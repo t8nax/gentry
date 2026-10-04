@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/error.json",
+  "title": "ErrorOutput",
+  "description": "Output of a failed `--json` command, on stdout; the exit code is not 0.",
+  "type": "object",
+  "properties": {
+    "error": {
+      "title": "Error",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "Stable machine code in English, such as unknown_command. The list is open: a client shows an unknown code as a generic error with its message.",
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "description": "The reason, in the operator's language.",
+          "type": "string",
+          "minLength": 1
+        },
+        "hint": {
+          "description": "What to do for the action to succeed, in the operator's language.",
+          "type": "string"
+        },
+        "details": {
+          "description": "Parameters of the error, such as command and flag, for a client to build its own text.",
+          "type": "object"
+        }
+      },
+      "required": ["code", "message"]
+    }
+  },
+  "required": ["error"]
+}

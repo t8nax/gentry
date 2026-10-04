@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/event.json",
+  "title": "Event",
+  "description": "An event of the journal, one JSON line per event in the output of `gentry events`.",
+  "type": "object",
+  "properties": {
+    "seq": {
+      "description": "Event number: grows on the machine without gaps in the order of writing. A client resumes reading after the last number it has processed.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "time": {
+      "description": "Time in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "type": {
+      "description": "Event type as object.action in the past tense, such as task.taken.",
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*[.][a-z][a-z_]*$"
+    },
+    "project": {
+      "description": "Project the event belongs to.",
+      "type": "string",
+      "minLength": 1
+    },
+    "task": {
+      "description": "Task the event belongs to; absent for events without a task.",
+      "type": "string"
+    },
+    "data": {
+      "description": "Details of the event; each type defines its own schema.",
+      "type": "object"
+    }
+  },
+  "required": ["seq", "time", "type", "project", "data"]
+}

@@ -12,6 +12,8 @@ package contract
 import "embed"
 
 //go:generate go tool go-jsonschema -p contract -t --tags json -o version.go schemas/version.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o error.go schemas/error.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o event.go schemas/event.json
 
 // Version is the contract version. It grows only on an incompatible change:
 // a field removed, renamed or retyped. It stays 0 until the first release of

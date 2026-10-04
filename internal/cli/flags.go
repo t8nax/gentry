@@ -1,10 +1,6 @@
 package cli
 
-import (
-	"strings"
-
-	"github.com/t8nax/gentry/internal/msg"
-)
+import "strings"
 
 // flags parses the flags of one command. Flags are long only (--json);
 // -h and --help anywhere show the help; "--" ends flags. Error texts come
@@ -40,14 +36,14 @@ func (f *flags) parse(args []string, env Env) (code int, done bool) {
 			name, _, hasValue := strings.Cut(a[2:], "=")
 			v, ok := f.bools[name]
 			if !ok {
-				return usageError(env, msg.Text(msg.ErrUnknownFlag, f.cmd, "--"+name)), true
+				return fail(env, unknownFlag(f.cmd, "--"+name)), true
 			}
 			if hasValue {
-				return usageError(env, msg.Text(msg.ErrFlagValue, "--"+name)), true
+				return fail(env, flagValue("--"+name)), true
 			}
 			*v = true
 		case strings.HasPrefix(a, "-") && a != "-":
-			return usageError(env, msg.Text(msg.ErrUnknownFlag, f.cmd, a)), true
+			return fail(env, unknownFlag(f.cmd, a)), true
 		default:
 			f.args = append(f.args, a)
 		}

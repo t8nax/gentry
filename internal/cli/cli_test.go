@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -22,8 +23,8 @@ func run(args ...string) (code int, stdout, stderr string) {
 func TestHelp(t *testing.T) {
 	for _, args := range [][]string{nil, {"help"}, {"-h"}, {"--help"}} {
 		code, stdout, stderr := run(args...)
-		if code != ExitOK {
-			t.Errorf("%v: exit code %d, want %d", args, code, ExitOK)
+		if code != contract.ExitOK {
+			t.Errorf("%v: exit code %d, want %d", args, code, contract.ExitOK)
 		}
 		if stderr != "" {
 			t.Errorf("%v: unexpected stderr: %q", args, stderr)
@@ -38,7 +39,7 @@ func TestHelp(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 	code, stdout, stderr := run("version")
-	if code != ExitOK || stderr != "" {
+	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("exit code %d, stderr %q", code, stderr)
 	}
 	if !strings.HasPrefix(stdout, "gentry ") || !strings.HasSuffix(stdout, "\n") {
@@ -54,8 +55,8 @@ func TestUsageErrors(t *testing.T) {
 	}
 	for _, args := range tests {
 		code, stdout, stderr := run(args...)
-		if code != ExitUsage {
-			t.Errorf("%v: exit code %d, want %d", args, code, ExitUsage)
+		if code != contract.ExitUsage {
+			t.Errorf("%v: exit code %d, want %d", args, code, contract.ExitUsage)
 		}
 		if stdout != "" {
 			t.Errorf("%v: unexpected stdout: %q", args, stdout)
@@ -76,7 +77,7 @@ func TestVersionText(t *testing.T) {
 
 func TestVersionJSON(t *testing.T) {
 	code, stdout, stderr := run("version", "--json")
-	if code != ExitOK || stderr != "" {
+	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("exit code %d, stderr %q", code, stderr)
 	}
 	if strings.Count(stdout, "\n") != 1 || !strings.HasSuffix(stdout, "\n") {
@@ -105,12 +106,12 @@ func TestFlags(t *testing.T) {
 		args []string
 		code int
 	}{
-		{[]string{"version", "--foo"}, ExitUsage},
-		{[]string{"version", "-x"}, ExitUsage},
-		{[]string{"version", "--json=1"}, ExitUsage},
-		{[]string{"version", "--json", "extra"}, ExitUsage},
-		{[]string{"version", "--", "--json"}, ExitUsage},
-		{[]string{"version", "--help"}, ExitOK},
+		{[]string{"version", "--foo"}, contract.ExitUsage},
+		{[]string{"version", "-x"}, contract.ExitUsage},
+		{[]string{"version", "--json=1"}, contract.ExitUsage},
+		{[]string{"version", "--json", "extra"}, contract.ExitUsage},
+		{[]string{"version", "--", "--json"}, contract.ExitUsage},
+		{[]string{"version", "--help"}, contract.ExitOK},
 	}
 	for _, tt := range tests {
 		if code, _, _ := run(tt.args...); code != tt.code {
@@ -149,5 +150,50 @@ func validate(t *testing.T, schema, doc string) {
 	}
 	if err := compiled.Validate(v); err != nil {
 		t.Errorf("%s does not match %s: %v", doc, schema, err)
+	}
+}
+
+func TestErrorsJSON(t *testing.T) {
+	tests := []struct {
+		args    []string
+		code    string
+		details map[string]any
+	}{
+		{[]string{"foo", "--json"}, contract.CodeUnknownCommand, map[string]any{"command": "foo"}},
+		{[]string{"version", "--foo", "--json"}, contract.CodeUnknownFlag, map[string]any{"command": "version", "flag": "--foo"}},
+		{[]string{"version", "extra", "--json"}, contract.CodeUnexpectedArgs, map[string]any{"command": "version"}},
+		{[]string{"version", "--json", "--json=1"}, contract.CodeFlagValue, map[string]any{"flag": "--json"}},
+	}
+	for _, tt := range tests {
+		exit, stdout, stderr := run(tt.args...)
+		if exit != contract.ExitUsage {
+			t.Errorf("%v: exit code %d, want %d", tt.args, exit, contract.ExitUsage)
+		}
+		if stderr != "" {
+			t.Errorf("%v: stderr must be empty with --json, got %q", tt.args, stderr)
+		}
+		validate(t, "schemas/error.json", stdout)
+		var out contract.ErrorOutput
+		if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+			t.Fatalf("%v: %v", tt.args, err)
+		}
+		if out.Error.Code != tt.code {
+			t.Errorf("%v: code %q, want %q", tt.args, out.Error.Code, tt.code)
+		}
+		if !reflect.DeepEqual(map[string]any(out.Error.Details), tt.details) {
+			t.Errorf("%v: details %v, want %v", tt.args, out.Error.Details, tt.details)
+		}
+	}
+}
+
+func TestErrorText(t *testing.T) {
+	_, stdout, stderr := run("foo")
+	want := "gentry: " + msg.Text(msg.ErrUnknownCommand, "foo") + " " + msg.Text(msg.HintUnknownCommand) + "\n"
+	if stdout != "" || stderr != want {
+		t.Errorf("stdout %q, stderr %q, want stderr %q", stdout, stderr, want)
+	}
+	// After "--", --json is an argument, not a flag: the failure stays text.
+	if _, stdout, _ := run("foo", "--", "--json"); stdout != "" {
+		t.Errorf("--json after -- must not switch to JSON, stdout %q", stdout)
 	}
 }

@@ -47,3 +47,17 @@ func TestVersionOutputRequiredFields(t *testing.T) {
 		t.Errorf("missing gentry must be rejected, got %v", err)
 	}
 }
+
+func TestEventRoundTrip(t *testing.T) {
+	line := `{"seq":42,"time":"2026-10-04T18:22:52.123Z","type":"task.taken","project":"shop","task":"SHOP-12","data":{}}`
+	var e Event
+	if err := json.Unmarshal([]byte(line), &e); err != nil {
+		t.Fatal(err)
+	}
+	if e.Seq != 42 || e.Type != "task.taken" || e.Task == nil || *e.Task != "SHOP-12" || e.Time.Nanosecond() != 123000000 {
+		t.Errorf("unexpected event: %+v", e)
+	}
+	if err := json.Unmarshal([]byte(`{"seq":1,"time":"2026-10-04T18:22:52.123Z","type":"task.taken","data":{}}`), &e); err == nil {
+		t.Error("event without project must be rejected")
+	}
+}

@@ -45,7 +45,10 @@ jobs:
         run: go vet ./...
 
       - name: go test
-        run: go test ./...
+        run: go test -short ./...
+
+      - name: startup time
+        run: go test -count=1 -v -run '^TestStartupTime$' ./cmd/gentry
 
       - name: build
         run: go build -o bin/ ./cmd/gentry
@@ -76,12 +79,13 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: |
+          table=$(mktemp)
           {
             echo "### Binary size"
             echo
             echo "| Platform | Size, MB |"
             echo "| --- | --- |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$table"
           for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
             os=${target%/*}
             arch=${target#*/}
@@ -90,5 +94,7 @@ jobs:
             out="dist/gentry-$os-$arch$ext"
             GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$out" ./cmd/gentry
             size=$(stat -c %s "$out")
-            awk -v t="$target" -v s="$size" 'BEGIN { printf "| %s | %.1f |\n", t, s / 1048576 }' >> "$GITHUB_STEP_SUMMARY"
+            awk -v t="$target" -v s="$size" 'BEGIN { printf "| %s | %.1f |\n", t, s / 1048576 }' >> "$table"
           done
+          cat "$table"
+          cat "$table" >> "$GITHUB_STEP_SUMMARY"

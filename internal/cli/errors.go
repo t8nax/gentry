@@ -112,3 +112,21 @@ func invalidArgument(cmd, arg, value, message, hint string) failure {
 		details: map[string]any{"command": cmd, "argument": arg, "value": value},
 	}
 }
+
+func homeUnknown() failure {
+	return failure{
+		exit:    contract.ExitError,
+		code:    contract.CodeHomeUnknown,
+		message: msg.Text(msg.ErrHomeUnknown),
+		hint:    msg.Text(msg.HintHomeUnknown),
+	}
+}
+
+func ioError(path string, err error) failure {
+	return failure{
+		exit:    contract.ExitError,
+		code:    contract.CodeIOError,
+		message: msg.Text(msg.ErrIO, path, err),
+		details: map[string]any{"path": path},
+	}
+}

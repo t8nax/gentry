@@ -78,6 +78,8 @@ jobs:
             echo "hook outside a project printed: $out"
             exit 1
           fi
+          GENTRY_HOME="$RUNNER_TEMP/gentry-home" ./bin/gentry setup claude --json
+          test -f "$RUNNER_TEMP/gentry-home/integrations/claude/gentry/hooks/hooks.json"
           code=0
           ./bin/gentry no-such-command || code=$?
           if [ "$code" -ne 2 ]; then

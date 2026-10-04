@@ -16,5 +16,7 @@ const (
 	CodeFlagValue       = "flag_value"       // details: flag
 	CodeMissingArgument = "missing_argument" // details: command, argument
 	CodeInvalidArgument = "invalid_argument" // details: command, argument, value
+	CodeHomeUnknown     = "home_unknown"     // the data root cannot be found: no GENTRY_HOME, no user home
+	CodeIOError         = "io_error"         // reading or writing files failed; details: path
 	CodeInternal        = "internal"         // a failure inside Gentry
 )

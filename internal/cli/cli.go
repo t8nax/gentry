@@ -30,6 +30,7 @@ type command struct {
 func commands() []command {
 	return []command{
 		{name: "version", summary: msg.CmdVersionSummary, run: runVersion},
+		{name: "setup", summary: msg.CmdSetupSummary, run: runSetup},
 		{name: "help", summary: msg.CmdHelpSummary, run: runHelp},
 		{name: "hook", hidden: true, run: runHook},
 	}

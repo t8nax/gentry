@@ -19,4 +19,12 @@ const (
 	ErrHookEventMissing Key = "err.hook_event_missing"
 	ErrHookEventUnknown Key = "err.hook_event_unknown"
 	HintHookEvents      Key = "hint.hook_events"
+	CmdSetupSummary     Key = "cmd.setup.summary"
+	ErrSetupToolMissing Key = "err.setup_tool_missing"
+	ErrSetupToolUnknown Key = "err.setup_tool_unknown"
+	HintSetupTools      Key = "hint.setup_tools"
+	SetupClaudeReady    Key = "setup.claude_ready"
+	ErrHomeUnknown      Key = "err.home_unknown"
+	HintHomeUnknown     Key = "hint.home_unknown"
+	ErrIO               Key = "err.io"
 )

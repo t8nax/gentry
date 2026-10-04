@@ -1,0 +1,15 @@
+{
+  "description": "Gentry ведёт задачи агента по флоу проекта.",
+  "name": "gentry",
+  "owner": {
+    "name": "Gentry"
+  },
+  "plugins": [
+    {
+      "description": "Gentry ведёт задачи агента по флоу проекта.",
+      "name": "gentry",
+      "source": "./gentry",
+      "version": "0.1.0+afb61717"
+    }
+  ]
+}

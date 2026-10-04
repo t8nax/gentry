@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "\"C:/Program Files/Gentry/gentry.exe\" hook session-start",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

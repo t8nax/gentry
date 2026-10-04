@@ -2,10 +2,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 
+	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/buildinfo"
 	"github.com/t8nax/gentry/internal/msg"
 )
@@ -73,10 +75,30 @@ func runHelp(args []string, env Env) int {
 }
 
 func runVersion(args []string, env Env) int {
-	if len(args) > 0 {
+	f := newFlags("version")
+	asJSON := f.Bool("json")
+	if code, done := f.parse(args, env); done {
+		return code
+	}
+	if len(f.args) > 0 {
 		return noArgs("version", env)
 	}
-	fmt.Fprintf(env.Stdout, "gentry %s\n", buildinfo.Version())
+	out := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version}
+	if *asJSON {
+		return writeJSON(env, out)
+	}
+	fmt.Fprintf(env.Stdout, "gentry %s\n%s\n", out.Gentry, msg.Text(msg.VersionContract, out.Contract))
+	return ExitOK
+}
+
+// writeJSON prints v as the single JSON object of a --json command.
+func writeJSON(env Env, v any) int {
+	enc := json.NewEncoder(env.Stdout)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		fmt.Fprintf(env.Stderr, "gentry: %v\n", err)
+		return ExitError
+	}
 	return ExitOK
 }
 

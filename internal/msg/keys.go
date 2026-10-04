@@ -10,4 +10,7 @@ const (
 	CmdVersionSummary Key = "cmd.version.summary"
 	ErrUnknownCommand Key = "err.unknown_command"
 	ErrUnexpectedArgs Key = "err.unexpected_args"
+	ErrUnknownFlag    Key = "err.unknown_flag"
+	ErrFlagValue      Key = "err.flag_value"
+	VersionContract   Key = "version.contract"
 )

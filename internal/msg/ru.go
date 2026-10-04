@@ -11,6 +11,9 @@ var ru = catalog{
 		CmdVersionSummary: "показать версию Gentry",
 		ErrUnknownCommand: "неизвестная команда «%s». Перечень команд — gentry help.",
 		ErrUnexpectedArgs: "команда %s не принимает аргументов.",
+		ErrUnknownFlag:    "команда %s не принимает флаг %s.",
+		ErrFlagValue:      "флаг %s не принимает значения.",
+		VersionContract:   "контракт %d",
 	},
 	plurals: map[Key][]string{},
 }

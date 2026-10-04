@@ -2,8 +2,15 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/buildinfo"
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 func run(args ...string) (code int, stdout, stderr string) {
@@ -56,5 +63,91 @@ func TestUsageErrors(t *testing.T) {
 		if !strings.HasPrefix(stderr, "gentry: ") {
 			t.Errorf("%v: unexpected stderr: %q", args, stderr)
 		}
+	}
+}
+
+func TestVersionText(t *testing.T) {
+	_, stdout, _ := run("version")
+	lines := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "gentry ") || lines[1] != msg.Text(msg.VersionContract, contract.Version) {
+		t.Errorf("unexpected output: %q", stdout)
+	}
+}
+
+func TestVersionJSON(t *testing.T) {
+	code, stdout, stderr := run("version", "--json")
+	if code != ExitOK || stderr != "" {
+		t.Fatalf("exit code %d, stderr %q", code, stderr)
+	}
+	if strings.Count(stdout, "\n") != 1 || !strings.HasSuffix(stdout, "\n") {
+		t.Errorf("want exactly one line of JSON, got %q", stdout)
+	}
+	validate(t, "schemas/version.json", stdout)
+
+	var got contract.VersionOutput
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version}
+	if got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	// No fields beyond the contract type.
+	var fields map[string]any
+	json.Unmarshal([]byte(stdout), &fields)
+	if len(fields) != 2 {
+		t.Errorf("unexpected fields: %v", fields)
+	}
+}
+
+func TestFlags(t *testing.T) {
+	tests := []struct {
+		args []string
+		code int
+	}{
+		{[]string{"version", "--foo"}, ExitUsage},
+		{[]string{"version", "-x"}, ExitUsage},
+		{[]string{"version", "--json=1"}, ExitUsage},
+		{[]string{"version", "--json", "extra"}, ExitUsage},
+		{[]string{"version", "--", "--json"}, ExitUsage},
+		{[]string{"version", "--help"}, ExitOK},
+	}
+	for _, tt := range tests {
+		if code, _, _ := run(tt.args...); code != tt.code {
+			t.Errorf("%v: exit code %d, want %d", tt.args, code, tt.code)
+		}
+	}
+	_, _, stderr := run("version", "--foo")
+	if want := "gentry: " + msg.Text(msg.ErrUnknownFlag, "version", "--foo") + "\n"; stderr != want {
+		t.Errorf("stderr %q, want %q", stderr, want)
+	}
+}
+
+// validate checks a JSON document against an embedded contract schema.
+func validate(t *testing.T, schema, doc string) {
+	t.Helper()
+	f, err := contract.Schemas.Open(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	s, err := jsonschema.UnmarshalJSON(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := jsonschema.NewCompiler()
+	if err := c.AddResource(schema, s); err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := c.Compile(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := jsonschema.UnmarshalJSON(strings.NewReader(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := compiled.Validate(v); err != nil {
+		t.Errorf("%s does not match %s: %v", doc, schema, err)
 	}
 }

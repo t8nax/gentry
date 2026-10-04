@@ -25,6 +25,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # tags give the version Go stamps into the binary
 
       - uses: actions/setup-go@v7
         with:
@@ -38,6 +40,17 @@ jobs:
           if [ -n "$unformatted" ]; then
             echo "Files need gofmt:"
             echo "$unformatted"
+            exit 1
+          fi
+
+      - name: generated code is up to date
+        if: runner.os == 'Linux'
+        run: |
+          go generate ./...
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "go generate changed files; run it and commit the result:"
+            git status --porcelain
+            git diff
             exit 1
           fi
 
@@ -56,6 +69,7 @@ jobs:
       - name: smoke test
         run: |
           ./bin/gentry version
+          ./bin/gentry version --json
           code=0
           ./bin/gentry no-such-command || code=$?
           if [ "$code" -ne 2 ]; then
@@ -69,6 +83,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # tags give the version Go stamps into the binary
 
       - uses: actions/setup-go@v7
         with:

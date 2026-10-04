@@ -1,45 +1,31 @@
 // Package buildinfo reports the version of the executable.
 package buildinfo
 
-import "runtime/debug"
+import (
+	"runtime/debug"
+	"strings"
+)
 
-// version is set when building a release:
-// go build -ldflags "-X github.com/t8nax/gentry/internal/buildinfo.version=1.2.3"
-var version string
+// fallback is the version of a build without module version information,
+// such as a test binary.
+const fallback = "0.0.0-dev"
 
-// Version returns the product version. A build without a version reports
-// "dev" with the short git revision and a "dirty" mark for uncommitted changes.
+// Version returns the product version in semver without the leading v.
+//
+// Go stamps the main module version from git when building: a commit tagged
+// v0.1.0 gives 0.1.0, any other commit gives a pseudo-version such as
+// 0.1.1-0.20261004175847-74a0120d2d39, with +dirty for uncommitted changes.
 func Version() string {
-	if version != "" {
-		return version
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return fallback
 	}
-	return devVersion(debug.ReadBuildInfo())
+	return fromModule(info.Main.Version)
 }
 
-func devVersion(info *debug.BuildInfo, ok bool) string {
-	v := "dev"
-	if !ok {
-		return v
+func fromModule(v string) string {
+	if v == "" || v == "(devel)" {
+		return fallback
 	}
-	var revision string
-	var modified bool
-	for _, s := range info.Settings {
-		switch s.Key {
-		case "vcs.revision":
-			revision = s.Value
-		case "vcs.modified":
-			modified = s.Value == "true"
-		}
-	}
-	if revision == "" {
-		return v
-	}
-	if len(revision) > 12 {
-		revision = revision[:12]
-	}
-	v += "+" + revision
-	if modified {
-		v += ".dirty"
-	}
-	return v
+	return strings.TrimPrefix(v, "v")
 }

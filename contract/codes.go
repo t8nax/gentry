@@ -18,5 +18,7 @@ const (
 	CodeInvalidArgument = "invalid_argument" // details: command, argument, value
 	CodeHomeUnknown     = "home_unknown"     // the data root cannot be found: no GENTRY_HOME, no user home
 	CodeIOError         = "io_error"         // reading or writing files failed; details: path
+	CodeToolNotFound    = "tool_not_found"   // the AI tool program is not found; details: tool, program
+	CodeToolFailed      = "tool_failed"      // a command of the AI tool failed; details: tool, command, output
 	CodeInternal        = "internal"         // a failure inside Gentry
 )

@@ -130,3 +130,22 @@ func ioError(path string, err error) failure {
 		details: map[string]any{"path": path},
 	}
 }
+
+func toolNotFound(tool, program, title string) failure {
+	return failure{
+		exit:    contract.ExitError,
+		code:    contract.CodeToolNotFound,
+		message: msg.Text(msg.ErrToolNotFound, program),
+		hint:    msg.Text(msg.HintToolNotFound, title, tool),
+		details: map[string]any{"tool": tool, "program": program},
+	}
+}
+
+func toolFailed(tool, title, command, output string) failure {
+	return failure{
+		exit:    contract.ExitError,
+		code:    contract.CodeToolFailed,
+		message: msg.Text(msg.ErrToolFailed, title, command, output),
+		details: map[string]any{"tool": tool, "command": command, "output": output},
+	}
+}

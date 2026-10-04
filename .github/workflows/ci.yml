@@ -78,8 +78,11 @@ jobs:
             echo "hook outside a project printed: $out"
             exit 1
           fi
-          GENTRY_HOME="$RUNNER_TEMP/gentry-home" ./bin/gentry setup claude --json
-          test -f "$RUNNER_TEMP/gentry-home/integrations/claude/gentry/hooks/hooks.json"
+          go build -o bin/ ./internal/adapter/claude/testdata/fakeclaude
+          export GENTRY_HOME="$RUNNER_TEMP/gentry-home" GENTRY_CLAUDE="$PWD/bin/fakeclaude$(go env GOEXE)"
+          ./bin/gentry setup claude --json | grep -q '"action":"installed"'
+          ./bin/gentry setup claude --json | grep -q '"action":"unchanged"'
+          test -f "$GENTRY_HOME/integrations/claude/gentry/hooks/hooks.json"
           code=0
           ./bin/gentry no-such-command || code=$?
           if [ "$code" -ne 2 ]; then

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,12 @@ import (
 
 // tools lists the tools `gentry setup` supports.
 var tools = []string{claude.Tool}
+
+var setupMessages = map[string]msg.Key{
+	claude.Installed: msg.SetupInstalled,
+	claude.Updated:   msg.SetupUpdated,
+	claude.Unchanged: msg.SetupUnchanged,
+}
 
 func runSetup(args []string, env Env) int {
 	f := newFlags("setup")
@@ -50,15 +57,30 @@ func runSetup(args []string, env Env) int {
 	if err := claude.Write(dir, p); err != nil {
 		return fail(env, ioError(dir, err))
 	}
+	program, err := claude.Program()
+	if err != nil {
+		return fail(env, toolNotFound(claude.Tool, "claude", "Claude Code"))
+	}
+	r, err := claude.Register(program, dir, p.Version)
+	var ce *claude.CommandError
+	if errors.As(err, &ce) {
+		return fail(env, toolFailed(claude.Tool, "Claude Code", ce.Command, ce.Output))
+	}
+	if err != nil {
+		return fail(env, internal(err))
+	}
 
-	out := contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version}
+	out := contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled}
 	if *asJSON {
 		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
 		}
 		return contract.ExitOK
 	}
-	fmt.Fprintln(env.Stdout, msg.Text(msg.SetupClaudeReady, dir))
+	fmt.Fprintln(env.Stdout, msg.Text(setupMessages[r.Action]))
+	if !r.Enabled {
+		fmt.Fprintln(env.Stdout, msg.Text(msg.SetupDisabled))
+	}
 	return contract.ExitOK
 }
 

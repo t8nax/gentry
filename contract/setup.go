@@ -8,8 +8,16 @@ import "unicode/utf8"
 
 // Output of `gentry setup <tool> --json`.
 type SetupOutput struct {
+	// What happened in the tool: installed, updated or unchanged. The list is open: a
+	// client shows an unknown value as is.
+	Action string `json:"action"`
+
 	// Directory of the integration files built for the tool.
 	Dir string `json:"dir"`
+
+	// Whether the plugin is enabled in the tool; Gentry does not enable a plugin the
+	// operator disabled.
+	Enabled bool `json:"enabled"`
 
 	// Version of the built plugin; it changes whenever the plugin content does.
 	PluginVersion string `json:"plugin_version"`
@@ -24,8 +32,14 @@ func (j *SetupOutput) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
+	if _, ok := raw["action"]; raw != nil && !ok {
+		return fmt.Errorf("field action in SetupOutput: required")
+	}
 	if _, ok := raw["dir"]; raw != nil && !ok {
 		return fmt.Errorf("field dir in SetupOutput: required")
+	}
+	if _, ok := raw["enabled"]; raw != nil && !ok {
+		return fmt.Errorf("field enabled in SetupOutput: required")
 	}
 	if _, ok := raw["plugin_version"]; raw != nil && !ok {
 		return fmt.Errorf("field plugin_version in SetupOutput: required")
@@ -37,6 +51,9 @@ func (j *SetupOutput) UnmarshalJSON(value []byte) error {
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
+	}
+	if utf8.RuneCountInString(string(plain.Action)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "action", 1)
 	}
 	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)

@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # tags give the version Go stamps into the binary
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: generated code is up to date
+        if: runner.os == 'Linux'
+        run: |
+          go generate ./...
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "go generate changed files; run it and commit the result:"
+            git status --porcelain
+            git diff
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -short ./...
+
+      - name: startup time
+        run: go test -count=1 -v -run '^TestStartupTime$' ./cmd/gentry
+
+      - name: hook budget
+        run: go test -count=1 -v -run '^TestHookBudget$' ./cmd/gentry
+
+      - name: build
+        run: go build -o bin/ ./cmd/gentry
+
+      - name: smoke test
+        run: |
+          ./bin/gentry version
+          ./bin/gentry version --json
+          out=$(./bin/gentry hook session-start)
+          if [ -n "$out" ]; then
+            echo "hook outside a project printed: $out"
+            exit 1
+          fi
+          go build -o bin/ ./internal/adapter/claude/testdata/fakeclaude
+          export GENTRY_HOME="$RUNNER_TEMP/gentry-home" GENTRY_CLAUDE="$PWD/bin/fakeclaude$(go env GOEXE)"
+          ./bin/gentry setup claude --json | grep -q '"action":"installed"'
+          ./bin/gentry setup claude --json | grep -q '"action":"unchanged"'
+          test -f "$GENTRY_HOME/integrations/claude/gentry/hooks/hooks.json"
+          code=0
+          ./bin/gentry no-such-command || code=$?
+          if [ "$code" -ne 2 ]; then
+            echo "unknown command exited with $code, want 2"
+            exit 1
+          fi
+
+  build:
+    name: build (6 platforms)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # tags give the version Go stamps into the binary
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      - name: cross-build
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          table=$(mktemp)
+          {
+            echo "### Binary size"
+            echo
+            echo "| Platform | Size, MB |"
+            echo "| --- | --- |"
+          } >> "$table"
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            os=${target%/*}
+            arch=${target#*/}
+            ext=""
+            if [ "$os" = windows ]; then ext=.exe; fi
+            out="dist/gentry-$os-$arch$ext"
+            GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$out" ./cmd/gentry
+            size=$(stat -c %s "$out")
+            awk -v t="$target" -v s="$size" 'BEGIN { printf "| %s | %.1f |\n", t, s / 1048576 }' >> "$table"
+          done
+          cat "$table"
+          cat "$table" >> "$GITHUB_STEP_SUMMARY"

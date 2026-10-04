@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/version.json",
+  "title": "VersionOutput",
+  "description": "Output of `gentry version --json`.",
+  "type": "object",
+  "properties": {
+    "gentry": {
+      "description": "Product version in semver, without the leading v: 0.1.0 for a release, a Go pseudo-version for a development build.",
+      "type": "string",
+      "minLength": 1
+    },
+    "contract": {
+      "description": "Contract version. It grows only on an incompatible change; 0 until the first release.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": ["gentry", "contract"]
+}

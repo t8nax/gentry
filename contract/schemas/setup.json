@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/setup.json",
+  "title": "SetupOutput",
+  "description": "Output of `gentry setup <tool> --json`.",
+  "type": "object",
+  "properties": {
+    "tool": {
+      "description": "The tool Gentry was set up for, such as claude.",
+      "type": "string",
+      "minLength": 1
+    },
+    "dir": {
+      "description": "Directory of the integration files built for the tool.",
+      "type": "string",
+      "minLength": 1
+    },
+    "plugin_version": {
+      "description": "Version of the built plugin; it changes whenever the plugin content does.",
+      "type": "string",
+      "minLength": 1
+    },
+    "action": {
+      "description": "What happened in the tool: installed, updated or unchanged. The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    },
+    "enabled": {
+      "description": "Whether the plugin is enabled in the tool; Gentry does not enable a plugin the operator disabled.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "tool",
+    "dir",
+    "plugin_version",
+    "action",
+    "enabled"
+  ]
+}

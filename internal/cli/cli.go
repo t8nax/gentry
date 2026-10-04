@@ -2,43 +2,44 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 
+	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/buildinfo"
 	"github.com/t8nax/gentry/internal/msg"
-)
-
-// Exit codes.
-const (
-	ExitOK    = 0
-	ExitError = 1
-	ExitUsage = 2
 )
 
 // Env is the environment a command runs in.
 type Env struct {
 	Stdout io.Writer
 	Stderr io.Writer
+
+	json bool // --json is among the arguments: failures are printed as JSON
 }
 
 type command struct {
 	name    string
 	summary msg.Key
+	hidden  bool // a service command, not shown in the help
 	run     func(args []string, env Env) int
 }
 
 func commands() []command {
 	return []command{
 		{name: "version", summary: msg.CmdVersionSummary, run: runVersion},
+		{name: "setup", summary: msg.CmdSetupSummary, run: runSetup},
 		{name: "help", summary: msg.CmdHelpSummary, run: runHelp},
+		{name: "hook", hidden: true, run: runHook},
 	}
 }
 
 // Run executes the command given by args (without the program name)
 // and returns the exit code.
 func Run(args []string, env Env) int {
+	env.json = hasJSONFlag(args)
 	if len(args) == 0 {
 		return runHelp(nil, env)
 	}
@@ -51,16 +52,35 @@ func Run(args []string, env Env) int {
 			return c.run(args[1:], env)
 		}
 	}
-	return usageError(env, msg.Text(msg.ErrUnknownCommand, name))
+	return fail(env, unknownCommand(name))
+}
+
+// hasJSONFlag reports whether --json is among the flags, so that even a
+// command line that cannot be parsed fails in JSON.
+func hasJSONFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "--json" {
+			return true
+		}
+	}
+	return false
 }
 
 func runHelp(args []string, env Env) int {
 	if len(args) > 0 {
-		return noArgs("help", env)
+		return fail(env, unexpectedArgs("help"))
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n%s\n\n%s\n", msg.Text(msg.HelpIntro), msg.Text(msg.HelpUsage), msg.Text(msg.HelpCommands))
-	cmds := commands()
+	var cmds []command
+	for _, c := range commands() {
+		if !c.hidden {
+			cmds = append(cmds, c)
+		}
+	}
 	width := 0
 	for _, c := range cmds {
 		width = max(width, len(c.name))
@@ -69,22 +89,32 @@ func runHelp(args []string, env Env) int {
 		fmt.Fprintf(&b, "  %-*s  %s\n", width, c.name, msg.Text(c.summary))
 	}
 	io.WriteString(env.Stdout, b.String())
-	return ExitOK
+	return contract.ExitOK
 }
 
 func runVersion(args []string, env Env) int {
-	if len(args) > 0 {
-		return noArgs("version", env)
+	f := newFlags("version")
+	asJSON := f.Bool("json")
+	if code, done := f.parse(args, env); done {
+		return code
 	}
-	fmt.Fprintf(env.Stdout, "gentry %s\n", buildinfo.Version())
-	return ExitOK
+	if len(f.args) > 0 {
+		return fail(env, unexpectedArgs("version"))
+	}
+	out := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version}
+	if *asJSON {
+		if err := writeJSON(env, out); err != nil {
+			return fail(env, internal(err))
+		}
+		return contract.ExitOK
+	}
+	fmt.Fprintf(env.Stdout, "gentry %s\n%s\n", out.Gentry, msg.Text(msg.VersionContract, out.Contract))
+	return contract.ExitOK
 }
 
-func noArgs(name string, env Env) int {
-	return usageError(env, msg.Text(msg.ErrUnexpectedArgs, name))
-}
-
-func usageError(env Env, text string) int {
-	fmt.Fprintf(env.Stderr, "gentry: %s\n", text)
-	return ExitUsage
+// writeJSON prints v as the single JSON object of a --json command.
+func writeJSON(env Env, v any) error {
+	enc := json.NewEncoder(env.Stdout)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(v)
 }

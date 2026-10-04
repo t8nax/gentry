@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "\"C:/Program Files/Gentry/gentry.exe\" hook session-start",
+            "command": "\"/opt/Gentry Tools/gentry\" hook session-start",
             "timeout": 10,
             "type": "command"
           }

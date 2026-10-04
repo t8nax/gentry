@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"testing"
 
 	"github.com/t8nax/gentry/internal/integration"
@@ -14,7 +15,8 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 
-const testExe = `C:\Program Files\Gentry\gentry.exe`
+// testExe has a space to check quoting; it is a valid path on every OS.
+const testExe = "/opt/Gentry Tools/gentry"
 
 func testPlugin(t *testing.T, exe, version string) Plugin {
 	t.Helper()
@@ -70,6 +72,17 @@ func TestHookCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := hooks.Hooks["SessionStart"][0].Hooks[0].Command
+	want := `"/opt/Gentry Tools/gentry" hook session-start`
+	if got != want {
+		t.Errorf("command %q, want %q", got, want)
+	}
+}
+
+func TestHookCommandWindowsPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("backslashes are path separators only on Windows")
+	}
+	got := shellCommand([]string{`C:\Program Files\Gentry\gentry.exe`, "hook", "session-start"})
 	want := `"C:/Program Files/Gentry/gentry.exe" hook session-start`
 	if got != want {
 		t.Errorf("command %q, want %q", got, want)

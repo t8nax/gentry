@@ -27,13 +27,16 @@ func buildGentry(t *testing.T) string {
 	return bin
 }
 
-// measure runs the binary with args warmup times unmeasured, then runs times
-// measured, and returns the sorted durations.
-func measure(t *testing.T, bin string, warmup, runs int, args ...string) []time.Duration {
+// measure runs the binary with args in dir (the current directory if empty)
+// warmup times unmeasured, then runs times measured, and returns the sorted
+// durations.
+func measure(t *testing.T, bin, dir string, warmup, runs int, args ...string) []time.Duration {
 	t.Helper()
 	run := func() time.Duration {
 		start := time.Now()
-		if out, err := exec.Command(bin, args...).CombinedOutput(); err != nil {
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s %v: %v\n%s", bin, args, err, out)
 		}
 		return time.Since(start)
@@ -91,7 +94,7 @@ func TestStartupTime(t *testing.T) {
 		t.Skip("startup measurement is skipped in short mode")
 	}
 	const warmup, runs = 3, 30
-	d := measure(t, buildGentry(t), warmup, runs, "version")
+	d := measure(t, buildGentry(t), "", warmup, runs, "version")
 	platform := runtime.GOOS + "/" + runtime.GOARCH
 	t.Logf("gentry version on %s, %d runs: median %s, p95 %s", platform, runs, ms(median(d)), ms(p95(d)))
 	writeSummary(t, fmt.Sprintf(

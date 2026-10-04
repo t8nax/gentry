@@ -23,6 +23,7 @@ type Env struct {
 type command struct {
 	name    string
 	summary msg.Key
+	hidden  bool // a service command, not shown in the help
 	run     func(args []string, env Env) int
 }
 
@@ -30,6 +31,7 @@ func commands() []command {
 	return []command{
 		{name: "version", summary: msg.CmdVersionSummary, run: runVersion},
 		{name: "help", summary: msg.CmdHelpSummary, run: runHelp},
+		{name: "hook", hidden: true, run: runHook},
 	}
 }
 
@@ -72,7 +74,12 @@ func runHelp(args []string, env Env) int {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n%s\n\n%s\n", msg.Text(msg.HelpIntro), msg.Text(msg.HelpUsage), msg.Text(msg.HelpCommands))
-	cmds := commands()
+	var cmds []command
+	for _, c := range commands() {
+		if !c.hidden {
+			cmds = append(cmds, c)
+		}
+	}
 	width := 0
 	for _, c := range cmds {
 		width = max(width, len(c.name))

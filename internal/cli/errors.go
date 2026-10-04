@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/msg"
@@ -56,6 +57,16 @@ func unexpectedArgs(cmd string) failure {
 	}
 }
 
+// extraArgs is for a command that takes some arguments but got more.
+func extraArgs(cmd string, extra []string) failure {
+	return failure{
+		exit:    contract.ExitUsage,
+		code:    contract.CodeUnexpectedArgs,
+		message: msg.Text(msg.ErrExtraArgs, cmd, strings.Join(extra, " ")),
+		details: map[string]any{"command": cmd, "args": extra},
+	}
+}
+
 func unknownFlag(cmd, flag string) failure {
 	return failure{
 		exit:    contract.ExitUsage,
@@ -79,5 +90,25 @@ func internal(err error) failure {
 		exit:    contract.ExitError,
 		code:    contract.CodeInternal,
 		message: msg.Text(msg.ErrInternal, err),
+	}
+}
+
+func missingArgument(cmd, arg, message, hint string) failure {
+	return failure{
+		exit:    contract.ExitUsage,
+		code:    contract.CodeMissingArgument,
+		message: message,
+		hint:    hint,
+		details: map[string]any{"command": cmd, "argument": arg},
+	}
+}
+
+func invalidArgument(cmd, arg, value, message, hint string) failure {
+	return failure{
+		exit:    contract.ExitUsage,
+		code:    contract.CodeInvalidArgument,
+		message: message,
+		hint:    hint,
+		details: map[string]any{"command": cmd, "argument": arg, "value": value},
 	}
 }

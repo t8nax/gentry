@@ -63,6 +63,9 @@ jobs:
       - name: startup time
         run: go test -count=1 -v -run '^TestStartupTime$' ./cmd/gentry
 
+      - name: hook budget
+        run: go test -count=1 -v -run '^TestHookBudget$' ./cmd/gentry
+
       - name: build
         run: go build -o bin/ ./cmd/gentry
 
@@ -70,6 +73,11 @@ jobs:
         run: |
           ./bin/gentry version
           ./bin/gentry version --json
+          out=$(./bin/gentry hook session-start)
+          if [ -n "$out" ]; then
+            echo "hook outside a project printed: $out"
+            exit 1
+          fi
           code=0
           ./bin/gentry no-such-command || code=$?
           if [ "$code" -ne 2 ]; then

@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,6 +32,9 @@ func TestHelp(t *testing.T) {
 			t.Errorf("%v: unexpected stderr: %q", args, stderr)
 		}
 		for _, c := range commands() {
+			if c.hidden {
+				continue
+			}
 			if !strings.Contains(stdout, c.name) {
 				t.Errorf("%v: help does not list command %s:\n%s", args, c.name, stdout)
 			}
@@ -195,5 +200,74 @@ func TestErrorText(t *testing.T) {
 	// After "--", --json is an argument, not a flag: the failure stays text.
 	if _, stdout, _ := run("foo", "--", "--json"); stdout != "" {
 		t.Errorf("--json after -- must not switch to JSON, stdout %q", stdout)
+	}
+}
+
+func TestHook(t *testing.T) {
+	code, stdout, stderr := run("hook", "session-start")
+	if code != contract.ExitOK || stdout != "" || stderr != "" {
+		t.Errorf("session-start outside a project: exit code %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+
+	tests := []struct {
+		args   []string
+		code   string
+		stderr string
+	}{
+		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + " " + msg.Text(msg.HintHookEvents, "session-start")},
+		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + " " + msg.Text(msg.HintHookEvents, "session-start")},
+		{[]string{"hook", "session-start", "extra"}, contract.CodeUnexpectedArgs, msg.Text(msg.ErrExtraArgs, "hook", "extra")},
+	}
+	for _, tt := range tests {
+		exit, _, stderr := run(tt.args...)
+		if exit != contract.ExitUsage || stderr != "gentry: "+tt.stderr+"\n" {
+			t.Errorf("%v: exit code %d, stderr %q, want %q", tt.args, exit, stderr, tt.stderr)
+		}
+		// hook takes no --json flag, so check the JSON failure through the env.
+		var out bytes.Buffer
+		runHook(tt.args[1:], Env{Stdout: &out, Stderr: io.Discard, json: true})
+		stdout := out.String()
+		validate(t, "schemas/error.json", stdout)
+		var e contract.ErrorOutput
+		json.Unmarshal([]byte(stdout), &e)
+		if e.Error.Code != tt.code {
+			t.Errorf("%v in JSON: code %q, want %q", tt.args, e.Error.Code, tt.code)
+		}
+	}
+
+	_, help, _ := run("help")
+	if strings.Contains(help, "hook") {
+		t.Errorf("hook must not be listed in the help:\n%s", help)
+	}
+}
+
+func TestSessionStartNeverBreaksSession(t *testing.T) {
+	orig := sessionStart
+	t.Cleanup(func() { sessionStart = orig })
+
+	failures := map[string]func(io.Writer) error{
+		"panic": func(w io.Writer) error {
+			io.WriteString(w, "partial")
+			panic("boom")
+		},
+		"error": func(w io.Writer) error {
+			io.WriteString(w, "partial")
+			return errors.New("boom")
+		},
+	}
+	for name, f := range failures {
+		sessionStart = f
+		code, stdout, stderr := run("hook", "session-start")
+		if code != contract.ExitOK || stdout != "" || stderr != "" {
+			t.Errorf("%s: exit code %d, stdout %q, stderr %q; want 0 and no output", name, code, stdout, stderr)
+		}
+	}
+
+	sessionStart = func(w io.Writer) error {
+		_, err := io.WriteString(w, "introduction")
+		return err
+	}
+	if _, stdout, _ := run("hook", "session-start"); stdout != "introduction" {
+		t.Errorf("successful output must pass through, got %q", stdout)
 	}
 }

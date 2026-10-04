@@ -10,6 +10,7 @@ import (
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/buildinfo"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/state"
 )
 
 // Env is the environment a command runs in.
@@ -33,6 +34,7 @@ func commands() []command {
 		{name: "setup", summary: msg.CmdSetupSummary, run: runSetup},
 		{name: "help", summary: msg.CmdHelpSummary, run: runHelp},
 		{name: "hook", hidden: true, run: runHook},
+		{name: "events", hidden: true, run: runEvents},
 	}
 }
 
@@ -101,14 +103,15 @@ func runVersion(args []string, env Env) int {
 	if len(f.args) > 0 {
 		return fail(env, unexpectedArgs("version"))
 	}
-	out := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version}
+	out := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version, StateSchema: state.SchemaVersion()}
 	if *asJSON {
 		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
 		}
 		return contract.ExitOK
 	}
-	fmt.Fprintf(env.Stdout, "gentry %s\n%s\n", out.Gentry, msg.Text(msg.VersionContract, out.Contract))
+	// The contract and schema versions are for programs: only --json has them.
+	fmt.Fprintln(env.Stdout, msg.Text(msg.VersionGentry, out.Gentry))
 	return contract.ExitOK
 }
 

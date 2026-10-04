@@ -3,7 +3,9 @@
 // generated from them.
 //
 // The output of every `--json` command is exactly one JSON object followed by
-// a newline on stdout, in UTF-8, with snake_case field names. A successful
+// a newline on stdout, in UTF-8, with snake_case field names. The one exception
+// is `gentry events --json`: one JSON line per event, as a stream (Event); its
+// failure is still a single ErrorOutput. A successful
 // result is printed as is, without an envelope; the exit code tells success (0)
 // from failure. Clients must ignore unknown fields: adding fields and commands
 // is a compatible change.

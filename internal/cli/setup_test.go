@@ -59,7 +59,7 @@ func TestSetupToolErrors(t *testing.T) {
 		t.Errorf("missing claude: exit code %d, output %s", code, stdout)
 	}
 	_, _, stderr := run("setup", "claude")
-	want := "gentry: " + msg.Text(msg.ErrToolNotFound, "claude") + " " + msg.Text(msg.HintToolNotFound, "Claude Code", "claude") + "\n"
+	want := msg.Text(msg.ErrToolNotFound, "claude") + " " + msg.Text(msg.HintToolNotFound, "Claude Code", "claude") + "\n"
 	if stderr != want {
 		t.Errorf("stderr %q, want %q", stderr, want)
 	}
@@ -94,7 +94,7 @@ func TestSetupErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		exit, _, stderr := run(tt.args...)
-		if exit != contract.ExitUsage || stderr != "gentry: "+tt.stderr+"\n" {
+		if exit != contract.ExitUsage || stderr != tt.stderr+"\n" {
 			t.Errorf("%v: exit code %d, stderr %q, want %q", tt.args, exit, stderr, tt.stderr)
 		}
 		_, stdout, _ := run(append(tt.args, "--json")...)

@@ -14,6 +14,7 @@ import (
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/buildinfo"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/state"
 )
 
 func run(args ...string) (code int, stdout, stderr string) {
@@ -47,7 +48,7 @@ func TestVersion(t *testing.T) {
 	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("exit code %d, stderr %q", code, stderr)
 	}
-	if !strings.HasPrefix(stdout, "gentry ") || !strings.HasSuffix(stdout, "\n") {
+	if !strings.HasPrefix(stdout, msg.Text(msg.VersionGentry, buildinfo.Version())+"\n") {
 		t.Errorf("unexpected output: %q", stdout)
 	}
 }
@@ -66,7 +67,7 @@ func TestUsageErrors(t *testing.T) {
 		if stdout != "" {
 			t.Errorf("%v: unexpected stdout: %q", args, stdout)
 		}
-		if !strings.HasPrefix(stderr, "gentry: ") {
+		if stderr == "" || strings.HasPrefix(stderr, "gentry:") {
 			t.Errorf("%v: unexpected stderr: %q", args, stderr)
 		}
 	}
@@ -74,9 +75,8 @@ func TestUsageErrors(t *testing.T) {
 
 func TestVersionText(t *testing.T) {
 	_, stdout, _ := run("version")
-	lines := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")
-	if len(lines) != 2 || !strings.HasPrefix(lines[0], "gentry ") || lines[1] != msg.Text(msg.VersionContract, contract.Version) {
-		t.Errorf("unexpected output: %q", stdout)
+	if want := msg.Text(msg.VersionGentry, buildinfo.Version()) + "\n"; stdout != want {
+		t.Errorf("output %q, want %q", stdout, want)
 	}
 }
 
@@ -94,14 +94,14 @@ func TestVersionJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
 		t.Fatal(err)
 	}
-	want := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version}
+	want := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version, StateSchema: state.SchemaVersion()}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 	// No fields beyond the contract type.
 	var fields map[string]any
 	json.Unmarshal([]byte(stdout), &fields)
-	if len(fields) != 2 {
+	if len(fields) != 3 {
 		t.Errorf("unexpected fields: %v", fields)
 	}
 }
@@ -124,7 +124,7 @@ func TestFlags(t *testing.T) {
 		}
 	}
 	_, _, stderr := run("version", "--foo")
-	if want := "gentry: " + msg.Text(msg.ErrUnknownFlag, "version", "--foo") + "\n"; stderr != want {
+	if want := msg.Text(msg.ErrUnknownFlag, "version", "--foo") + "\n"; stderr != want {
 		t.Errorf("stderr %q, want %q", stderr, want)
 	}
 }
@@ -193,7 +193,7 @@ func TestErrorsJSON(t *testing.T) {
 
 func TestErrorText(t *testing.T) {
 	_, stdout, stderr := run("foo")
-	want := "gentry: " + msg.Text(msg.ErrUnknownCommand, "foo") + " " + msg.Text(msg.HintUnknownCommand) + "\n"
+	want := msg.Text(msg.ErrUnknownCommand, "foo") + " " + msg.Text(msg.HintUnknownCommand) + "\n"
 	if stdout != "" || stderr != want {
 		t.Errorf("stdout %q, stderr %q, want stderr %q", stdout, stderr, want)
 	}
@@ -220,7 +220,7 @@ func TestHook(t *testing.T) {
 	}
 	for _, tt := range tests {
 		exit, _, stderr := run(tt.args...)
-		if exit != contract.ExitUsage || stderr != "gentry: "+tt.stderr+"\n" {
+		if exit != contract.ExitUsage || stderr != tt.stderr+"\n" {
 			t.Errorf("%v: exit code %d, stderr %q, want %q", tt.args, exit, stderr, tt.stderr)
 		}
 		// hook takes no --json flag, so check the JSON failure through the env.

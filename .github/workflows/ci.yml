@@ -82,6 +82,11 @@ jobs:
           export GENTRY_HOME="$RUNNER_TEMP/gentry-home" GENTRY_CLAUDE="$PWD/bin/fakeclaude$(go env GOEXE)"
           ./bin/gentry setup claude --json | grep -q '"action":"installed"'
           ./bin/gentry setup claude --json | grep -q '"action":"unchanged"'
+          ./bin/gentry events
+          if [ -n "$(./bin/gentry events --json)" ] || [ -e "$GENTRY_HOME/state" ]; then
+            echo "events without a state store must print nothing and create nothing"
+            exit 1
+          fi
           test -f "$GENTRY_HOME/integrations/claude/gentry/hooks/hooks.json"
           code=0
           ./bin/gentry no-such-command || code=$?

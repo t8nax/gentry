@@ -1,15 +1,18 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/state"
 )
 
 // failure is a refusal or failure of a command. It is printed as text on
-// stderr, or as contract.ErrorOutput on stdout when --json is given.
+// stderr, without a program prefix, or as contract.ErrorOutput on stdout when
+// --json is given.
 type failure struct {
 	exit    int
 	code    string
@@ -34,7 +37,7 @@ func fail(env Env, f failure) int {
 	if f.hint != "" {
 		text += " " + f.hint
 	}
-	fmt.Fprintf(env.Stderr, "gentry: %s\n", text)
+	fmt.Fprintln(env.Stderr, text)
 	return f.exit
 }
 
@@ -74,6 +77,51 @@ func unknownFlag(cmd, flag string) failure {
 		message: msg.Text(msg.ErrUnknownFlag, cmd, flag),
 		details: map[string]any{"command": cmd, "flag": flag},
 	}
+}
+
+// flagValueMissing is for a flag that takes a value but got none.
+func flagValueMissing(flag string) failure {
+	return failure{
+		exit:    contract.ExitUsage,
+		code:    contract.CodeFlagValue,
+		message: msg.Text(msg.ErrFlagValueMissing, flag),
+		details: map[string]any{"flag": flag},
+	}
+}
+
+// flagValueInvalid is for a flag value the command cannot accept.
+func flagValueInvalid(flag, value, message string) failure {
+	return failure{
+		exit:    contract.ExitUsage,
+		code:    contract.CodeFlagValue,
+		message: message,
+		details: map[string]any{"flag": flag, "value": value},
+	}
+}
+
+// stateFailure turns an error of the state store into a failure.
+func stateFailure(err error) failure {
+	var ne *state.NewerError
+	var ue *state.UnavailableError
+	switch {
+	case errors.As(err, &ne):
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeStateNewer,
+			message: msg.Text(msg.ErrStateNewer, ne.Schema, ne.Supported),
+			hint:    msg.Text(msg.HintStateNewer),
+			details: map[string]any{"path": ne.Path, "schema": ne.Schema, "supported": ne.Supported},
+		}
+	case errors.As(err, &ue):
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeStateUnavailable,
+			message: msg.Text(msg.ErrStateUnavailable, ue.Path, ue.Err),
+			hint:    msg.Text(msg.HintStateUnavail),
+			details: map[string]any{"path": ue.Path},
+		}
+	}
+	return internal(err)
 }
 
 func flagValue(flag string) failure {
@@ -141,11 +189,11 @@ func toolNotFound(tool, program, title string) failure {
 	}
 }
 
-func toolFailed(tool, title, command, output string) failure {
+func toolFailed(tool, command, output string) failure {
 	return failure{
 		exit:    contract.ExitError,
 		code:    contract.CodeToolFailed,
-		message: msg.Text(msg.ErrToolFailed, title, command, output),
+		message: msg.Text(msg.ErrToolFailed, command, output),
 		details: map[string]any{"tool": tool, "command": command, "output": output},
 	}
 }

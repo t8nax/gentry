@@ -64,7 +64,7 @@ func runSetup(args []string, env Env) int {
 	r, err := claude.Register(program, dir, p.Version)
 	var ce *claude.CommandError
 	if errors.As(err, &ce) {
-		return fail(env, toolFailed(claude.Tool, "Claude Code", ce.Command, ce.Output))
+		return fail(env, toolFailed(claude.Tool, ce.Command, ce.Output))
 	}
 	if err != nil {
 		return fail(env, internal(err))

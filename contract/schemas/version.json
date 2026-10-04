@@ -14,7 +14,12 @@
       "description": "Contract version. It grows only on an incompatible change; 0 until the first release.",
       "type": "integer",
       "minimum": 0
+    },
+    "state_schema": {
+      "description": "Version of the state store schema this build supports. It grows with every change of the schema; a store with a newer schema is refused.",
+      "type": "integer",
+      "minimum": 1
     }
   },
-  "required": ["gentry", "contract"]
+  "required": ["gentry", "contract", "state_schema"]
 }

@@ -59,3 +59,36 @@ jobs:
             echo "unknown command exited with $code, want 2"
             exit 1
           fi
+
+  build:
+    name: build (6 platforms)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      - name: cross-build
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          {
+            echo "### Binary size"
+            echo
+            echo "| Platform | Size, MB |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            os=${target%/*}
+            arch=${target#*/}
+            ext=""
+            if [ "$os" = windows ]; then ext=.exe; fi
+            out="dist/gentry-$os-$arch$ext"
+            GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$out" ./cmd/gentry
+            size=$(stat -c %s "$out")
+            awk -v t="$target" -v s="$size" 'BEGIN { printf "| %s | %.1f |\n", t, s / 1048576 }' >> "$GITHUB_STEP_SUMMARY"
+          done

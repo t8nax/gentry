@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-problem.json",
+  "title": "FlowProblem",
+  "description": "A problem of a flow, in the details of the errors flow_invalid and flow_draft_invalid.",
+  "type": "object",
+  "properties": {
+    "code": {
+      "description": "Kind of the problem, such as unknown_stage. The list is open: a client shows an unknown kind by its message.",
+      "type": "string",
+      "minLength": 1
+    },
+    "file": {
+      "description": "Path of the file inside the flow, with forward slashes, such as scenarios/bug.yaml; absent when the problem is of the whole flow or of a subagent of the library.",
+      "type": "string",
+      "minLength": 1
+    },
+    "line": {
+      "description": "Line of the file, from 1; absent when unknown.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "message": {
+      "description": "The problem, in the operator's language. It names the object, such as a scenario, a node, a stage or a subagent, and not the file.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["code", "message"]
+}

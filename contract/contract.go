@@ -23,9 +23,16 @@ import "embed"
 //go:generate go tool go-jsonschema -p contract -t --tags json -o worktree_add.go schemas/worktree-add.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o worktree_list.go schemas/worktree-list.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o flow_show.go schemas/flow-show.json
-//go:generate go tool go-jsonschema -p contract -t --tags json -o flow_invalid.go schemas/flow-invalid.json
+//go:generate go tool go-jsonschema -p contract -t --tags json --schema-output https://github.com/t8nax/gentry/contract/schemas/flow-problem.json=flow_problem.go --schema-output https://github.com/t8nax/gentry/contract/schemas/flow-invalid.json=flow_invalid.go --schema-output https://github.com/t8nax/gentry/contract/schemas/flow-draft-invalid.json=flow_draft_invalid.go schemas/flow-problem.json schemas/flow-invalid.json schemas/flow-draft-invalid.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o flow_edit.go schemas/flow-edit.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o flow_diff.go schemas/flow-diff.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o flow_apply.go schemas/flow-apply.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o flow_discard.go schemas/flow-discard.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o event_project_added.go schemas/events/project.added.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o event_worktree_added.go schemas/events/worktree.added.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o event_flow_draft_created.go schemas/events/flow.draft_created.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o event_flow_applied.go schemas/events/flow.applied.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o event_flow_draft_discarded.go schemas/events/flow.draft_discarded.json
 
 // Version is the contract version. It grows only on an incompatible change:
 // a field removed, renamed or retyped. It stays 0 until the first release of

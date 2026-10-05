@@ -6,17 +6,19 @@ import "encoding/json"
 import "fmt"
 import "unicode/utf8"
 
-// Details of the error flow_invalid: the problems of the flow of a project.
+// Details of the error flow_invalid: the active version of the flow of a project
+// does not pass the checks of this Gentry, for example after an update.
 type FlowInvalidDetails struct {
-	// Absolute path of the flow directory.
-	Dir string `json:"dir"`
-
 	// All problems of the flow in the order of files and lines: problems of the whole
-	// flow first, files that do not belong to the flow last.
+	// flow first, then the common rules, scenarios, stages, parts, project subagents,
+	// library subagents, and files that do not belong to the flow last.
 	Problems []FlowProblem `json:"problems"`
 
 	// Identifier of the project.
 	Project string `json:"project"`
+
+	// Number of the active flow version.
+	Version int `json:"version"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -25,22 +27,19 @@ func (j *FlowInvalidDetails) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
-	if _, ok := raw["dir"]; raw != nil && !ok {
-		return fmt.Errorf("field dir in FlowInvalidDetails: required")
-	}
 	if _, ok := raw["problems"]; raw != nil && !ok {
 		return fmt.Errorf("field problems in FlowInvalidDetails: required")
 	}
 	if _, ok := raw["project"]; raw != nil && !ok {
 		return fmt.Errorf("field project in FlowInvalidDetails: required")
 	}
+	if _, ok := raw["version"]; raw != nil && !ok {
+		return fmt.Errorf("field version in FlowInvalidDetails: required")
+	}
 	type Plain FlowInvalidDetails
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
-	}
-	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
 	}
 	if plain.Problems != nil && len(plain.Problems) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "problems", 1)
@@ -48,56 +47,9 @@ func (j *FlowInvalidDetails) UnmarshalJSON(value []byte) error {
 	if utf8.RuneCountInString(string(plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
 	}
+	if 1 > plain.Version {
+		return fmt.Errorf("field %s: must be >= %v", "version", 1)
+	}
 	*j = FlowInvalidDetails(plain)
-	return nil
-}
-
-type FlowProblem struct {
-	// Kind of the problem, such as unknown_stage. The list is open: a client shows an
-	// unknown kind by its message.
-	Code string `json:"code"`
-
-	// Path of the file inside the flow directory, with forward slashes, such as
-	// scenarios/bug.yaml; absent when the problem is of the whole flow.
-	File *string `json:"file,omitempty,omitzero"`
-
-	// Line of the file, from 1; absent when unknown.
-	Line *int `json:"line,omitempty,omitzero"`
-
-	// The problem, in the operator's language. It names the object, such as a
-	// scenario, a node or a stage, and not the file.
-	Message string `json:"message"`
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-func (j *FlowProblem) UnmarshalJSON(value []byte) error {
-	var raw map[string]interface{}
-	if err := json.Unmarshal(value, &raw); err != nil {
-		return err
-	}
-	if _, ok := raw["code"]; raw != nil && !ok {
-		return fmt.Errorf("field code in FlowProblem: required")
-	}
-	if _, ok := raw["message"]; raw != nil && !ok {
-		return fmt.Errorf("field message in FlowProblem: required")
-	}
-	type Plain FlowProblem
-	var plain Plain
-	if err := json.Unmarshal(value, &plain); err != nil {
-		return err
-	}
-	if utf8.RuneCountInString(string(plain.Code)) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "code", 1)
-	}
-	if plain.File != nil && utf8.RuneCountInString(string(*plain.File)) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "file", 1)
-	}
-	if plain.Line != nil && 1 > *plain.Line {
-		return fmt.Errorf("field %s: must be >= %v", "line", 1)
-	}
-	if utf8.RuneCountInString(string(plain.Message)) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "message", 1)
-	}
-	*j = FlowProblem(plain)
 	return nil
 }

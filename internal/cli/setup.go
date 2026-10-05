@@ -32,10 +32,10 @@ func runSetup(args []string, env Env) int {
 	}
 	switch {
 	case len(f.args) == 0:
-		return fail(env, missingArgument("setup", "tool", msg.Text(msg.ErrSetupToolMissing), msg.Text(msg.HintSetupTools)))
+		return fail(env, missingArgument("setup", "tool", msg.Text(msg.ErrSetupToolMissing), msg.Text(msg.HintCommandHelp, "setup")))
 	case !slices.Contains(tools, f.args[0]):
 		t := f.args[0]
-		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), msg.Text(msg.HintSetupTools)))
+		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), msg.Text(msg.HintCommandHelp, "setup")))
 	}
 
 	dir, err := home.Integration(claude.Tool)

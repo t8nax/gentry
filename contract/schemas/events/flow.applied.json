@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/flow.applied.json",
+  "title": "FlowAppliedData",
+  "description": "Data of the flow.applied event: the flow draft of the project in the event envelope was applied as a new version and deleted.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "description": "Number of the new flow version.",
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": ["version"]
+}

@@ -22,6 +22,8 @@ func TestSchemasCompile(t *testing.T) {
 	if len(names) == 0 {
 		t.Fatal("no schemas embedded")
 	}
+	// All schemas first: one may refer to another, as flow-invalid.json to
+	// flow-problem.json.
 	c := jsonschema.NewCompiler()
 	for _, name := range names {
 		f, err := Schemas.Open(name)
@@ -33,10 +35,12 @@ func TestSchemasCompile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if err := c.AddResource(name, doc); err != nil {
+		if err := c.AddResource(schemaURL(name), doc); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if _, err := c.Compile(name); err != nil {
+	}
+	for _, name := range names {
+		if _, err := c.Compile(schemaURL(name)); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -77,3 +81,7 @@ func TestEventRoundTrip(t *testing.T) {
 		t.Error("event without data must be rejected")
 	}
 }
+
+// schemaURL is the $id of the embedded schema name: schemas refer to each
+// other by it.
+func schemaURL(name string) string { return "https://github.com/t8nax/gentry/contract/" + name }

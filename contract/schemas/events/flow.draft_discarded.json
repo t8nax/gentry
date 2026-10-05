@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/flow.draft_discarded.json",
+  "title": "FlowDraftDiscardedData",
+  "description": "Data of the flow.draft_discarded event: the flow draft of the project in the event envelope was deleted; the active flow is unchanged. The data is an empty object.",
+  "type": "object",
+  "properties": {}
+}

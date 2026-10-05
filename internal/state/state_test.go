@@ -35,7 +35,7 @@ func TestOpenCreatesStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v != SchemaVersion() || v != 2 {
+	if v != SchemaVersion() || v != 3 {
 		t.Errorf("schema version %d, want %d", v, SchemaVersion())
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -133,12 +133,12 @@ func setSchemaVersion(t *testing.T, s *Store, v int) {
 func TestNewerStoreRefused(t *testing.T) {
 	path := tempPath(t)
 	s := mustOpen(t, path)
-	setSchemaVersion(t, s, 3)
+	setSchemaVersion(t, s, SchemaVersion()+1)
 	s.Close()
 
 	var ne *NewerError
-	if _, err := Open(path); !errors.As(err, &ne) || ne.Schema != 3 || ne.Supported != SchemaVersion() {
-		t.Errorf("Open: got %v, want NewerError for schema 3", err)
+	if _, err := Open(path); !errors.As(err, &ne) || ne.Schema != SchemaVersion()+1 || ne.Supported != SchemaVersion() {
+		t.Errorf("Open: got %v, want NewerError for schema %d", err, SchemaVersion()+1)
 	}
 	if _, err := OpenRead(path); !errors.As(err, &ne) {
 		t.Errorf("OpenRead: got %v, want NewerError", err)

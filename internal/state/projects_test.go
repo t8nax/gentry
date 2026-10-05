@@ -19,8 +19,8 @@ func TestMigrationFromSchema1(t *testing.T) {
 	migrations = orig
 
 	s = mustOpen(t, path)
-	if v, _ := schemaVersion(s.db); v != 2 {
-		t.Fatalf("schema %d, want 2", v)
+	if v, _ := schemaVersion(s.db); v != SchemaVersion() {
+		t.Fatalf("schema %d, want %d", v, SchemaVersion())
 	}
 	if ps, err := s.Projects(); err != nil || len(ps) != 0 {
 		t.Errorf("projects after migration: %+v, %v", ps, err)

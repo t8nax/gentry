@@ -100,7 +100,7 @@ func runProjectAdd(args []string, env Env) int {
 	if len(res.Unpooled) > 0 {
 		b.WriteString("\n")
 		writeList(&b, msg.Text(msg.ProjectUnpooled), res.Unpooled)
-		fmt.Fprintln(&b, msg.Text(msg.HintProjectUnpooled))
+		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintProjectUnpooled))
 	}
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK

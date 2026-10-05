@@ -88,8 +88,8 @@ func TestSetupErrors(t *testing.T) {
 		code   string
 		stderr string
 	}{
-		{[]string{"setup"}, contract.CodeMissingArgument, msg.Text(msg.ErrSetupToolMissing) + "\n" + "Описание команды: gentry setup --help"},
-		{[]string{"setup", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrSetupToolUnknown, "foo") + "\n" + "Описание команды: gentry setup --help"},
+		{[]string{"setup"}, contract.CodeMissingArgument, msg.Text(msg.ErrSetupToolMissing) + "\n" + "Посмотреть описание команды: gentry setup --help"},
+		{[]string{"setup", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrSetupToolUnknown, "foo") + "\n" + "Посмотреть описание команды: gentry setup --help"},
 		{[]string{"setup", "claude", "extra"}, contract.CodeUnexpectedArgs, msg.Text(msg.ErrExtraArgs, "setup", "extra")},
 	}
 	for _, tt := range tests {

@@ -100,8 +100,9 @@ func Path() (string, error) {
 
 // Store is an open state store.
 type Store struct {
-	db   *sql.DB
-	path string
+	db     *sql.DB
+	path   string
+	schema int // schema version of the store; a store opened for reading may be older
 }
 
 // Open opens the store at path for writing. It creates the store if it does
@@ -119,6 +120,7 @@ func Open(path string) (*Store, error) {
 		s.Close()
 		return nil, err
 	}
+	s.schema = SchemaVersion()
 	return s, nil
 }
 
@@ -146,6 +148,7 @@ func OpenRead(path string) (*Store, error) {
 		s.Close()
 		return nil, err
 	}
+	s.schema = v
 	return s, nil
 }
 

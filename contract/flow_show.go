@@ -4,7 +4,96 @@ package contract
 
 import "encoding/json"
 import "fmt"
+import "reflect"
 import "unicode/utf8"
+
+type FlowAgent struct {
+	// What the subagent may do, in the order of its file.
+	Capabilities []FlowShowOutputAgentsElemCapabilitiesElem `json:"capabilities"`
+
+	// Identifier of the subagent, the name of its files.
+	Id string `json:"id"`
+
+	// Instruction of the subagent in markdown, as written.
+	Instruction string `json:"instruction"`
+
+	// What the subagent is for.
+	Purpose string `json:"purpose"`
+
+	// Where the subagent comes from: project for a subagent of the flow, library for
+	// a copy of a subagent of the library taken into the version.
+	Source FlowShowOutputAgentsElemSource `json:"source"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowAgent) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["capabilities"]; raw != nil && !ok {
+		return fmt.Errorf("field capabilities in FlowAgent: required")
+	}
+	if _, ok := raw["id"]; raw != nil && !ok {
+		return fmt.Errorf("field id in FlowAgent: required")
+	}
+	if _, ok := raw["instruction"]; raw != nil && !ok {
+		return fmt.Errorf("field instruction in FlowAgent: required")
+	}
+	if _, ok := raw["purpose"]; raw != nil && !ok {
+		return fmt.Errorf("field purpose in FlowAgent: required")
+	}
+	if _, ok := raw["source"]; raw != nil && !ok {
+		return fmt.Errorf("field source in FlowAgent: required")
+	}
+	type Plain FlowAgent
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if utf8.RuneCountInString(string(plain.Id)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "id", 1)
+	}
+	if utf8.RuneCountInString(string(plain.Purpose)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "purpose", 1)
+	}
+	*j = FlowAgent(plain)
+	return nil
+}
+
+// The open draft of the flow; absent if there is none.
+type FlowDraftInfo struct {
+	// Number of the version the draft was made from; absent if the project had no
+	// flow.
+	BaseVersion *int `json:"base_version,omitempty,omitzero"`
+
+	// Absolute path of the draft directory.
+	Dir string `json:"dir"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowDraftInfo) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["dir"]; raw != nil && !ok {
+		return fmt.Errorf("field dir in FlowDraftInfo: required")
+	}
+	type Plain FlowDraftInfo
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.BaseVersion != nil && 1 > *plain.BaseVersion {
+		return fmt.Errorf("field %s: must be >= %v", "base_version", 1)
+	}
+	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
+	}
+	*j = FlowDraftInfo(plain)
+	return nil
+}
 
 type FlowNode struct {
 	// Identifier of the node, unique within the scenario. One stage may stand in
@@ -46,6 +135,38 @@ func (j *FlowNode) UnmarshalJSON(value []byte) error {
 		return fmt.Errorf("field %s length: must be >= %d", "stage", 1)
 	}
 	*j = FlowNode(plain)
+	return nil
+}
+
+type FlowPart struct {
+	// Identifier of the part, the name of its file.
+	Id string `json:"id"`
+
+	// Text of the part in markdown, as written.
+	Text string `json:"text"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowPart) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["id"]; raw != nil && !ok {
+		return fmt.Errorf("field id in FlowPart: required")
+	}
+	if _, ok := raw["text"]; raw != nil && !ok {
+		return fmt.Errorf("field text in FlowPart: required")
+	}
+	type Plain FlowPart
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if utf8.RuneCountInString(string(plain.Id)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "id", 1)
+	}
+	*j = FlowPart(plain)
 	return nil
 }
 
@@ -99,15 +220,21 @@ func (j *FlowScenario) UnmarshalJSON(value []byte) error {
 	return nil
 }
 
-// Output of `gentry flow show --json`: the flow of the project. With a scenario
-// named, scenarios has only it, stages only its stages and parts only the parts
-// they include.
+// Output of `gentry flow show --json`: the active flow of the project with its
+// texts, or with --draft the draft. With an object flag the arrays narrow to the
+// object and what it refers to: for a scenario its stages, their parts and
+// subagents; for a stage its parts and subagent; for a part or a subagent the
+// object alone.
 type FlowShowOutput struct {
-	// Absolute path of the flow directory.
-	Dir string `json:"dir"`
+	// Subagents by identifier: those of the project and those of the library the
+	// stages name. A project subagent replaces a library one of the same identifier.
+	Agents []FlowAgent `json:"agents"`
 
-	// Identifiers of the parts by identifier.
-	Parts []string `json:"parts"`
+	// The open draft of the flow; absent if there is none.
+	Draft *FlowDraftInfo `json:"draft,omitempty,omitzero"`
+
+	// Parts by identifier.
+	Parts []FlowPart `json:"parts"`
 
 	// Identifier of the project.
 	Project string `json:"project"`
@@ -117,6 +244,76 @@ type FlowShowOutput struct {
 
 	// Stages by identifier.
 	Stages []FlowStage `json:"stages"`
+
+	// Number of the active flow version; absent if the project has no flow yet, which
+	// only the draft can show.
+	Version *int `json:"version,omitempty,omitzero"`
+}
+
+type FlowShowOutputAgentsElemCapabilitiesElem string
+
+const FlowShowOutputAgentsElemCapabilitiesElemEdit FlowShowOutputAgentsElemCapabilitiesElem = "edit"
+const FlowShowOutputAgentsElemCapabilitiesElemRead FlowShowOutputAgentsElemCapabilitiesElem = "read"
+const FlowShowOutputAgentsElemCapabilitiesElemRun FlowShowOutputAgentsElemCapabilitiesElem = "run"
+const FlowShowOutputAgentsElemCapabilitiesElemSearch FlowShowOutputAgentsElemCapabilitiesElem = "search"
+const FlowShowOutputAgentsElemCapabilitiesElemWeb FlowShowOutputAgentsElemCapabilitiesElem = "web"
+
+var enumValues_FlowShowOutputAgentsElemCapabilitiesElem = []interface{}{
+	"read",
+	"search",
+	"edit",
+	"run",
+	"web",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowShowOutputAgentsElemCapabilitiesElem) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_FlowShowOutputAgentsElemCapabilitiesElem {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_FlowShowOutputAgentsElemCapabilitiesElem, v)
+	}
+	*j = FlowShowOutputAgentsElemCapabilitiesElem(v)
+	return nil
+}
+
+type FlowShowOutputAgentsElemSource string
+
+const FlowShowOutputAgentsElemSourceLibrary FlowShowOutputAgentsElemSource = "library"
+const FlowShowOutputAgentsElemSourceProject FlowShowOutputAgentsElemSource = "project"
+
+var enumValues_FlowShowOutputAgentsElemSource = []interface{}{
+	"project",
+	"library",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowShowOutputAgentsElemSource) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_FlowShowOutputAgentsElemSource {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_FlowShowOutputAgentsElemSource, v)
+	}
+	*j = FlowShowOutputAgentsElemSource(v)
+	return nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -125,8 +322,8 @@ func (j *FlowShowOutput) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
-	if _, ok := raw["dir"]; raw != nil && !ok {
-		return fmt.Errorf("field dir in FlowShowOutput: required")
+	if _, ok := raw["agents"]; raw != nil && !ok {
+		return fmt.Errorf("field agents in FlowShowOutput: required")
 	}
 	if _, ok := raw["parts"]; raw != nil && !ok {
 		return fmt.Errorf("field parts in FlowShowOutput: required")
@@ -145,11 +342,11 @@ func (j *FlowShowOutput) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
-	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
-	}
 	if utf8.RuneCountInString(string(plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
+	}
+	if plain.Version != nil && 1 > *plain.Version {
+		return fmt.Errorf("field %s: must be >= %v", "version", 1)
 	}
 	*j = FlowShowOutput(plain)
 	return nil
@@ -157,8 +354,8 @@ func (j *FlowShowOutput) UnmarshalJSON(value []byte) error {
 
 type FlowStage struct {
 	// Who carries out the stage: orchestrator for the main agent session, operator
-	// for the operator, otherwise the identifier of a subagent of the project or a
-	// shared one.
+	// for the operator, otherwise the identifier of a subagent of the project or of
+	// the library.
 	Executor string `json:"executor"`
 
 	// Exit of the stage: what must be true to close it.
@@ -170,6 +367,9 @@ type FlowStage struct {
 	// Identifiers of the parts included in the instruction of the stage, in the order
 	// of the stage file; empty if none.
 	Include []string `json:"include"`
+
+	// Instruction of the stage in markdown, as written.
+	Instruction string `json:"instruction"`
 
 	// Name of the stage shown to the operator.
 	Title string `json:"title"`
@@ -192,6 +392,9 @@ func (j *FlowStage) UnmarshalJSON(value []byte) error {
 	}
 	if _, ok := raw["include"]; raw != nil && !ok {
 		return fmt.Errorf("field include in FlowStage: required")
+	}
+	if _, ok := raw["instruction"]; raw != nil && !ok {
+		return fmt.Errorf("field instruction in FlowStage: required")
 	}
 	if _, ok := raw["title"]; raw != nil && !ok {
 		return fmt.Errorf("field title in FlowStage: required")

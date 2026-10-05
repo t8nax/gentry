@@ -134,12 +134,19 @@ func describe(c command) string {
 		}
 		usage = append(usage, name)
 	}
-	for _, f := range c.flags {
+	for i, f := range c.flags {
 		name := "--" + f.name
 		if f.value != "" {
 			name += " " + msg.Text(f.value)
 		}
 		flags = append(flags, row{name, f.desc()})
+		// A flag of the group of the previous one is another choice in its
+		// brackets: [--a <x> | --b <y>].
+		if f.group != "" && i > 0 && c.flags[i-1].group == f.group {
+			last := &usage[len(usage)-1]
+			*last = strings.TrimSuffix(*last, "]") + " | " + name + "]"
+			continue
+		}
 		if !f.required {
 			name = "[" + name + "]"
 		}

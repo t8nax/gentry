@@ -1,15 +1,14 @@
-// Package flow reads the flow of a project from its process directory and
-// checks it by sections 7.1-7.2 of the technical solution: the files of the
-// flow and their fields, the pairs of stage files, references to stages,
-// parts and subagents, and the graph of each scenario.
+// Package flow reads the flow of a project and checks it by sections 7.1-7.2
+// and 10.2 of the technical solution: the files of the flow and their fields,
+// the pairs of stage and subagent files, references to stages, parts and
+// subagents, and the graph of each scenario. The active flow is a version
+// snapshot in the state store; its files exist only as the draft, the one
+// form of the flow the operator and the agent edit.
 package flow
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -30,9 +29,26 @@ const (
 	scenariosDir = "scenarios"
 	stagesDir    = "stages"
 	partsDir     = "parts"
+	agentsDir    = "agents"
 	fieldsExt    = ".yaml"
 	textExt      = ".md"
 )
+
+// Places of the flow in the process directory of the operator.
+const (
+	draftDirName   = "flow-draft" // the draft, in the directory of the project
+	libraryDirName = "agents"     // the library of subagents, for all projects
+)
+
+// DraftDir returns the directory of the flow draft of project in the process
+// directory.
+func DraftDir(process, project string) string {
+	return filepath.Join(process, project, draftDirName)
+}
+
+// LibraryDir returns the directory of the library of subagents in the process
+// directory.
+func LibraryDir(process string) string { return filepath.Join(process, libraryDirName) }
 
 // Finish is the target of a transition that ends the scenario.
 const Finish = "finish"
@@ -42,6 +58,9 @@ const (
 	Orchestrator = "orchestrator" // the main agent session
 	Operator     = "operator"     // the operator
 )
+
+// Capabilities a subagent may have (section 10.2).
+var Capabilities = []string{"read", "search", "edit", "run", "web"}
 
 // Fields that come with later versions of Gentry: tracker actions with stage
 // 8, procedures of the knowledge with stage 7. Until then they are refused, so
@@ -55,7 +74,8 @@ var (
 type Flow struct {
 	Scenarios []Scenario // by identifier
 	Stages    []Stage    // by identifier
-	Parts     []string   // by identifier
+	Parts     []Part     // by identifier
+	Agents    []Agent    // the project subagents and the library ones the stages name, by identifier
 }
 
 // Scenario is the graph of a scenario.
@@ -82,11 +102,27 @@ type Transition struct {
 
 // Stage is a stage of the flow, described once for all scenarios.
 type Stage struct {
-	ID       string
-	Title    string
-	Exit     string
-	Executor string   // Orchestrator, Operator or a subagent
-	Include  []string // parts, in the order of the stage file
+	ID          string
+	Title       string
+	Exit        string
+	Executor    string   // Orchestrator, Operator or a subagent
+	Include     []string // parts, in the order of the stage file
+	Instruction string   // markdown
+}
+
+// Part is a part included in the instructions of stages.
+type Part struct {
+	ID   string
+	Text string // markdown
+}
+
+// Agent is a subagent of the flow: of the project or of the library.
+type Agent struct {
+	ID           string
+	Library      bool // from the library of subagents, not of the project
+	Purpose      string
+	Capabilities []string // in the order of the file
+	Instruction  string   // markdown
 }
 
 // Scenario returns the scenario with identifier id.
@@ -109,78 +145,177 @@ func (f *Flow) Stage(id string) (Stage, bool) {
 	return Stage{}, false
 }
 
-// Only returns the flow of scenario s alone: its stages and their parts.
-func (f *Flow) Only(s Scenario) *Flow {
-	out := &Flow{Scenarios: []Scenario{s}, Parts: []string{}}
-	for _, st := range f.Stages {
-		if slices.ContainsFunc(s.Nodes, func(n Node) bool { return n.Stage == st.ID }) {
-			out.Stages = append(out.Stages, st)
+// Part returns the part with identifier id.
+func (f *Flow) Part(id string) (Part, bool) {
+	for _, p := range f.Parts {
+		if p.ID == id {
+			return p, true
 		}
 	}
-	for _, p := range f.Parts {
-		if slices.ContainsFunc(out.Stages, func(st Stage) bool { return slices.Contains(st.Include, p) }) {
-			out.Parts = append(out.Parts, p)
+	return Part{}, false
+}
+
+// Agent returns the subagent with identifier id.
+func (f *Flow) Agent(id string) (Agent, bool) {
+	for _, a := range f.Agents {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return Agent{}, false
+}
+
+// ScenariosOf returns the identifiers of the scenarios where stage stands.
+func (f *Flow) ScenariosOf(stage string) []string {
+	var out []string
+	for _, s := range f.Scenarios {
+		if slices.ContainsFunc(s.Nodes, func(n Node) bool { return n.Stage == stage }) {
+			out = append(out, s.ID)
 		}
 	}
 	return out
 }
 
-// Dirs locates a flow and the subagents its stages may name.
-type Dirs struct {
-	Flow   string   // the flow directory
-	Agents []string // directories of subagents, the project ones first
+// StagesOf returns the identifiers of the stages that include part.
+func (f *Flow) StagesOf(part string) []string {
+	var out []string
+	for _, st := range f.Stages {
+		if slices.Contains(st.Include, part) {
+			out = append(out, st.ID)
+		}
+	}
+	return out
 }
 
-// ProjectDirs returns the dirs of project in the process directory: its flow,
-// its subagents and the shared subagents of the operator (section 10.2).
-func ProjectDirs(process, project string) Dirs {
-	return Dirs{
-		Flow:   filepath.Join(process, project, "flow"),
-		Agents: []string{filepath.Join(process, project, "agents"), filepath.Join(process, "agents")},
+// StagesBy returns the identifiers of the stages subagent agent carries out.
+func (f *Flow) StagesBy(agent string) []string {
+	var out []string
+	for _, st := range f.Stages {
+		if st.Executor == agent {
+			out = append(out, st.ID)
+		}
 	}
+	return out
+}
+
+// OnlyScenario returns the flow of scenario s alone: its stages, their parts
+// and subagents.
+func (f *Flow) OnlyScenario(s Scenario) *Flow {
+	var stages []Stage
+	for _, st := range f.Stages {
+		if slices.ContainsFunc(s.Nodes, func(n Node) bool { return n.Stage == st.ID }) {
+			stages = append(stages, st)
+		}
+	}
+	out := f.withStages(stages)
+	out.Scenarios = []Scenario{s}
+	return out
+}
+
+// OnlyStage returns the flow of stage st alone: it, its parts and subagent.
+func (f *Flow) OnlyStage(st Stage) *Flow { return f.withStages([]Stage{st}) }
+
+// OnlyPart returns the flow of part p alone.
+func (f *Flow) OnlyPart(p Part) *Flow {
+	return &Flow{Scenarios: []Scenario{}, Stages: []Stage{}, Parts: []Part{p}, Agents: []Agent{}}
+}
+
+// OnlyAgent returns the flow of subagent a alone.
+func (f *Flow) OnlyAgent(a Agent) *Flow {
+	return &Flow{Scenarios: []Scenario{}, Stages: []Stage{}, Parts: []Part{}, Agents: []Agent{a}}
+}
+
+// withStages returns stages with what they refer to: their parts and
+// subagents.
+func (f *Flow) withStages(stages []Stage) *Flow {
+	out := &Flow{Scenarios: []Scenario{}, Stages: append([]Stage{}, stages...), Parts: []Part{}, Agents: []Agent{}}
+	for _, p := range f.Parts {
+		if slices.ContainsFunc(stages, func(st Stage) bool { return slices.Contains(st.Include, p.ID) }) {
+			out.Parts = append(out.Parts, p)
+		}
+	}
+	for _, a := range f.Agents {
+		if slices.ContainsFunc(stages, func(st Stage) bool { return st.Executor == a.ID }) {
+			out.Agents = append(out.Agents, a)
+		}
+	}
+	return out
 }
 
 var idPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 
-// ValidID reports whether id is a valid identifier of a scenario, stage, part
-// or node: up to 64 lowercase Latin letters, digits and hyphens, starting with
-// a letter.
+// ValidID reports whether id is a valid identifier of a scenario, stage, part,
+// node or subagent: up to 64 lowercase Latin letters, digits and hyphens,
+// starting with a letter.
 func ValidID(id string) bool { return idPattern.MatchString(id) }
 
-// Load reads and checks the flow. It returns NotFoundError if there is no flow
-// directory, InvalidError with all problems if the flow has any, and an error
-// satisfying errors.As(err, *fs.PathError) if a file cannot be read.
-func Load(d Dirs) (*Flow, error) {
-	fi, err := os.Stat(d.Flow)
-	if errors.Is(err, fs.ErrNotExist) || err == nil && !fi.IsDir() {
-		return nil, &NotFoundError{Dir: d.Flow}
-	}
+// Result is a flow as read: the flow itself if it has no problems, and what
+// it consists of either way.
+type Result struct {
+	Flow     *Flow     // nil if there are problems
+	Problems []Problem // in the order of files and lines
+	// Snapshot holds the files of the flow and the library subagents its
+	// stages name. With problems it is as complete as the problems allow.
+	Snapshot Snapshot
+}
+
+// ReadDraft reads and checks the flow draft in directory dir; the library of
+// subagents is in directory library. It returns an error satisfying
+// errors.As(err, *fs.PathError) if a file cannot be read.
+func ReadDraft(dir, library string) (*Result, error) {
+	t, err := readTree(dir)
 	if err != nil {
 		return nil, err
 	}
+	return readFlow(t, dirLibrary(library))
+}
+
+// ReadSnapshot checks the flow of a version snapshot. A snapshot was checked
+// when it was applied, but a later Gentry may check more.
+func ReadSnapshot(s Snapshot) (*Result, error) {
+	return readFlow(treeOf(s.Files), mapLibrary(s.Library))
+}
+
+func readFlow(t *tree, lib library) (*Result, error) {
 	l := &loader{
-		dirs:   d,
-		fields: map[string]bool{},
-		texts:  map[string]bool{},
-		parts:  map[string]bool{},
-		stages: map[string]*stage{},
-		agents: map[string]bool{},
+		src:         t,
+		lib:         lib,
+		fields:      map[string]bool{},
+		texts:       map[string]bool{},
+		parts:       map[string]bool{},
+		agentFields: map[string]bool{},
+		agentTexts:  map[string]bool{},
+		stages:      map[string]*stage{},
+		agents:      map[string]*agent{},
+		library:     map[string]*agent{},
+		libFiles:    map[string]string{},
+		contents:    map[string]string{},
 	}
 	if err := l.load(); err != nil {
 		return nil, err
 	}
-	l.check()
-	if len(l.problems) > 0 {
-		sortProblems(l.problems)
-		return nil, &InvalidError{Dir: d.Flow, Problems: l.problems}
+	if err := l.check(); err != nil {
+		return nil, err
 	}
-	return l.flow(), nil
+	files := map[string]string{}
+	for p, b := range t.files {
+		files[p] = string(b)
+	}
+	res := &Result{Snapshot: Snapshot{Files: files, Library: l.libFiles}}
+	if problems := sortProblems(l.problems, l.libProblems); len(problems) > 0 {
+		res.Problems = problems
+		return res, nil
+	}
+	res.Flow = l.flow()
+	return res, nil
 }
 
 // loader reads a flow and collects its problems.
 type loader struct {
-	dirs     Dirs
-	problems []Problem
+	src         *tree
+	lib         library
+	problems    []Problem
+	libProblems []Problem // of library subagents, in the order they are found
 
 	common        bool            // flow.yaml exists
 	scenarioFiles []string        // identifiers of the scenario files with valid names
@@ -188,10 +323,15 @@ type loader struct {
 	fields        map[string]bool // stages with fields
 	texts         map[string]bool // stages with an instruction
 	parts         map[string]bool
+	agentFields   map[string]bool // project subagents with fields
+	agentTexts    map[string]bool // project subagents with an instruction
 
 	scenarios []*scenario
 	stages    map[string]*stage
-	agents    map[string]bool // whether a subagent exists, by identifier
+	agents    map[string]*agent // project subagents as read
+	library   map[string]*agent // library subagents the stages name; nil if there is none
+	libFiles  map[string]string // the files of the library subagents read, for the snapshot
+	contents  map[string]string // texts of instructions and parts, by path
 }
 
 // scenario is a scenario as read, with the lines of its parts.
@@ -227,97 +367,71 @@ type stage struct {
 	includeLines []int
 }
 
+// agent is a subagent as read.
+type agent struct {
+	id           string
+	library      bool
+	purpose      string
+	capabilities []string
+	instruction  string
+}
+
 // load reads the files of the flow.
 func (l *loader) load() error {
-	entries, err := l.entries("")
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
+	for _, e := range l.src.entries("") {
 		switch {
 		case e.name == commonFile && !e.dir:
 			l.common = true
-		case e.dir && (e.name == scenariosDir || e.name == stagesDir || e.name == partsDir):
-			if err := l.scan(e.name); err != nil {
-				return err
-			}
+		case e.dir && (e.name == scenariosDir || e.name == stagesDir || e.name == partsDir || e.name == agentsDir):
+			l.scan(e.name)
 		default:
 			l.extra(e)
 		}
 	}
 
 	if l.common {
-		if err := l.loadCommon(); err != nil {
-			return err
-		}
+		l.loadCommon()
 	}
 	for _, id := range l.scenarioFiles {
-		if err := l.loadScenario(id); err != nil {
-			return err
-		}
+		l.loadScenario(id)
 	}
 	for _, id := range sorted(l.fields) {
-		if err := l.loadStage(id); err != nil {
-			return err
-		}
+		l.loadStage(id)
 	}
 	for _, id := range sorted(l.texts) {
-		if _, _, err := l.read(stagesDir+"/"+id+textExt, objStage(id)); err != nil {
-			return err
-		}
+		l.readText(stagesDir+"/"+id+textExt, objStage(id))
 	}
 	for _, id := range sorted(l.parts) {
-		if _, _, err := l.read(partsDir+"/"+id+textExt, objPart(id)); err != nil {
-			return err
+		l.readText(partsDir+"/"+id+textExt, objPart(id))
+	}
+	for _, id := range sorted(l.agentFields) {
+		o := object{name: objAgent(id), file: agentsDir + "/" + id + fieldsExt}
+		v, ok := l.readYAML(l.src.files[o.file], o)
+		a := &agent{id: id}
+		l.agents[id] = a
+		if ok {
+			l.loadAgent(o, v, a)
+		}
+	}
+	for _, id := range sorted(l.agentTexts) {
+		if text, ok := l.readText(agentsDir+"/"+id+textExt, objAgent(id)); ok && l.agents[id] != nil {
+			l.agents[id].instruction = text
 		}
 	}
 	return nil
 }
 
 // entry is a file or directory of the flow; rel is its path inside the flow
-// directory with forward slashes.
+// with forward slashes.
 type entry struct {
 	name, rel string
 	dir       bool
 }
 
-// entries returns the entries of directory rel of the flow by name. Hidden
-// files, those whose name starts with a dot, are not part of the flow.
-func (l *loader) entries(rel string) ([]entry, error) {
-	dir := filepath.Join(l.dirs.Flow, filepath.FromSlash(rel))
-	des, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	var out []entry
-	for _, de := range des {
-		name := de.Name()
-		if strings.HasPrefix(name, ".") {
-			continue
-		}
-		e := entry{name: name, rel: name, dir: de.IsDir()}
-		if rel != "" {
-			e.rel = rel + "/" + name
-		}
-		// A symbolic link counts as what it points to.
-		if de.Type()&fs.ModeSymlink != 0 {
-			if fi, err := os.Stat(filepath.Join(dir, name)); err == nil {
-				e.dir = fi.IsDir()
-			}
-		}
-		out = append(out, e)
-	}
-	return out, nil
-}
-
 // scan notes the files of directory sub of the flow.
-func (l *loader) scan(sub string) error {
-	entries, err := l.entries(sub)
-	if err != nil {
-		return err
-	}
+func (l *loader) scan(sub string) {
 	invalid := map[string]bool{}
-	for _, e := range entries {
+	for _, e := range l.src.entries(sub) {
 		ext := filepath.Ext(e.name)
 		id := strings.TrimSuffix(e.name, ext)
 		var into map[string]bool
@@ -333,6 +447,10 @@ func (l *loader) scan(sub string) error {
 			into, obj = l.texts, objStage
 		case sub == partsDir && ext == textExt:
 			into, obj = l.parts, objPart
+		case sub == agentsDir && ext == fieldsExt:
+			into, obj = l.agentFields, objAgent
+		case sub == agentsDir && ext == textExt:
+			into, obj = l.agentTexts, objAgent
 		}
 		switch {
 		case obj == nil:
@@ -349,7 +467,6 @@ func (l *loader) scan(sub string) error {
 			into[id] = true
 		}
 	}
-	return nil
 }
 
 // extra reports a file or directory that does not belong to the flow.
@@ -361,27 +478,25 @@ func (l *loader) extra(e entry) {
 	l.report(contract.ProblemExtraFile, e.rel, 0, k, e.rel)
 }
 
-// read returns the text of file rel of the flow. If the text is not in UTF-8,
-// it reports the problem for object obj and returns ok false.
-func (l *loader) read(rel, obj string) (text []byte, ok bool, err error) {
-	b, err := os.ReadFile(filepath.Join(l.dirs.Flow, filepath.FromSlash(rel)))
-	if err != nil {
-		return nil, false, err
-	}
-	b = bytes.TrimPrefix(b, []byte{0xEF, 0xBB, 0xBF}) // a byte order mark is not part of the text
+// readText returns file rel of the flow as text and keeps it for the flow. If
+// the text is not in UTF-8, it reports the problem for object obj and returns
+// ok false.
+func (l *loader) readText(rel, obj string) (string, bool) {
+	b := l.src.files[rel]
 	if !utf8.Valid(b) {
 		l.report(contract.ProblemSyntax, rel, 0, msg.ProblemEncoding, obj)
-		return nil, false, nil
+		return "", false
 	}
-	return b, true, nil
+	l.contents[rel] = string(b)
+	return string(b), true
 }
 
-// readYAML reads and parses file rel of the flow. It returns ok false after
-// reporting a problem of syntax or encoding for object obj.
-func (l *loader) readYAML(rel, obj string) (v *value, ok bool, err error) {
-	b, ok, err := l.read(rel, obj)
-	if !ok {
-		return nil, false, err
+// readYAML parses text b of the file of object o. It returns ok false after
+// reporting a problem of syntax or encoding.
+func (l *loader) readYAML(b []byte, o object) (v *value, ok bool) {
+	if !utf8.Valid(b) {
+		l.reportOn(o, contract.ProblemSyntax, 0, msg.ProblemEncoding, o.name)
+		return nil, false
 	}
 	f, err := parser.ParseBytes(b, 0)
 	if err != nil {
@@ -390,43 +505,41 @@ func (l *loader) readYAML(rel, obj string) (v *value, ok bool, err error) {
 		if errors.As(err, &ye) && ye.GetToken() != nil && ye.GetToken().Position != nil {
 			line = ye.GetToken().Position.Line
 		}
-		l.report(contract.ProblemSyntax, rel, line, msg.ProblemSyntax, obj)
-		return nil, false, nil
+		l.reportOn(o, contract.ProblemSyntax, line, msg.ProblemSyntax, o.name)
+		return nil, false
 	}
 	switch len(f.Docs) {
 	case 0:
-		return &value{}, true, nil
+		return &value{}, true
 	case 1:
-		return convert(f.Docs[0].Body, map[string]*value{}), true, nil
+		return convert(f.Docs[0].Body, map[string]*value{}), true
 	}
 	// A file of the flow is one document.
-	l.report(contract.ProblemSyntax, rel, lineOf(f.Docs[1]), msg.ProblemSyntax, obj)
-	return nil, false, nil
+	l.reportOn(o, contract.ProblemSyntax, lineOf(f.Docs[1]), msg.ProblemSyntax, o.name)
+	return nil, false
 }
 
-func (l *loader) loadCommon() error {
+func (l *loader) loadCommon() {
 	o := object{name: objCommon(), file: commonFile}
-	v, ok, err := l.readYAML(o.file, o.name)
-	if ok {
+	if v, ok := l.readYAML(l.src.files[o.file], o); ok {
 		l.mapping(o, v, 0, nil, laterTaskFields)
 	}
-	return err
 }
 
-func (l *loader) loadScenario(id string) error {
+func (l *loader) loadScenario(id string) {
 	o := object{name: objScenario(id), file: scenariosDir + "/" + id + fieldsExt}
 	s := &scenario{id: id, file: o.file, malformed: true}
 	l.scenarios = append(l.scenarios, s)
-	v, ok, err := l.readYAML(o.file, o.name)
+	v, ok := l.readYAML(l.src.files[o.file], o)
 	if !ok {
-		return err
+		return
 	}
 	before := len(l.problems)
 	defer func() { s.malformed = len(l.problems) > before }()
 
 	m, ok := l.mapping(o, v, 0, []string{"title", "start", "nodes"}, laterTaskFields)
 	if !ok {
-		return nil
+		return
 	}
 	s.title, _ = l.text(o, m, "title", 0)
 	s.start, s.startLine = l.text(o, m, "start", 0)
@@ -434,10 +547,10 @@ func (l *loader) loadScenario(id string) error {
 	switch {
 	case !present || nodes.value.kind == null:
 		l.report(contract.ProblemMissingField, o.file, nodes.line, msg.ProblemMissingField, o.name, "nodes")
-		return nil
+		return
 	case nodes.value.kind != mapping:
 		l.report(contract.ProblemInvalidValue, o.file, nodes.line, msg.ProblemNodes, o.name)
-		return nil
+		return
 	}
 	for _, f := range nodes.value.fields {
 		no := object{name: objNode(id, f.name), file: o.file}
@@ -458,7 +571,6 @@ func (l *loader) loadScenario(id string) error {
 		n.stage, n.stageLine = l.text(no, nm, "stage", f.line)
 		n.next = l.transitions(no, nm, f.line)
 	}
-	return nil
 }
 
 // transitions reads field next of a node: one node identifier, a transition
@@ -505,24 +617,24 @@ func (l *loader) transitions(o object, m map[string]field, line int) []*transiti
 	return out
 }
 
-func (l *loader) loadStage(id string) error {
+func (l *loader) loadStage(id string) {
 	o := object{name: objStage(id), file: stagesDir + "/" + id + fieldsExt}
 	st := &stage{id: id, file: o.file}
 	l.stages[id] = st
-	v, ok, err := l.readYAML(o.file, o.name)
+	v, ok := l.readYAML(l.src.files[o.file], o)
 	if !ok {
-		return err
+		return
 	}
 	m, ok := l.mapping(o, v, 0, []string{"title", "exit", "executor", "include"}, laterStageFields)
 	if !ok {
-		return nil
+		return
 	}
 	st.title, _ = l.text(o, m, "title", 0)
 	st.exit, _ = l.text(o, m, "exit", 0)
 	st.executor, st.executorLine = l.text(o, m, "executor", 0)
 	inc, present := m["include"]
 	if !present || inc.value.kind == null {
-		return nil
+		return
 	}
 	ids := inc.value.kind == sequence
 	for _, item := range inc.value.items {
@@ -531,19 +643,47 @@ func (l *loader) loadStage(id string) error {
 	}
 	if !ids {
 		l.report(contract.ProblemInvalidValue, o.file, inc.line, msg.ProblemInclude, o.name)
-		return nil
+		return
 	}
 	for _, item := range inc.value.items {
 		st.include = append(st.include, item.scalar.(string))
 		st.includeLines = append(st.includeLines, item.line)
 	}
-	return nil
+}
+
+// loadAgent reads the fields of subagent a from v (section 10.2).
+func (l *loader) loadAgent(o object, v *value, a *agent) {
+	m, ok := l.mapping(o, v, 0, []string{"purpose", "capabilities"}, nil)
+	if !ok {
+		return
+	}
+	a.purpose, _ = l.text(o, m, "purpose", 0)
+	caps, present := m["capabilities"]
+	if !present || caps.value.kind == null {
+		l.reportOn(o, contract.ProblemMissingField, caps.line, msg.ProblemMissingField, o.name, "capabilities")
+		return
+	}
+	valid := caps.value.kind == sequence
+	for _, item := range caps.value.items {
+		s, ok := item.scalar.(string)
+		valid = valid && ok && slices.Contains(Capabilities, s)
+	}
+	if !valid {
+		l.reportOn(o, contract.ProblemInvalidValue, caps.line, msg.ProblemCapabilities, o.name, strings.Join(Capabilities, ", "))
+		return
+	}
+	a.capabilities = []string{}
+	for _, item := range caps.value.items {
+		a.capabilities = append(a.capabilities, item.scalar.(string))
+	}
 }
 
 // object is what problems are about: the name messages give it and its file.
+// A subagent of the library has no file in the flow.
 type object struct {
-	name string
-	file string
+	name    string
+	file    string
+	library bool
 }
 
 // mapping returns the fields of v, which must be a mapping or empty, by name.
@@ -557,7 +697,7 @@ func (l *loader) mapping(o object, v *value, line int, known, later []string) (m
 		return m, true
 	case mapping:
 	default:
-		l.report(contract.ProblemInvalidValue, o.file, max(v.line, line), msg.ProblemNotMapping, o.name)
+		l.reportOn(o, contract.ProblemInvalidValue, max(v.line, line), msg.ProblemNotMapping, o.name)
 		return nil, false
 	}
 	for _, f := range v.fields {
@@ -565,9 +705,9 @@ func (l *loader) mapping(o object, v *value, line int, known, later []string) (m
 		case slices.Contains(known, f.name):
 			m[f.name] = f
 		case slices.Contains(later, f.name):
-			l.report(contract.ProblemUnsupportedField, o.file, f.line, msg.ProblemUnsupportedField, o.name, f.name)
+			l.reportOn(o, contract.ProblemUnsupportedField, f.line, msg.ProblemUnsupportedField, o.name, f.name)
 		default:
-			l.report(contract.ProblemUnknownField, o.file, f.line, msg.ProblemUnknownField, o.name, f.name)
+			l.reportOn(o, contract.ProblemUnknownField, f.line, msg.ProblemUnknownField, o.name, f.name)
 		}
 	}
 	return m, true
@@ -586,7 +726,7 @@ func (l *loader) optionalText(o object, m map[string]field, name string) (s stri
 	}
 	s, isString := f.value.scalar.(string)
 	if f.value.kind != scalar || !isString {
-		l.report(contract.ProblemInvalidValue, o.file, f.line, msg.ProblemNotString, o.name, name)
+		l.reportOn(o, contract.ProblemInvalidValue, f.line, msg.ProblemNotString, o.name, name)
 		return "", f.line, false
 	}
 	return s, f.line, true
@@ -600,35 +740,54 @@ func (l *loader) text(o object, m map[string]field, name string, line int) (stri
 		at = line
 	}
 	if ok && s == "" {
-		l.report(contract.ProblemMissingField, o.file, at, msg.ProblemMissingField, o.name, name)
+		l.reportOn(o, contract.ProblemMissingField, at, msg.ProblemMissingField, o.name, name)
 	}
 	return s, at
 }
 
-// subagent reports whether subagent id exists among the subagents of the
-// project or the shared ones. Only its existence is checked here; its
-// description is checked when subagents are laid out.
-func (l *loader) subagent(id string) bool {
+// subagent reports whether subagent id exists: among the subagents of the
+// project, or else in the library. A library subagent is read and checked
+// the first time a stage names it, and its files go to the snapshot.
+func (l *loader) subagent(id string) (bool, error) {
 	if !ValidID(id) {
-		return false
+		return false, nil
 	}
-	if found, ok := l.agents[id]; ok {
-		return found
+	if l.agentFields[id] {
+		return true, nil
 	}
-	found := false
-	for _, dir := range l.dirs.Agents {
-		if fi, err := os.Stat(filepath.Join(dir, id+fieldsExt)); err == nil && fi.Mode().IsRegular() {
-			found = true
-			break
-		}
+	if a, ok := l.library[id]; ok {
+		return a != nil, nil
 	}
-	l.agents[id] = found
-	return found
+	fields, ok, err := l.lib.file(id + fieldsExt)
+	if err != nil || !ok {
+		l.library[id] = nil
+		return false, err
+	}
+	o := object{name: objLibraryAgent(id), library: true}
+	a := &agent{id: id, library: true}
+	l.library[id] = a
+	l.libFiles[id+fieldsExt] = string(fields)
+	if v, ok := l.readYAML(fields, o); ok {
+		l.loadAgent(o, v, a)
+	}
+	text, ok, err := l.lib.file(id + textExt)
+	switch {
+	case err != nil:
+		return false, err
+	case !ok:
+		l.reportOn(o, contract.ProblemMissingInstruction, 0, msg.ProblemMissingInstruction, o.name)
+	case !utf8.Valid(text):
+		l.reportOn(o, contract.ProblemSyntax, 0, msg.ProblemEncoding, o.name)
+	default:
+		l.libFiles[id+textExt] = string(text)
+		a.instruction = string(text)
+	}
+	return true, nil
 }
 
 // flow returns the flow as read, once it has no problems.
 func (l *loader) flow() *Flow {
-	f := &Flow{Scenarios: []Scenario{}, Stages: []Stage{}, Parts: sorted(l.parts)}
+	f := &Flow{Scenarios: []Scenario{}, Stages: []Stage{}, Parts: []Part{}, Agents: []Agent{}}
 	for _, s := range l.scenarios {
 		out := Scenario{ID: s.id, Title: s.title, Start: s.start}
 		for _, n := range s.nodes {
@@ -642,7 +801,29 @@ func (l *loader) flow() *Flow {
 	}
 	for _, id := range sorted(l.fields) {
 		st := l.stages[id]
-		f.Stages = append(f.Stages, Stage{ID: id, Title: st.title, Exit: st.exit, Executor: st.executor, Include: append([]string{}, st.include...)})
+		f.Stages = append(f.Stages, Stage{
+			ID: id, Title: st.title, Exit: st.exit, Executor: st.executor,
+			Include: append([]string{}, st.include...), Instruction: l.contents[stagesDir+"/"+id+textExt],
+		})
+	}
+	for _, id := range sorted(l.parts) {
+		f.Parts = append(f.Parts, Part{ID: id, Text: l.contents[partsDir+"/"+id+textExt]})
+	}
+	var agents []*agent
+	for _, a := range l.agents {
+		agents = append(agents, a)
+	}
+	for _, a := range l.library {
+		if a != nil {
+			agents = append(agents, a)
+		}
+	}
+	slices.SortFunc(agents, func(a, b *agent) int { return strings.Compare(a.id, b.id) })
+	for _, a := range agents {
+		f.Agents = append(f.Agents, Agent{
+			ID: a.id, Library: a.library, Purpose: a.purpose,
+			Capabilities: append([]string{}, a.capabilities...), Instruction: a.instruction,
+		})
 	}
 	return f
 }

@@ -30,7 +30,7 @@ func TestProjectAddNamesUnpooled(t *testing.T) {
 	shop, fix, know := filepath.Join(root, "shop"), filepath.Join(root, "shop-fix"), filepath.Join(root, "shop-knowledge")
 	t.Chdir(shop)
 	_, stdout, _ := run("project", "add", "shop", "--knowledge", know)
-	tail := "\n" + msg.Text(msg.ProjectUnpooled) + "\n  " + fix + "\n" + msg.Text(msg.HintProjectUnpooled) + "\n"
+	tail := "\n" + msg.Text(msg.ProjectUnpooled) + "\n  " + fix + "\n\n" + msg.Text(msg.HintProjectUnpooled) + "\n"
 	if !strings.HasPrefix(stdout, msg.Text(msg.ProjectAdded, "shop")+"\n") || !strings.HasSuffix(stdout, msg.Text(msg.ProjectMainWorktree, shop)+"\n"+tail) {
 		t.Errorf("output:\n%s", stdout)
 	}

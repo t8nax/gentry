@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/flow.draft_created.json",
+  "title": "FlowDraftCreatedData",
+  "description": "Data of the flow.draft_created event: a flow draft was created for the project in the event envelope. Continuing an open draft gives no event.",
+  "type": "object",
+  "properties": {
+    "base_version": {
+      "description": "Number of the version the draft was made from; absent if the project had no flow.",
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

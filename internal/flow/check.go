@@ -8,8 +8,9 @@ import (
 )
 
 // check checks what the files of the flow refer to and the graph of each
-// scenario. Problems of a file itself are reported as it is read.
-func (l *loader) check() {
+// scenario. Problems of a file itself are reported as it is read. It returns
+// an error only if the library of subagents cannot be read.
+func (l *loader) check() error {
 	if l.scenarioCount == 0 {
 		l.report(contract.ProblemNoScenarios, "", 0, msg.ProblemNoScenarios)
 	}
@@ -23,6 +24,16 @@ func (l *loader) check() {
 			l.report(contract.ProblemOrphanInstruction, stagesDir+"/"+id+textExt, 0, msg.ProblemOrphanInstruction, objStage(id))
 		}
 	}
+	for _, id := range sorted(l.agentFields) {
+		if !l.agentTexts[id] {
+			l.report(contract.ProblemMissingInstruction, agentsDir+"/"+id+fieldsExt, 0, msg.ProblemMissingInstruction, objAgent(id))
+		}
+	}
+	for _, id := range sorted(l.agentTexts) {
+		if !l.agentFields[id] {
+			l.report(contract.ProblemOrphanInstruction, agentsDir+"/"+id+textExt, 0, msg.ProblemOrphanAgentInstruction, objAgent(id))
+		}
+	}
 	for _, id := range sorted(l.fields) {
 		st := l.stages[id]
 		for i, p := range st.include {
@@ -30,8 +41,14 @@ func (l *loader) check() {
 				l.report(contract.ProblemUnknownPart, st.file, st.includeLines[i], msg.ProblemUnknownPart, objStage(id), p)
 			}
 		}
-		if e := st.executor; e != "" && e != Orchestrator && e != Operator && !l.subagent(e) {
-			l.report(contract.ProblemUnknownExecutor, st.file, st.executorLine, msg.ProblemUnknownExecutor, objStage(id), e)
+		if e := st.executor; e != "" && e != Orchestrator && e != Operator {
+			found, err := l.subagent(e)
+			if err != nil {
+				return err
+			}
+			if !found {
+				l.report(contract.ProblemUnknownExecutor, st.file, st.executorLine, msg.ProblemUnknownExecutor, objStage(id), e)
+			}
 		}
 	}
 	for _, s := range l.scenarios {
@@ -46,6 +63,7 @@ func (l *loader) check() {
 			l.checkGraph(s)
 		}
 	}
+	return nil
 }
 
 // checkGraph checks the graph of scenario s by the rules of section 7.1: the

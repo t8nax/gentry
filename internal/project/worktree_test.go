@@ -259,7 +259,7 @@ func TestResolve(t *testing.T) {
 		{filepath.Join(at("shop"), "src"), "", "shop"},
 		{filepath.Join(at("shop"), ".worktrees", "cart-fix", "src"), "", "cart"},
 		{filepath.Join(at("shop-knowledge"), "notes"), "", "shop"},
-		{filepath.Join(process, "cart", "flow", "stages"), "", "cart"},
+		{filepath.Join(process, "cart", "flow-draft", "stages"), "", "cart"},
 		{filepath.Join(process, "shop"), "", "shop"},
 		{at("shop"), "cart", "cart"},
 	}

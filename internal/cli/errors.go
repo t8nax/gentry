@@ -129,6 +129,18 @@ func stateFailure(err error) failure {
 	return internal(err)
 }
 
+// conflictingFlags is for flags that cannot be given together, named in the
+// order of the command spec.
+func conflictingFlags(cmd string, flags []string) failure {
+	return failure{
+		exit:    contract.ExitUsage,
+		code:    contract.CodeConflictingFlags,
+		message: msg.Text(msg.ErrConflictingFlags, flags[0], flags[1]),
+		hint:    msg.Text(msg.HintCommandHelp, cmd),
+		details: map[string]any{"command": cmd, "flags": flags},
+	}
+}
+
 func flagValue(flag string) failure {
 	return failure{
 		exit:    contract.ExitUsage,

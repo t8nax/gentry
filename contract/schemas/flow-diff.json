@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-diff.json",
+  "title": "FlowDiffOutput",
+  "description": "Output of `gentry flow diff --json`: the objects of the draft that differ from the active flow.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "description": "Identifier of the project.",
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "description": "Number of the active flow version the draft is compared with; absent if the project has no flow, and then every object of the draft is added.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "changes": {
+      "description": "Changed objects: the common rules first, then scenarios, stages, parts, project subagents and library subagents, each kind by identifier. Empty if the draft is the same as the active flow.",
+      "type": "array",
+      "items": {
+        "title": "FlowChange",
+        "type": "object",
+        "properties": {
+          "object": {
+            "description": "Kind of the object: common for the common rules of the flow, scenario, stage, part or agent for a subagent.",
+            "type": "string",
+            "enum": ["common", "scenario", "stage", "part", "agent"]
+          },
+          "id": {
+            "description": "Identifier of the object; absent for the common rules.",
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "description": "Where a subagent comes from: project, or library for a subagent of the library the flow names, whose copy in the version changes on apply. Only for a subagent.",
+            "type": "string",
+            "enum": ["project", "library"]
+          },
+          "change": {
+            "description": "What happened to the object.",
+            "type": "string",
+            "enum": ["added", "modified", "removed"]
+          }
+        },
+        "required": ["object", "change"]
+      }
+    }
+  },
+  "required": ["project", "changes"]
+}

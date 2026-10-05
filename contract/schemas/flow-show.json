@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-show.json",
   "title": "FlowShowOutput",
-  "description": "Output of `gentry flow show --json`: the flow of the project. With a scenario named, scenarios has only it, stages only its stages and parts only the parts they include.",
+  "description": "Output of `gentry flow show --json`: the active flow of the project with its texts, or with --draft the draft. With an object flag the arrays narrow to the object and what it refers to: for a scenario its stages, their parts and subagents; for a stage its parts and subagent; for a part or a subagent the object alone.",
   "type": "object",
   "properties": {
     "project": {
@@ -10,10 +10,28 @@
       "type": "string",
       "minLength": 1
     },
-    "dir": {
-      "description": "Absolute path of the flow directory.",
-      "type": "string",
-      "minLength": 1
+    "version": {
+      "description": "Number of the active flow version; absent if the project has no flow yet, which only the draft can show.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "draft": {
+      "title": "FlowDraftInfo",
+      "description": "The open draft of the flow; absent if there is none.",
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "Absolute path of the draft directory.",
+          "type": "string",
+          "minLength": 1
+        },
+        "base_version": {
+          "description": "Number of the version the draft was made from; absent if the project had no flow.",
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["dir"]
     },
     "scenarios": {
       "description": "Scenarios by identifier.",
@@ -111,7 +129,7 @@
             "minLength": 1
           },
           "executor": {
-            "description": "Who carries out the stage: orchestrator for the main agent session, operator for the operator, otherwise the identifier of a subagent of the project or a shared one.",
+            "description": "Who carries out the stage: orchestrator for the main agent session, operator for the operator, otherwise the identifier of a subagent of the project or of the library.",
             "type": "string",
             "minLength": 1
           },
@@ -122,19 +140,73 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "instruction": {
+            "description": "Instruction of the stage in markdown, as written.",
+            "type": "string"
           }
         },
-        "required": ["id", "title", "exit", "executor", "include"]
+        "required": ["id", "title", "exit", "executor", "include", "instruction"]
       }
     },
     "parts": {
-      "description": "Identifiers of the parts by identifier.",
+      "description": "Parts by identifier.",
       "type": "array",
       "items": {
-        "type": "string",
-        "minLength": 1
+        "title": "FlowPart",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Identifier of the part, the name of its file.",
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "description": "Text of the part in markdown, as written.",
+            "type": "string"
+          }
+        },
+        "required": ["id", "text"]
+      }
+    },
+    "agents": {
+      "description": "Subagents by identifier: those of the project and those of the library the stages name. A project subagent replaces a library one of the same identifier.",
+      "type": "array",
+      "items": {
+        "title": "FlowAgent",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Identifier of the subagent, the name of its files.",
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "description": "Where the subagent comes from: project for a subagent of the flow, library for a copy of a subagent of the library taken into the version.",
+            "type": "string",
+            "enum": ["project", "library"]
+          },
+          "purpose": {
+            "description": "What the subagent is for.",
+            "type": "string",
+            "minLength": 1
+          },
+          "capabilities": {
+            "description": "What the subagent may do, in the order of its file.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["read", "search", "edit", "run", "web"]
+            }
+          },
+          "instruction": {
+            "description": "Instruction of the subagent in markdown, as written.",
+            "type": "string"
+          }
+        },
+        "required": ["id", "source", "purpose", "capabilities", "instruction"]
       }
     }
   },
-  "required": ["project", "dir", "scenarios", "stages", "parts"]
+  "required": ["project", "scenarios", "stages", "parts", "agents"]
 }

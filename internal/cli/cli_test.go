@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"reflect"
 	"strings"
 	"testing"
@@ -133,20 +134,31 @@ func TestFlags(t *testing.T) {
 // validate checks a JSON document against an embedded contract schema.
 func validate(t *testing.T, schema, doc string) {
 	t.Helper()
-	f, err := contract.Schemas.Open(schema)
+	// Every schema of the contract, as one may refer to another.
+	names, err := fs.Glob(contract.Schemas, "schemas/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	s, err := jsonschema.UnmarshalJSON(f)
+	events, err := fs.Glob(contract.Schemas, "schemas/events/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := jsonschema.NewCompiler()
-	if err := c.AddResource(schema, s); err != nil {
-		t.Fatal(err)
+	for _, name := range append(names, events...) {
+		f, err := contract.Schemas.Open(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := jsonschema.UnmarshalJSON(f)
+		f.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := c.AddResource("https://github.com/t8nax/gentry/contract/"+name, s); err != nil {
+			t.Fatal(err)
+		}
 	}
-	compiled, err := c.Compile(schema)
+	compiled, err := c.Compile("https://github.com/t8nax/gentry/contract/" + schema)
 	if err != nil {
 		t.Fatal(err)
 	}

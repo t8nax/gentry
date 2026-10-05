@@ -104,14 +104,11 @@ func TestGraphProblems(t *testing.T) {
 }
 
 func TestDefaultPathAtFork(t *testing.T) {
-	f, err := Load(shop(t, bug("branch",
+	f := load(t, shop(t, bug("branch",
 		"  branch: { stage: branch, next: triage }\n"+
 			"  triage:\n    stage: plan-bug\n    next:\n      - to: hotfix\n        if: срочно\n      - to: merge\n        if: не срочно\n"+
 			"  hotfix: { stage: implementation, next: merge }\n"+
 			"  merge: { stage: merge, next: finish }\n")))
-	if err != nil {
-		t.Fatal(err)
-	}
 	s, _ := f.Scenario("bug")
 	if got, want := s.DefaultPath(), []string{"branch", "triage"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("default path %v, want %v", got, want)

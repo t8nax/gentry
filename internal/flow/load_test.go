@@ -2,6 +2,7 @@ package flow
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,54 +14,68 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
-// shop copies the process of testdata — the flow of the shop and the shared
-// subagents — into a temporary directory, applies changes and returns the
-// dirs of the shop. A change is the new text of a file by its path inside the
-// flow directory; an empty text removes the file or directory.
-func shop(t *testing.T, changes map[string]string) Dirs {
+// shop copies the process of testdata — the flow draft of the shop and the
+// library of subagents — into a temporary directory, applies changes and
+// returns the places of the flow of the shop. A change is the new text of a
+// file by its path inside the draft; an empty text removes the file or
+// directory.
+func shop(t *testing.T, changes map[string]string) Places {
 	t.Helper()
 	process := t.TempDir()
 	if err := os.CopyFS(process, os.DirFS("testdata/process")); err != nil {
 		t.Fatal(err)
 	}
-	d := ProjectDirs(process, "shop")
+	p := PlacesOf(process, "shop")
 	for rel, text := range changes {
-		p := filepath.Join(d.Flow, filepath.FromSlash(rel))
+		full := filepath.Join(p.Draft, filepath.FromSlash(rel))
 		if text == "" {
-			if err := os.RemoveAll(p); err != nil {
+			if err := os.RemoveAll(full); err != nil {
 				t.Fatal(err)
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+		if err := os.WriteFile(full, []byte(text), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return d
+	return p
 }
 
-// problems loads the flow of d and returns its problems.
-func problems(t *testing.T, d Dirs) []Problem {
+// readShop reads the draft of p.
+func readShop(t *testing.T, p Places) *Result {
 	t.Helper()
-	_, err := Load(d)
-	var ie *InvalidError
-	if !errors.As(err, &ie) {
-		t.Fatalf("Load: got %v, want InvalidError", err)
-	}
-	if ie.Dir != d.Flow {
-		t.Errorf("dir %s, want %s", ie.Dir, d.Flow)
-	}
-	return ie.Problems
-}
-
-func TestLoadShop(t *testing.T) {
-	f, err := Load(shop(t, nil))
+	res, err := ReadDraft(p.Draft, p.Library)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return res
+}
+
+// load reads the draft of p, which must have no problems.
+func load(t *testing.T, p Places) *Flow {
+	t.Helper()
+	res := readShop(t, p)
+	if len(res.Problems) > 0 {
+		t.Fatalf("problems:\n%s", dump(res.Problems))
+	}
+	return res.Flow
+}
+
+// problems reads the draft of p and returns its problems.
+func problems(t *testing.T, p Places) []Problem {
+	t.Helper()
+	res := readShop(t, p)
+	if len(res.Problems) == 0 || res.Flow != nil {
+		t.Fatalf("no problems, flow %+v", res.Flow)
+	}
+	return res.Problems
+}
+
+func TestLoadShop(t *testing.T) {
+	f := load(t, shop(t, nil))
 	var ids []string
 	for _, s := range f.Scenarios {
 		ids = append(ids, s.ID)
@@ -90,83 +105,95 @@ func TestLoadShop(t *testing.T) {
 		t.Errorf("stages %v, want %v", ids, want)
 	}
 	review, _ := f.Stage("review")
-	if want := (Stage{ID: "review", Title: "Ревью", Exit: "замечания ревью записаны и разобраны", Executor: "reviewer", Include: []string{"review-checklist"}}); !reflect.DeepEqual(review, want) {
+	if want := (Stage{ID: "review", Title: "Ревью", Exit: "замечания ревью записаны и разобраны", Executor: "reviewer",
+		Include: []string{"review-checklist"}, Instruction: "Проверить изменения задачи по списку.\n"}); !reflect.DeepEqual(review, want) {
 		t.Errorf("review: %+v, want %+v", review, want)
 	}
 	if merge, _ := f.Stage("merge"); merge.Executor != Operator || merge.Include == nil {
 		t.Errorf("merge: %+v; want the operator and an empty include", merge)
 	}
-	if want := []string{"plan-format", "review-checklist"}; !reflect.DeepEqual(f.Parts, want) {
-		t.Errorf("parts %v, want %v", f.Parts, want)
+	if p, _ := f.Part("review-checklist"); len(f.Parts) != 2 || p.Text != "## Список ревью\n- поведение\n- тесты\n- тексты\n" {
+		t.Errorf("parts %+v", f.Parts)
+	}
+	// The library subagent a stage names is part of the flow.
+	if want := []Agent{{ID: "reviewer", Library: true, Purpose: "ревью изменений задачи — поведение и текст",
+		Capabilities: []string{"read", "search"}, Instruction: "Проверить изменения задачи: поведение, тесты и тексты для оператора.\n"}}; !reflect.DeepEqual(f.Agents, want) {
+		t.Errorf("agents %+v, want %+v", f.Agents, want)
 	}
 	if got, want := feature.DefaultPath(), []string{"branch", "plan", "implementation", "review", "merge", Finish}; !reflect.DeepEqual(got, want) {
 		t.Errorf("default path %v, want %v", got, want)
 	}
+	if got := f.ScenariosOf("review"); !reflect.DeepEqual(got, []string{"bug", "feature"}) {
+		t.Errorf("scenarios of review: %v", got)
+	}
+	if got := f.StagesOf("review-checklist"); !reflect.DeepEqual(got, []string{"review"}) {
+		t.Errorf("stages of review-checklist: %v", got)
+	}
+	if got := f.StagesBy("reviewer"); !reflect.DeepEqual(got, []string{"review"}) {
+		t.Errorf("stages by reviewer: %v", got)
+	}
 
-	only := f.Only(feature)
+	only := f.OnlyScenario(feature)
 	ids = nil
 	for _, s := range only.Stages {
 		ids = append(ids, s.ID)
 	}
 	if len(only.Scenarios) != 1 || !reflect.DeepEqual(ids, []string{"branch", "implementation", "merge", "plan-feature", "review"}) ||
-		!reflect.DeepEqual(only.Parts, []string{"plan-format", "review-checklist"}) {
-		t.Errorf("only feature: stages %v, parts %v", ids, only.Parts)
+		len(only.Parts) != 2 || len(only.Agents) != 1 {
+		t.Errorf("only feature: stages %v, parts %+v, agents %+v", ids, only.Parts, only.Agents)
+	}
+	if only := f.OnlyStage(review); len(only.Scenarios) != 0 || len(only.Stages) != 1 || len(only.Parts) != 1 || len(only.Agents) != 1 {
+		t.Errorf("only review: %+v", only)
+	}
+	if only := f.OnlyAgent(f.Agents[0]); len(only.Stages) != 0 || len(only.Agents) != 1 || only.Parts == nil {
+		t.Errorf("only reviewer: %+v", only)
 	}
 }
 
-func TestLoadNotFound(t *testing.T) {
-	d := shop(t, nil)
-	d.Flow = filepath.Join(filepath.Dir(d.Flow), "none")
-	var nf *NotFoundError
-	if _, err := Load(d); !errors.As(err, &nf) || nf.Dir != d.Flow {
-		t.Errorf("got %v, want NotFoundError for %s", err, d.Flow)
+func TestReadDraftMissing(t *testing.T) {
+	p := shop(t, nil)
+	var pe *fs.PathError
+	if _, err := ReadDraft(filepath.Join(p.Draft, "none"), p.Library); !errors.As(err, &pe) {
+		t.Errorf("got %v, want a path error", err)
 	}
 }
 
 func TestLoadIgnoresHidden(t *testing.T) {
-	d := shop(t, map[string]string{
+	res := readShop(t, shop(t, map[string]string{
 		".git/config":         "x",
 		"stages/.draft.yaml":  "not: [yaml",
 		"scenarios/.old.yaml": "x",
-	})
-	if _, err := Load(d); err != nil {
-		t.Error(err)
+	}))
+	if len(res.Problems) > 0 {
+		t.Error(dump(res.Problems))
+	}
+	// Hidden files are not part of the version either.
+	for path := range res.Snapshot.Files {
+		if strings.Contains(path, "/.") || strings.HasPrefix(path, ".") {
+			t.Errorf("hidden file %s in the snapshot", path)
+		}
 	}
 }
 
 func TestLoadAcceptsYAMLForms(t *testing.T) {
 	// Anchors, aliases, block text, a byte order mark and line ends of Windows
 	// are plain YAML.
-	d := shop(t, map[string]string{
+	f := load(t, shop(t, map[string]string{
 		"stages/branch.yaml":         "\xEF\xBB\xBFtitle: &t Ветка\nexit: *t\nexecutor: orchestrator\ninclude: []\n",
 		"stages/implementation.yaml": "title: Реализация\nexit: |\n  изменения сделаны,\n  тесты проходят\nexecutor: orchestrator\n",
 		"stages/merge.yaml":          "title: Слияние\r\nexit: ветка задачи влита в main\r\nexecutor: operator\r\n",
+		"stages/merge.md":            "Влить ветку.\r\nУдалить ветку.\r\n",
 		"flow.yaml":                  "# общие правила\n",
-	})
-	f, err := Load(d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	}))
 	if b, _ := f.Stage("branch"); b.Title != "Ветка" || b.Exit != "Ветка" {
 		t.Errorf("branch: %+v", b)
 	}
 	if i, _ := f.Stage("implementation"); i.Exit != "изменения сделаны,\nтесты проходят\n" {
 		t.Errorf("implementation: %+v", i)
 	}
-	// Line ends of Windows are not part of the values.
-	if m, _ := f.Stage("merge"); m.Title != "Слияние" || m.Executor != Operator {
+	// Line ends of Windows are not part of the values and texts.
+	if m, _ := f.Stage("merge"); m.Title != "Слияние" || m.Executor != Operator || m.Instruction != "Влить ветку.\nУдалить ветку.\n" {
 		t.Errorf("merge: %+v", m)
-	}
-}
-
-func TestProjectSubagent(t *testing.T) {
-	// A subagent of the project, next to the shared ones.
-	d := shop(t, map[string]string{
-		"../agents/linter.yaml": "purpose: проверка стиля\n",
-		"stages/review.yaml":    "title: Ревью\nexit: замечания разобраны\nexecutor: linter\n",
-	})
-	if _, err := Load(d); err != nil {
-		t.Error(err)
 	}
 }
 
@@ -197,13 +224,13 @@ func TestProblemOrder(t *testing.T) {
 	}
 }
 
-// d0 returns the dirs of an unchanged copy of the shop.
-func d0(t *testing.T) Dirs { return shop(t, nil) }
+// d0 returns the places of an unchanged copy of the shop.
+func d0(t *testing.T) Places { return shop(t, nil) }
 
-// read returns the text of file rel of the flow of d.
-func read(t *testing.T, d Dirs, rel string) string {
+// read returns the text of file rel of the draft of p.
+func read(t *testing.T, p Places, rel string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(d.Flow, filepath.FromSlash(rel)))
+	b, err := os.ReadFile(filepath.Join(p.Draft, filepath.FromSlash(rel)))
 	if err != nil {
 		t.Fatal(err)
 	}

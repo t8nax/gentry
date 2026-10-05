@@ -55,6 +55,9 @@ type flagSpec struct {
 	value    msg.Key // placeholder of the value; empty for a boolean flag
 	desc     func() string
 	required bool
+	// group names flags of which at most one may be given; the call line of
+	// the help shows them as one choice. The command refuses several itself.
+	group string
 }
 
 // descText returns a description that is the text of k.
@@ -114,12 +117,48 @@ func commands() []command {
 			actions: []command{
 				{
 					name: "flow show", summary: msg.CmdFlowShowSummary, desc: msg.CmdFlowShowDesc,
-					args: []argSpec{{name: msg.ArgScenario, desc: descText(msg.ArgScenarioDesc), optional: true}},
 					flags: []flagSpec{
+						{name: "scenario", value: msg.ArgScenario, desc: descText(msg.FlagShowScenario), group: "object"},
+						{name: "stage", value: msg.ArgStage, desc: descText(msg.FlagShowStage), group: "object"},
+						{name: "agent", value: msg.ArgAgent, desc: descText(msg.FlagShowAgent), group: "object"},
+						{name: "part", value: msg.ArgPart, desc: descText(msg.FlagShowPart), group: "object"},
+						{name: "draft", desc: descText(msg.FlagShowDraft)},
 						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagFlowShowProject)},
 						jsonFlag,
 					},
 					run: runFlowShow,
+				},
+				{
+					name: "flow edit", summary: msg.CmdFlowEditSummary, desc: msg.CmdFlowEditDesc,
+					flags: []flagSpec{
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagFlowEditProject)},
+						jsonFlag,
+					},
+					run: runFlowEdit,
+				},
+				{
+					name: "flow diff", summary: msg.CmdFlowDiffSummary, desc: msg.CmdFlowDiffDesc,
+					flags: []flagSpec{
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagFlowDiffProject)},
+						jsonFlag,
+					},
+					run: runFlowDiff,
+				},
+				{
+					name: "flow apply", summary: msg.CmdFlowApplySummary, desc: msg.CmdFlowApplyDesc,
+					flags: []flagSpec{
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagFlowApplyProject)},
+						jsonFlag,
+					},
+					run: runFlowApply,
+				},
+				{
+					name: "flow discard", summary: msg.CmdFlowDiscardSummary, desc: msg.CmdFlowDiscardDesc,
+					flags: []flagSpec{
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagFlowDiscardProject)},
+						jsonFlag,
+					},
+					run: runFlowDiscard,
 				},
 			},
 		},

@@ -204,7 +204,7 @@ func TestFlowDraftText(t *testing.T) {
 	if want := "Создан пустой черновик флоу.\n" + tail; stdout != want {
 		t.Errorf("edit without a flow:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := run("flow", "edit"); stdout != "Черновик уже открыт.\n"+tail {
+	if _, stdout, _ := run("flow", "edit"); stdout != "Черновик уже создан.\n"+tail {
 		t.Errorf("edit again:\n%s", stdout)
 	}
 	if err := os.CopyFS(p.Draft+"-src", os.DirFS(filepath.Join(flowTestdata, "shop", "flow-draft"))); err != nil {
@@ -235,7 +235,7 @@ func TestFlowDraftText(t *testing.T) {
 		t.Errorf("edit version 1:\n%s\nwant:\n%s", stdout, want)
 	}
 	_, stdout, _ = run("flow", "show")
-	if want := "Проект: shop\nВерсия флоу: 1\nОткрыт черновик.\n\n" + shopTables + "\nПосмотреть черновик: gentry flow show --draft\n"; stdout != want {
+	if want := "Проект: shop\nВерсия флоу: 1\nЧерновик существует.\n\n" + shopTables + "\nПосмотреть черновик: gentry flow show --draft\n"; stdout != want {
 		t.Errorf("show with a draft:\n%s\nwant:\n%s", stdout, want)
 	}
 	_, stdout, _ = run("flow", "diff")
@@ -416,7 +416,7 @@ func TestFlowDraftInvalid(t *testing.T) {
 		}
 	}
 	// Nothing changed: the version is 1, the draft is open.
-	if _, stdout, _ := run("flow", "show"); !strings.HasPrefix(stdout, "Проект: shop\nВерсия флоу: 1\nОткрыт черновик.\n") {
+	if _, stdout, _ := run("flow", "show"); !strings.HasPrefix(stdout, "Проект: shop\nВерсия флоу: 1\nЧерновик существует.\n") {
 		t.Errorf("show after a refused apply:\n%s", stdout)
 	}
 

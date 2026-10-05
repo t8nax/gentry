@@ -36,3 +36,14 @@ func Integration(tool string) (string, error) {
 	}
 	return filepath.Join(root, "integrations", tool), nil
 }
+
+// Process returns the directory of the operator's process: flows and
+// subagents, such as ~/.gentry/process. The process of a project is in its
+// subdirectory named by the project identifier.
+func Process() (string, error) {
+	root, err := Root()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "process"), nil
+}

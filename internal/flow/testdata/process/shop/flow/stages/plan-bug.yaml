@@ -1,0 +1,4 @@
+title: План бага
+exit: причина установлена, план исправления согласован
+executor: orchestrator
+include: [plan-format]

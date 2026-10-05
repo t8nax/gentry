@@ -22,6 +22,8 @@ import "embed"
 //go:generate go tool go-jsonschema -p contract -t --tags json -o project_list.go schemas/project-list.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o worktree_add.go schemas/worktree-add.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o worktree_list.go schemas/worktree-list.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o flow_show.go schemas/flow-show.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o flow_invalid.go schemas/flow-invalid.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o event_project_added.go schemas/events/project.added.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o event_worktree_added.go schemas/events/worktree.added.json
 

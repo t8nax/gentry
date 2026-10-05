@@ -17,6 +17,7 @@ type failure struct {
 	exit    int
 	code    string
 	message string
+	more    string // lines under the message in text only, such as a list of problems
 	hint    string
 	details map[string]any
 }
@@ -35,6 +36,9 @@ func fail(env Env, f failure) int {
 	}
 	// The hint is a line of its own, right under the message (principle 12).
 	fmt.Fprintln(env.Stderr, f.message)
+	if f.more != "" {
+		fmt.Fprint(env.Stderr, f.more)
+	}
 	if f.hint != "" {
 		fmt.Fprintln(env.Stderr, f.hint)
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/gittest"
+	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/state"
 )
 
@@ -241,6 +242,8 @@ func TestResolve(t *testing.T) {
 		root = `C:\dev\x`
 	}
 	at := func(name string) string { return filepath.Join(root, name) }
+	t.Setenv(home.EnvVar, at("home"))
+	process := filepath.Join(at("home"), "process")
 	projects := []state.Project{
 		{ID: "cart", Knowledge: at("cart-knowledge")},
 		{ID: "shop", Knowledge: at("shop-knowledge")},
@@ -256,6 +259,8 @@ func TestResolve(t *testing.T) {
 		{filepath.Join(at("shop"), "src"), "", "shop"},
 		{filepath.Join(at("shop"), ".worktrees", "cart-fix", "src"), "", "cart"},
 		{filepath.Join(at("shop-knowledge"), "notes"), "", "shop"},
+		{filepath.Join(process, "cart", "flow", "stages"), "", "cart"},
+		{filepath.Join(process, "shop"), "", "shop"},
 		{at("shop"), "cart", "cart"},
 	}
 	for _, tt := range tests {
@@ -267,6 +272,10 @@ func TestResolve(t *testing.T) {
 	// A directory next to a worktree with a common name prefix is outside it.
 	if _, err := Resolve(projects, worktrees, at("shop-2"), ""); !isA[*UndeterminedError](err) {
 		t.Errorf("shop-2: got %v, want UndeterminedError", err)
+	}
+	// The shared subagents belong to no project.
+	if _, err := Resolve(projects, worktrees, filepath.Join(process, "agents"), ""); !isA[*UndeterminedError](err) {
+		t.Errorf("shared subagents: got %v, want UndeterminedError", err)
 	}
 	if _, err := Resolve(projects, worktrees, at("shop"), "nope"); !isA[*NotFoundError](err) {
 		t.Errorf("unknown project: got %v, want NotFoundError", err)

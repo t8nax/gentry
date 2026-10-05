@@ -34,5 +34,35 @@ const (
 	CodeProjectNotFound     = "project_not_found"    // the project named is not connected; details: project
 	CodeGitNotFound         = "git_not_found"        // the git program is not found
 	CodeGitFailed           = "git_failed"           // a git command failed; details: command, output
+	CodeFlowNotFound        = "flow_not_found"       // the project has no flow directory; details: project, dir
+	CodeFlowInvalid         = "flow_invalid"         // the flow has problems; details: FlowInvalidDetails
+	CodeScenarioNotFound    = "scenario_not_found"   // the flow has no scenario of that identifier; details: project, scenario
 	CodeInternal            = "internal"             // a failure inside Gentry
+)
+
+// Kinds of flow problems, the code of FlowProblem. The list is open: new kinds
+// come with new flow fields, and a client shows an unknown kind by its message.
+const (
+	ProblemSyntax                = "syntax"                  // a file is not YAML or not in UTF-8
+	ProblemUnknownField          = "unknown_field"           // a field the flow does not have
+	ProblemUnsupportedField      = "unsupported_field"       // a field of a later version of Gentry: tracker actions, procedures
+	ProblemMissingField          = "missing_field"           // a required field is absent or empty
+	ProblemInvalidValue          = "invalid_value"           // a value of the wrong kind, such as a string for a list
+	ProblemInvalidID             = "invalid_id"              // an invalid identifier of a scenario, stage, part or node
+	ProblemExtraFile             = "extra_file"              // a file or directory that does not belong to the flow
+	ProblemMissingInstruction    = "missing_instruction"     // a stage has fields but no instruction
+	ProblemOrphanInstruction     = "orphan_instruction"      // a stage has an instruction but no fields
+	ProblemNoScenarios           = "no_scenarios"            // the flow has no scenario
+	ProblemUnknownStage          = "unknown_stage"           // a node names a stage that does not exist
+	ProblemUnknownPart           = "unknown_part"            // include names a part that does not exist
+	ProblemUnknownExecutor       = "unknown_executor"        // executor names a subagent that does not exist
+	ProblemUnknownNode           = "unknown_node"            // the start node or a transition target does not exist
+	ProblemReservedNode          = "reserved_node"           // a node is named finish
+	ProblemUnreachable           = "unreachable"             // a node is not reachable from the start node
+	ProblemDeadEnd               = "dead_end"                // the end of the scenario is not reachable from a node
+	ProblemUnlimitedLoop         = "unlimited_loop"          // a loop has no transition with a limit of rounds
+	ProblemLimitOutsideLoop      = "limit_outside_loop"      // a transition with a limit of rounds closes no loop
+	ProblemLimitWithoutCondition = "limit_without_condition" // a transition with a limit of rounds has no condition
+	ProblemSeveralDefaults       = "several_defaults"        // a node has more than one transition without a condition
+	ProblemDuplicateTransition   = "duplicate_transition"    // a node has two transitions to one node
 )

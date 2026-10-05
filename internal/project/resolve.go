@@ -1,6 +1,9 @@
 package project
 
 import (
+	"path/filepath"
+
+	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/paths"
 	"github.com/t8nax/gentry/internal/state"
 )
@@ -25,9 +28,10 @@ func Find(projects []state.Project, id string) (state.Project, error) {
 	return state.Project{}, &NotFoundError{Project: id}
 }
 
-// Containing returns the project whose pool worktree or knowledge is the
-// canonical directory dir or contains it. A worktree may lie inside another,
-// as worktrees kept in a subdirectory of the main one: the deepest wins.
+// Containing returns the project whose pool worktree, knowledge or process
+// directory is the canonical directory dir or contains it. A worktree may lie
+// inside another, as worktrees kept in a subdirectory of the main one: the
+// deepest wins.
 func Containing(projects []state.Project, worktrees []state.Worktree, dir string) (state.Project, bool) {
 	id, depth := "", -1
 	match := func(root, project string) {
@@ -40,6 +44,15 @@ func Containing(projects []state.Project, worktrees []state.Worktree, dir string
 	}
 	for _, p := range projects {
 		match(p.Knowledge, p.ID)
+	}
+	// The process directory lets the operator edit the flow and show it in
+	// one place. Without a known data root there is none to match.
+	if process, err := home.Process(); err == nil {
+		if process, err = paths.Canonical(process); err == nil {
+			for _, p := range projects {
+				match(filepath.Join(process, p.ID), p.ID)
+			}
+		}
 	}
 	if id == "" {
 		return state.Project{}, false

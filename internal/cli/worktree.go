@@ -165,11 +165,12 @@ func readPool() ([]state.Project, []state.Worktree, *failure) {
 
 // worktreeFailure turns an error of a worktree command into a failure.
 func worktreeFailure(err error) failure {
+	if f, ok := resolveFailure(err); ok {
+		return f
+	}
 	var (
-		notRepo  *project.NotRepoError
-		invalid  *project.InvalidWorktreeError
-		notFound *project.NotFoundError
-		undet    *project.UndeterminedError
+		notRepo *project.NotRepoError
+		invalid *project.InvalidWorktreeError
 	)
 	switch {
 	case errors.As(err, &notRepo):
@@ -187,6 +188,18 @@ func worktreeFailure(err error) failure {
 			message: msg.Text(msg.ErrWorktreeKnowledge, invalid.Project, invalid.Path),
 			details: map[string]any{"path": invalid.Path},
 		}
+	}
+	return projectFailure(err)
+}
+
+// resolveFailure turns an error of determining the project of a command into
+// a failure; ok is false for other errors.
+func resolveFailure(err error) (f failure, ok bool) {
+	var (
+		notFound *project.NotFoundError
+		undet    *project.UndeterminedError
+	)
+	switch {
 	case errors.As(err, &notFound):
 		return failure{
 			exit:    contract.ExitError,
@@ -194,7 +207,7 @@ func worktreeFailure(err error) failure {
 			message: msg.Text(msg.ErrProjectNotFound, notFound.Project),
 			hint:    msg.Text(msg.HintProjectNotFound),
 			details: map[string]any{"project": notFound.Project},
-		}
+		}, true
 	case errors.As(err, &undet):
 		return failure{
 			exit:    contract.ExitError,
@@ -202,7 +215,7 @@ func worktreeFailure(err error) failure {
 			message: msg.Text(msg.ErrProjectUndetermined, undet.Dir),
 			hint:    msg.Text(msg.HintProjectUndetermined),
 			details: map[string]any{"dir": undet.Dir},
-		}
+		}, true
 	}
-	return projectFailure(err)
+	return failure{}, false
 }

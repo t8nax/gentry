@@ -1,0 +1,14 @@
+title: Баг
+start: branch
+nodes:
+  branch:          { stage: branch, next: plan }
+  plan:            { stage: plan-bug, next: implementation }
+  implementation:  { stage: implementation, next: review }
+  review:
+    stage: review
+    next:
+      - to: implementation
+        if: ревью выявило существенные замечания
+        max_rounds: 2
+      - to: merge
+  merge:           { stage: merge, next: finish }

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-invalid.json",
+  "title": "FlowInvalidDetails",
+  "description": "Details of the error flow_invalid: the problems of the flow of a project.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "description": "Identifier of the project.",
+      "type": "string",
+      "minLength": 1
+    },
+    "dir": {
+      "description": "Absolute path of the flow directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "problems": {
+      "description": "All problems of the flow in the order of files and lines: problems of the whole flow first, files that do not belong to the flow last.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "title": "FlowProblem",
+        "type": "object",
+        "properties": {
+          "code": {
+            "description": "Kind of the problem, such as unknown_stage. The list is open: a client shows an unknown kind by its message.",
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "description": "Path of the file inside the flow directory, with forward slashes, such as scenarios/bug.yaml; absent when the problem is of the whole flow.",
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "description": "Line of the file, from 1; absent when unknown.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "message": {
+            "description": "The problem, in the operator's language. It names the object, such as a scenario, a node or a stage, and not the file.",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["code", "message"]
+      }
+    }
+  },
+  "required": ["project", "dir", "problems"]
+}

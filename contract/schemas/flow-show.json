@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-show.json",
+  "title": "FlowShowOutput",
+  "description": "Output of `gentry flow show --json`: the flow of the project. With a scenario named, scenarios has only it, stages only its stages and parts only the parts they include.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "description": "Identifier of the project.",
+      "type": "string",
+      "minLength": 1
+    },
+    "dir": {
+      "description": "Absolute path of the flow directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "scenarios": {
+      "description": "Scenarios by identifier.",
+      "type": "array",
+      "items": {
+        "title": "FlowScenario",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Identifier of the scenario, the name of its file.",
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "description": "Name of the scenario shown to the operator.",
+            "type": "string",
+            "minLength": 1
+          },
+          "start": {
+            "description": "Identifier of the start node.",
+            "type": "string",
+            "minLength": 1
+          },
+          "nodes": {
+            "description": "Nodes of the scenario graph in the order of the scenario file.",
+            "type": "array",
+            "items": {
+              "title": "FlowNode",
+              "type": "object",
+              "properties": {
+                "id": {
+                  "description": "Identifier of the node, unique within the scenario. One stage may stand in several nodes.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "stage": {
+                  "description": "Identifier of the stage of the node.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "next": {
+                  "description": "Transitions from the node, always a list, even when the scenario file has one node identifier. At most one is without a condition: the default path.",
+                  "type": "array",
+                  "items": {
+                    "title": "FlowTransition",
+                    "type": "object",
+                    "properties": {
+                      "to": {
+                        "description": "Identifier of the target node, or finish for the end of the scenario.",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "if": {
+                        "description": "Condition of the transition as text, evaluated by the agent; absent for the transition of the default path.",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "max_rounds": {
+                        "description": "Limit of rounds of the loop the transition closes; absent when the transition closes no loop.",
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "required": ["to"]
+                  }
+                }
+              },
+              "required": ["id", "stage", "next"]
+            }
+          }
+        },
+        "required": ["id", "title", "start", "nodes"]
+      }
+    },
+    "stages": {
+      "description": "Stages by identifier.",
+      "type": "array",
+      "items": {
+        "title": "FlowStage",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Identifier of the stage, the name of its files.",
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "description": "Name of the stage shown to the operator.",
+            "type": "string",
+            "minLength": 1
+          },
+          "exit": {
+            "description": "Exit of the stage: what must be true to close it.",
+            "type": "string",
+            "minLength": 1
+          },
+          "executor": {
+            "description": "Who carries out the stage: orchestrator for the main agent session, operator for the operator, otherwise the identifier of a subagent of the project or a shared one.",
+            "type": "string",
+            "minLength": 1
+          },
+          "include": {
+            "description": "Identifiers of the parts included in the instruction of the stage, in the order of the stage file; empty if none.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": ["id", "title", "exit", "executor", "include"]
+      }
+    },
+    "parts": {
+      "description": "Identifiers of the parts by identifier.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": ["project", "dir", "scenarios", "stages", "parts"]
+}

@@ -110,6 +110,20 @@ func commands() []command {
 			},
 		},
 		{
+			name: "flow", section: msg.HelpSectionFlow, summary: msg.CmdFlowSummary, desc: msg.CmdFlowDesc,
+			actions: []command{
+				{
+					name: "flow show", summary: msg.CmdFlowShowSummary, desc: msg.CmdFlowShowDesc,
+					args: []argSpec{{name: msg.ArgScenario, desc: descText(msg.ArgScenarioDesc), optional: true}},
+					flags: []flagSpec{
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagFlowShowProject)},
+						jsonFlag,
+					},
+					run: runFlowShow,
+				},
+			},
+		},
+		{
 			name: "setup", section: msg.HelpSectionMaint, summary: msg.CmdSetupSummary, desc: msg.CmdSetupDesc,
 			args: []argSpec{{name: msg.ArgTool, desc: func() string {
 				return msg.Text(msg.ArgToolDesc, strings.Join(tools, ", "))

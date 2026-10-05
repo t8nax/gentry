@@ -219,7 +219,7 @@ func TestFlowShowRefusals(t *testing.T) {
 		{"unknown action", []string{"flow", "check"}, nil, contract.ExitUsage,
 			msg.Text(msg.ErrActionUnknown, "check", "flow") + "\n" + msg.Text(msg.HintActions, "show")},
 		{"no flow", []string{"flow", "show"}, func() { os.RemoveAll(dir) }, contract.ExitError,
-			msg.Text(msg.ErrFlowNotFound, "shop") + "\n" + msg.Text(msg.HintFlowNotFound, dir)},
+			msg.Text(msg.ErrFlowNotFound, "shop")},
 	}
 	for _, tt := range tests {
 		if tt.prepare != nil {
@@ -234,7 +234,7 @@ func TestFlowShowRefusals(t *testing.T) {
 	code, stdout, _ := run("flow", "show", "--json")
 	validate(t, "schemas/error.json", stdout)
 	if want := `{"error":{"code":"flow_not_found","details":{"dir":` + jsonString(dir) + `,"project":"shop"},` +
-		`"hint":` + jsonString(msg.Text(msg.HintFlowNotFound, dir)) + `,"message":"У проекта shop нет флоу."}}` + "\n"; code != contract.ExitError || stdout != want {
+		`"message":"У проекта shop нет флоу."}}` + "\n"; code != contract.ExitError || stdout != want {
 		t.Errorf("no flow --json: exit code %d, %s, want %s", code, stdout, want)
 	}
 

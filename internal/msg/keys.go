@@ -170,7 +170,6 @@ const (
 	ColExit                      Key = "col.exit"
 	ColNode                      Key = "col.node"
 	ErrFlowNotFound              Key = "err.flow_not_found"
-	HintFlowNotFound             Key = "hint.flow_not_found"
 	ErrFlowInvalid               Key = "err.flow_invalid"
 	ErrScenarioNotFound          Key = "err.scenario_not_found"
 	HintScenarioNotFound         Key = "hint.scenario_not_found"

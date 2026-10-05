@@ -217,7 +217,6 @@ func flowFailure(err error, projectID string) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeFlowNotFound,
 			message: msg.Text(msg.ErrFlowNotFound, projectID),
-			hint:    msg.Text(msg.HintFlowNotFound, notFound.Dir),
 			details: map[string]any{"project": projectID, "dir": notFound.Dir},
 		}
 	case errors.As(err, &invalid):

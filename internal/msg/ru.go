@@ -174,7 +174,6 @@ var ru = catalog{
 		ColExit:                      "ВЫХОД",
 		ColNode:                      "УЗЕЛ",
 		ErrFlowNotFound:              "У проекта %s нет флоу.",
-		HintFlowNotFound:             "Создайте флоу в папке: %s",
 		ErrFlowInvalid:               "Во флоу проекта %s есть ошибки.",
 		ErrScenarioNotFound:          "Во флоу проекта %s нет сценария «%s».",
 		HintScenarioNotFound:         "Перечень сценариев: gentry flow show",

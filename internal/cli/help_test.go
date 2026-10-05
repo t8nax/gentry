@@ -170,10 +170,10 @@ func TestGroupHelp(t *testing.T) {
 		args   []string
 		stderr string
 	}{
-		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + "\n" + "Посмотреть перечень действий: gentry project --help"},
-		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + "\n" + "Посмотреть перечень действий: gentry project --help"},
-		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n" + "Посмотреть перечень действий: gentry project --help"},
-		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n" + "Посмотреть перечень действий: gentry project --help"},
+		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + "\n\n" + "Посмотреть перечень действий: gentry project --help"},
+		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + "\n\n" + "Посмотреть перечень действий: gentry project --help"},
+		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n\n" + "Посмотреть перечень действий: gentry project --help"},
+		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n\n" + "Посмотреть перечень действий: gentry project --help"},
 		{[]string{"project", "list", "extra"}, msg.Text(msg.ErrUnexpectedArgs, "project list")},
 		{[]string{"project", "list", "--foo"}, msg.Text(msg.ErrUnknownFlag, "project list", "--foo")},
 	}
@@ -213,7 +213,7 @@ func TestHelpErrors(t *testing.T) {
 		args   []string
 		stderr string
 	}{
-		{[]string{"help", "foo"}, msg.Text(msg.ErrUnknownCommand, "foo") + "\n" + msg.Text(msg.HintUnknownCommand)},
+		{[]string{"help", "foo"}, msg.Text(msg.ErrUnknownCommand, "foo") + "\n\n" + msg.Text(msg.HintUnknownCommand)},
 		{[]string{"help", "setup", "claude"}, msg.Text(msg.ErrExtraArgs, "help", "claude")},
 		{[]string{"help", "--foo"}, msg.Text(msg.ErrUnknownFlag, "help", "--foo")},
 		// help has no --json, so it refuses the flag in text, not in JSON.

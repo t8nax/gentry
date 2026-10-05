@@ -667,7 +667,6 @@ func flowInvalid(projectID string, version int, problems []flow.Problem) failure
 	fmt.Fprintln(&more, msg.Text(msg.FlowVersion, strconv.Itoa(version)))
 	more.WriteString("\n")
 	cps := writeProblems(&more, problems)
-	more.WriteString("\n")
 	return failure{
 		exit:    contract.ExitError,
 		code:    contract.CodeFlowInvalid,

@@ -59,7 +59,7 @@ func TestSetupToolErrors(t *testing.T) {
 		t.Errorf("missing claude: exit code %d, output %s", code, stdout)
 	}
 	_, _, stderr := run("setup", "claude")
-	want := msg.Text(msg.ErrToolNotFound, "claude") + "\n" + msg.Text(msg.HintToolNotFound, "Claude Code", "claude") + "\n"
+	want := msg.Text(msg.ErrToolNotFound, "claude") + "\n\n" + msg.Text(msg.HintToolNotFound, "Claude Code", "claude") + "\n"
 	if stderr != want {
 		t.Errorf("stderr %q, want %q", stderr, want)
 	}
@@ -88,8 +88,8 @@ func TestSetupErrors(t *testing.T) {
 		code   string
 		stderr string
 	}{
-		{[]string{"setup"}, contract.CodeMissingArgument, msg.Text(msg.ErrSetupToolMissing) + "\n" + "Посмотреть описание команды: gentry setup --help"},
-		{[]string{"setup", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrSetupToolUnknown, "foo") + "\n" + "Посмотреть описание команды: gentry setup --help"},
+		{[]string{"setup"}, contract.CodeMissingArgument, msg.Text(msg.ErrSetupToolMissing) + "\n\n" + "Посмотреть описание команды: gentry setup --help"},
+		{[]string{"setup", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrSetupToolUnknown, "foo") + "\n\n" + "Посмотреть описание команды: gentry setup --help"},
 		{[]string{"setup", "claude", "extra"}, contract.CodeUnexpectedArgs, msg.Text(msg.ErrExtraArgs, "setup", "extra")},
 	}
 	for _, tt := range tests {

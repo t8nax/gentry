@@ -164,7 +164,7 @@ func TestProjectAddRefusalText(t *testing.T) {
 	root := shopDir(t)
 	t.Chdir(root)
 	_, _, stderr := run("project", "add", "shop", "--knowledge", "k")
-	if want := msg.Text(msg.ErrNotGitRepo, root) + "\n" + msg.Text(msg.HintNotGitRepo) + "\n"; stderr != want {
+	if want := msg.Text(msg.ErrNotGitRepo, root) + "\n\n" + msg.Text(msg.HintNotGitRepo) + "\n"; stderr != want {
 		t.Errorf("got %q, want %q", stderr, want)
 	}
 
@@ -174,10 +174,10 @@ func TestProjectAddRefusalText(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"shop"}, msg.Text(msg.ErrKnowledgeFlagMissing) + "\n" + msg.Text(msg.HintKnowledgeFlag)},
-		{[]string{"--knowledge", "../new"}, msg.Text(msg.ErrProjectIDMissing) + "\n" + msg.Text(msg.HintProjectIDMissing)},
-		{[]string{"Shop", "--knowledge", "../k"}, msg.Text(msg.ErrProjectIDInvalid, "Shop") + "\n" + msg.Text(msg.HintProjectIDInvalid)},
-		{[]string{"shop", "--knowledge", "../k", "--prefix", "s"}, msg.Text(msg.ErrPrefixInvalid, "s") + "\n" + msg.Text(msg.HintPrefixInvalid)},
+		{[]string{"shop"}, msg.Text(msg.ErrKnowledgeFlagMissing) + "\n\n" + msg.Text(msg.HintKnowledgeFlag)},
+		{[]string{"--knowledge", "../new"}, msg.Text(msg.ErrProjectIDMissing) + "\n\n" + msg.Text(msg.HintProjectIDMissing)},
+		{[]string{"Shop", "--knowledge", "../k"}, msg.Text(msg.ErrProjectIDInvalid, "Shop") + "\n\n" + msg.Text(msg.HintProjectIDInvalid)},
+		{[]string{"shop", "--knowledge", "../k", "--prefix", "s"}, msg.Text(msg.ErrPrefixInvalid, "s") + "\n\n" + msg.Text(msg.HintPrefixInvalid)},
 	}
 	for _, tt := range tests {
 		if _, _, stderr := run(append([]string{"project", "add"}, tt.args...)...); stderr != tt.want+"\n" {

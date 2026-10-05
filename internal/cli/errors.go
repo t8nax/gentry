@@ -34,13 +34,14 @@ func fail(env Env, f failure) int {
 		}
 		// Fall back to text: the failure must reach the operator anyway.
 	}
-	// The hint is a line of its own, right under the message (principle 12).
+	// The hint is a block of its own, the last one, after an empty line
+	// (principle 12).
 	fmt.Fprintln(env.Stderr, f.message)
 	if f.more != "" {
 		fmt.Fprint(env.Stderr, f.more)
 	}
 	if f.hint != "" {
-		fmt.Fprintln(env.Stderr, f.hint)
+		fmt.Fprintf(env.Stderr, "\n%s\n", f.hint)
 	}
 	return f.exit
 }

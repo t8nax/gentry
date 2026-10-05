@@ -120,8 +120,8 @@ func TestEventsUsageErrors(t *testing.T) {
 		code    string
 		details map[string]any
 	}{
-		{[]string{"events", "--after", "abc"}, msg.Text(msg.ErrEventsAfter, "abc") + "\n" + msg.Text(msg.HintEventsAfter), contract.CodeFlagValue, map[string]any{"flag": "--after", "value": "abc"}},
-		{[]string{"events", "--after", "-1"}, msg.Text(msg.ErrEventsAfter, "-1") + "\n" + msg.Text(msg.HintEventsAfter), contract.CodeFlagValue, map[string]any{"flag": "--after", "value": "-1"}},
+		{[]string{"events", "--after", "abc"}, msg.Text(msg.ErrEventsAfter, "abc") + "\n\n" + msg.Text(msg.HintEventsAfter), contract.CodeFlagValue, map[string]any{"flag": "--after", "value": "abc"}},
+		{[]string{"events", "--after", "-1"}, msg.Text(msg.ErrEventsAfter, "-1") + "\n\n" + msg.Text(msg.HintEventsAfter), contract.CodeFlagValue, map[string]any{"flag": "--after", "value": "-1"}},
 		{[]string{"events", "--after"}, msg.Text(msg.ErrFlagValueMissing, "--after"), contract.CodeFlagValue, map[string]any{"flag": "--after"}},
 		{[]string{"events", "--after", "--json"}, msg.Text(msg.ErrFlagValueMissing, "--after"), contract.CodeFlagValue, map[string]any{"flag": "--after"}},
 		{[]string{"events", "extra"}, msg.Text(msg.ErrUnexpectedArgs, "events"), contract.CodeUnexpectedArgs, map[string]any{"command": "events"}},
@@ -168,7 +168,7 @@ func TestEventsNewerStore(t *testing.T) {
 	}
 
 	code, _, stderr := run("events")
-	want := msg.Text(msg.ErrStateNewer, 7, state.SchemaVersion()) + "\n" + msg.Text(msg.HintStateNewer) + "\n"
+	want := msg.Text(msg.ErrStateNewer, 7, state.SchemaVersion()) + "\n\n" + msg.Text(msg.HintStateNewer) + "\n"
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("exit code %d, stderr %q, want %q", code, stderr, want)
 	}

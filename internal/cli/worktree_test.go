@@ -52,7 +52,7 @@ func TestProjectAddCloneHint(t *testing.T) {
 	gittest.Run(t, root, "clone", "--quiet", filepath.Join(root, "shop"), clone)
 	t.Chdir(clone)
 	_, _, stderr := run("project", "add", "--knowledge", "../shop-knowledge")
-	want := msg.Text(msg.ErrProjectClone, "shop", filepath.Join(root, "shop")) + "\n" + msg.Text(msg.HintProjectClone, "shop") + "\n"
+	want := msg.Text(msg.ErrProjectClone, "shop", filepath.Join(root, "shop")) + "\n\n" + msg.Text(msg.HintProjectClone, "shop") + "\n"
 	if stderr != want {
 		t.Errorf("got %q, want %q", stderr, want)
 	}
@@ -217,7 +217,7 @@ func TestWorktreeRefusalTexts(t *testing.T) {
 	}{
 		{know, []string{"worktree", "add"}, msg.Text(msg.ErrWorktreeKnowledge, "shop", know)},
 		{root, []string{"worktree", "add", "--project", "shop"}, msg.Text(msg.ErrNotGitRepo, root)},
-		{root, []string{"worktree", "list", "--project", "nope"}, msg.Text(msg.ErrProjectNotFound, "nope") + "\n" + msg.Text(msg.HintProjectNotFound)},
+		{root, []string{"worktree", "list", "--project", "nope"}, msg.Text(msg.ErrProjectNotFound, "nope") + "\n\n" + msg.Text(msg.HintProjectNotFound)},
 	}
 	for _, tt := range tests {
 		t.Chdir(tt.dir)
@@ -228,7 +228,7 @@ func TestWorktreeRefusalTexts(t *testing.T) {
 	clone := filepath.Join(root, "shop-clone")
 	gittest.Run(t, root, "clone", "--quiet", filepath.Join(root, "shop"), clone)
 	t.Chdir(root)
-	want := msg.Text(msg.ErrProjectUndetermined, root) + "\n" + msg.Text(msg.HintProjectUndetermined) + "\n"
+	want := msg.Text(msg.ErrProjectUndetermined, root) + "\n\n" + msg.Text(msg.HintProjectUndetermined) + "\n"
 	if _, _, stderr := run("worktree", "add", clone); stderr != want {
 		t.Errorf("undetermined: got %q, want %q", stderr, want)
 	}

@@ -243,7 +243,7 @@ func TestFlowDraftText(t *testing.T) {
 		t.Errorf("diff unchanged:\n%s\nwant:\n%s", stdout, want)
 	}
 	code, stdout, stderr := run("flow", "apply")
-	if want := "Черновик совпадает с флоу версии 1.\nУдалить черновик: gentry flow discard\n"; code != contract.ExitError || stdout != "" || stderr != want {
+	if want := "Черновик совпадает с флоу версии 1.\n\nУдалить черновик: gentry flow discard\n"; code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("apply unchanged: exit code %d, stderr:\n%s", code, stderr)
 	}
 
@@ -499,21 +499,21 @@ func TestFlowRefusals(t *testing.T) {
 		exit   int
 		stderr string
 	}{
-		{"no flow", []string{"flow", "show"}, contract.ExitError, "У проекта shop нет флоу.\nСоздать флоу: gentry flow edit"},
-		{"no draft to show", []string{"flow", "show", "--draft"}, contract.ExitError, "У проекта shop нет черновика флоу.\nНачать правку: gentry flow edit"},
-		{"no draft to compare", []string{"flow", "diff"}, contract.ExitError, "У проекта shop нет черновика флоу.\nНачать правку: gentry flow edit"},
-		{"no draft to apply", []string{"flow", "apply"}, contract.ExitError, "У проекта shop нет черновика флоу.\nНачать правку: gentry flow edit"},
-		{"no draft to discard", []string{"flow", "discard"}, contract.ExitError, "У проекта shop нет черновика флоу.\nНачать правку: gentry flow edit"},
+		{"no flow", []string{"flow", "show"}, contract.ExitError, "У проекта shop нет флоу.\n\nСоздать флоу: gentry flow edit"},
+		{"no draft to show", []string{"flow", "show", "--draft"}, contract.ExitError, "У проекта shop нет черновика флоу.\n\nНачать правку: gentry flow edit"},
+		{"no draft to compare", []string{"flow", "diff"}, contract.ExitError, "У проекта shop нет черновика флоу.\n\nНачать правку: gentry flow edit"},
+		{"no draft to apply", []string{"flow", "apply"}, contract.ExitError, "У проекта shop нет черновика флоу.\n\nНачать правку: gentry flow edit"},
+		{"no draft to discard", []string{"flow", "discard"}, contract.ExitError, "У проекта shop нет черновика флоу.\n\nНачать правку: gentry flow edit"},
 		{"two objects", []string{"flow", "show", "--stage", "review", "--agent", "reviewer"}, contract.ExitUsage,
-			"Флаги --stage и --agent нельзя указывать вместе.\nПосмотреть описание команды: gentry flow show --help"},
+			"Флаги --stage и --agent нельзя указывать вместе.\n\nПосмотреть описание команды: gentry flow show --help"},
 		{"empty object", []string{"flow", "show", "--stage="}, contract.ExitUsage, msg.Text(msg.ErrFlagValueMissing, "--stage")},
 		{"argument", []string{"flow", "show", "feature"}, contract.ExitUsage, msg.Text(msg.ErrUnexpectedArgs, "flow show")},
 		{"unknown project", []string{"flow", "edit", "--project", "cart"}, contract.ExitError,
-			"Проект «cart» не подключён.\nПосмотреть перечень проектов: gentry project list"},
+			"Проект «cart» не подключён.\n\nПосмотреть перечень проектов: gentry project list"},
 		{"empty project", []string{"flow", "diff", "--project="}, contract.ExitUsage, msg.Text(msg.ErrFlagValueMissing, "--project")},
-		{"no action", []string{"flow"}, contract.ExitUsage, msg.Text(msg.ErrActionMissing, "flow") + "\nПосмотреть перечень действий: gentry flow --help"},
+		{"no action", []string{"flow"}, contract.ExitUsage, msg.Text(msg.ErrActionMissing, "flow") + "\n\nПосмотреть перечень действий: gentry flow --help"},
 		{"unknown action", []string{"flow", "check"}, contract.ExitUsage,
-			msg.Text(msg.ErrActionUnknown, "check", "flow") + "\nПосмотреть перечень действий: gentry flow --help"},
+			msg.Text(msg.ErrActionUnknown, "check", "flow") + "\n\nПосмотреть перечень действий: gentry flow --help"},
 	}
 	for _, tt := range tests {
 		code, stdout, stderr := run(tt.args...)
@@ -544,13 +544,13 @@ func TestFlowRefusals(t *testing.T) {
 		stderr string
 	}{
 		{"unknown stage", []string{"flow", "show", "--stage", "revew"}, contract.ExitError,
-			"Во флоу проекта shop нет этапа «revew».\nПосмотреть перечень объектов: gentry flow show"},
+			"Во флоу проекта shop нет этапа «revew».\n\nПосмотреть перечень объектов: gentry flow show"},
 		{"unknown scenario", []string{"flow", "show", "--scenario", "bg"}, contract.ExitError,
-			"Во флоу проекта shop нет сценария «bg».\nПосмотреть перечень объектов: gentry flow show"},
+			"Во флоу проекта shop нет сценария «bg».\n\nПосмотреть перечень объектов: gentry flow show"},
 		{"unknown agent in the draft", []string{"flow", "show", "--draft", "--agent", "auditor"}, contract.ExitError,
-			"В черновике флоу проекта shop нет субагента «auditor».\nПосмотреть перечень объектов: gentry flow show --draft"},
+			"В черновике флоу проекта shop нет субагента «auditor».\n\nПосмотреть перечень объектов: gentry flow show --draft"},
 		{"unknown part", []string{"flow", "show", "--part", "x"}, contract.ExitError,
-			"Во флоу проекта shop нет фрагмента «x».\nПосмотреть перечень объектов: gentry flow show"},
+			"Во флоу проекта shop нет фрагмента «x».\n\nПосмотреть перечень объектов: gentry flow show"},
 	}
 	for _, tt := range tests {
 		code, stdout, stderr := run(tt.args...)

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
@@ -31,13 +30,12 @@ func runSetup(args []string, env Env) int {
 	if code, done := f.parse(args, env); done {
 		return code
 	}
-	list := strings.Join(tools, ", ")
 	switch {
 	case len(f.args) == 0:
-		return fail(env, missingArgument("setup", "tool", msg.Text(msg.ErrSetupToolMissing), msg.Text(msg.HintSetupTools, list)))
+		return fail(env, missingArgument("setup", "tool", msg.Text(msg.ErrSetupToolMissing), msg.Text(msg.HintSetupTools)))
 	case !slices.Contains(tools, f.args[0]):
 		t := f.args[0]
-		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), msg.Text(msg.HintSetupTools, list)))
+		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), msg.Text(msg.HintSetupTools)))
 	}
 
 	dir, err := home.Integration(claude.Tool)

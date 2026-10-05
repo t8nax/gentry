@@ -205,10 +205,10 @@ func toolFailed(tool, command, output string) failure {
 
 func missingAction(g command) failure {
 	return missingArgument(g.name, "action", msg.Text(msg.ErrActionMissing, g.name),
-		msg.Text(msg.HintActions, strings.Join(g.actionNames(), ", ")))
+		msg.Text(msg.HintActions, g.name))
 }
 
 func unknownAction(g command, action string) failure {
 	return invalidArgument(g.name, "action", action, msg.Text(msg.ErrActionUnknown, action, g.name),
-		msg.Text(msg.HintActions, strings.Join(g.actionNames(), ", ")))
+		msg.Text(msg.HintActions, g.name))
 }

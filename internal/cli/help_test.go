@@ -166,15 +166,14 @@ func TestGroupHelp(t *testing.T) {
 		}
 	}
 
-	actions := strings.Join(g.actionNames(), ", ")
 	tests := []struct {
 		args   []string
 		stderr string
 	}{
-		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + "\n" + msg.Text(msg.HintActions, actions)},
-		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + "\n" + msg.Text(msg.HintActions, actions)},
-		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n" + msg.Text(msg.HintActions, actions)},
-		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n" + msg.Text(msg.HintActions, actions)},
+		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + "\n" + "Перечень действий: gentry project --help"},
+		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + "\n" + "Перечень действий: gentry project --help"},
+		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n" + "Перечень действий: gentry project --help"},
+		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n" + "Перечень действий: gentry project --help"},
 		{[]string{"project", "list", "extra"}, msg.Text(msg.ErrUnexpectedArgs, "project list")},
 		{[]string{"project", "list", "--foo"}, msg.Text(msg.ErrUnknownFlag, "project list", "--foo")},
 	}

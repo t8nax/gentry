@@ -215,9 +215,9 @@ func TestFlowShowRefusals(t *testing.T) {
 		{"extra argument", []string{"flow", "show", "bug", "feature"}, nil, contract.ExitUsage,
 			msg.Text(msg.ErrExtraArgs, "flow show", "feature")},
 		{"no action", []string{"flow"}, nil, contract.ExitUsage,
-			msg.Text(msg.ErrActionMissing, "flow") + "\n" + msg.Text(msg.HintActions, "show")},
+			msg.Text(msg.ErrActionMissing, "flow") + "\n" + "Перечень действий: gentry flow --help"},
 		{"unknown action", []string{"flow", "check"}, nil, contract.ExitUsage,
-			msg.Text(msg.ErrActionUnknown, "check", "flow") + "\n" + msg.Text(msg.HintActions, "show")},
+			msg.Text(msg.ErrActionUnknown, "check", "flow") + "\n" + "Перечень действий: gentry flow --help"},
 		{"no flow", []string{"flow", "show"}, func() { os.RemoveAll(dir) }, contract.ExitError,
 			msg.Text(msg.ErrFlowNotFound, "shop")},
 	}

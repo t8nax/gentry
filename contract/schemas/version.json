@@ -19,7 +19,12 @@
       "description": "Version of the state store schema this build supports. It grows with every change of the schema; a store with a newer schema is refused.",
       "type": "integer",
       "minimum": 1
+    },
+    "knowledge_format": {
+      "description": "Latest format version of the project knowledge this build supports; knowledge in a newer format is refused.",
+      "type": "integer",
+      "minimum": 1
     }
   },
-  "required": ["gentry", "contract", "state_schema"]
+  "required": ["gentry", "contract", "state_schema", "knowledge_format"]
 }

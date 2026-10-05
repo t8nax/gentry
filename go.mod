@@ -5,6 +5,7 @@ go 1.27.0
 tool github.com/atombender/go-jsonschema
 
 require (
+	github.com/goccy/go-yaml v1.19.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	modernc.org/sqlite v1.60.1
 )
@@ -13,7 +14,6 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/atombender/go-jsonschema v0.24.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

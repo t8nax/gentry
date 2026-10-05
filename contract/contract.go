@@ -17,13 +17,18 @@ import "embed"
 //go:generate go tool go-jsonschema -p contract -t --tags json -o error.go schemas/error.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o event.go schemas/event.json
 //go:generate go tool go-jsonschema -p contract -t --tags json -o setup.go schemas/setup.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o project_add.go schemas/project-add.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o project_list.go schemas/project-list.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o event_project_added.go schemas/events/project.added.json
+//go:generate go tool go-jsonschema -p contract -t --tags json -o event_worktree_added.go schemas/events/worktree.added.json
 
 // Version is the contract version. It grows only on an incompatible change:
 // a field removed, renamed or retyped. It stays 0 until the first release of
 // Gentry, while the contract may still change freely.
 const Version = 0
 
-// Schemas holds the JSON schemas of the contract, one file per document.
+// Schemas holds the JSON schemas of the contract, one file per document. The
+// data of each event type has its own schema in schemas/events/<type>.json.
 //
-//go:embed schemas/*.json
+//go:embed schemas/*.json schemas/events/*.json
 var Schemas embed.FS

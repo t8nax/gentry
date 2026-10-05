@@ -14,6 +14,7 @@ import (
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/buildinfo"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/project"
 	"github.com/t8nax/gentry/internal/state"
 )
 
@@ -94,14 +95,14 @@ func TestVersionJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
 		t.Fatal(err)
 	}
-	want := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version, StateSchema: state.SchemaVersion()}
+	want := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version, StateSchema: state.SchemaVersion(), KnowledgeFormat: project.KnowledgeFormat}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 	// No fields beyond the contract type.
 	var fields map[string]any
 	json.Unmarshal([]byte(stdout), &fields)
-	if len(fields) != 3 {
+	if len(fields) != 4 {
 		t.Errorf("unexpected fields: %v", fields)
 	}
 }

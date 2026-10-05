@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/project-add.json",
+  "title": "ProjectAddOutput",
+  "description": "Output of `gentry project add --json`.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "description": "Project identifier shared by the team, as recorded in the project knowledge.",
+      "type": "string",
+      "minLength": 1
+    },
+    "prefix": {
+      "description": "Prefix of task numbers; a personal setting of the operator.",
+      "type": "string",
+      "minLength": 1
+    },
+    "knowledge": {
+      "description": "Absolute path of the project knowledge repository.",
+      "type": "string",
+      "minLength": 1
+    },
+    "knowledge_created": {
+      "description": "Whether this call created the project knowledge: wrote and committed its project information.",
+      "type": "boolean"
+    },
+    "main_worktree": {
+      "description": "Absolute path of the main worktree of the project.",
+      "type": "string",
+      "minLength": 1
+    },
+    "worktrees": {
+      "description": "Worktrees this call added to the pool: the main one and the one the command ran in; empty when nothing changed.",
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "action": {
+      "description": "What happened: added or unchanged. The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["project", "prefix", "knowledge", "knowledge_created", "main_worktree", "worktrees", "action"]
+}

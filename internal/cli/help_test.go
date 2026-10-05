@@ -16,7 +16,13 @@ func TestCommandList(t *testing.T) {
 	if !strings.HasSuffix(list, "\n"+msg.Text(msg.HelpMore)+"\n") {
 		t.Errorf("list does not end with the hint about command help:\n%s", list)
 	}
-	// Every command is listed under its section heading.
+	// Every top-level command is listed under its section heading; actions
+	// are not, they are in the help of their group.
+	for _, a := range allCommands() {
+		if strings.Contains(a.name, " ") && strings.Contains(list, a.name) {
+			t.Errorf("action %s is in the command list:\n%s", a.name, list)
+		}
+	}
 	for _, c := range commands() {
 		if c.hidden() {
 			if strings.Contains(list, "  "+c.name+" ") {
@@ -38,7 +44,7 @@ func TestCommandList(t *testing.T) {
 // TestCommandHelp checks that every operator command has a help naming each
 // argument and flag it declares, and that all ways to ask for it agree.
 func TestCommandHelp(t *testing.T) {
-	for _, c := range commands() {
+	for _, c := range allCommands() {
 		if c.hidden() {
 			continue
 		}
@@ -47,7 +53,8 @@ func TestCommandHelp(t *testing.T) {
 			continue
 		}
 		want := describe(c)
-		for _, args := range [][]string{{"help", c.name}, {c.name, "--help"}, {c.name, "-h"}} {
+		name := strings.Fields(c.name)
+		for _, args := range [][]string{append([]string{"help"}, name...), append(name, "--help"), append(name, "-h")} {
 			code, stdout, stderr := run(args...)
 			if code != contract.ExitOK || stderr != "" || stdout != want {
 				t.Errorf("%v: exit code %d, stderr %q, output:\n%s\nwant:\n%s", args, code, stderr, stdout, want)
@@ -61,7 +68,7 @@ func TestCommandHelp(t *testing.T) {
 				t.Errorf("%s: argument without a name or description", c.name)
 				continue
 			}
-			if !strings.Contains(want, "  "+msg.Text(a.name)+" ") || !strings.Contains(want, a.desc()) {
+			if !strings.Contains(want, "  "+msg.Text(a.name)+" ") || !containsLines(want, a.desc()) {
 				t.Errorf("%s: argument %s is not described:\n%s", c.name, msg.Text(a.name), want)
 			}
 		}
@@ -70,11 +77,22 @@ func TestCommandHelp(t *testing.T) {
 				t.Errorf("%s: flag --%s without a description", c.name, f.name)
 				continue
 			}
-			if !strings.Contains(want, "  --"+f.name+" ") || !strings.Contains(want, f.desc()) {
+			if !strings.Contains(want, "  --"+f.name+" ") || !containsLines(want, f.desc()) {
 				t.Errorf("%s: flag --%s is not described:\n%s", c.name, f.name, want)
 			}
 		}
 	}
+}
+
+// containsLines reports whether every line of desc is in help: a description
+// of several lines is printed with an indent.
+func containsLines(help, desc string) bool {
+	for _, line := range strings.Split(desc, "\n") {
+		if !strings.Contains(help, line) {
+			return false
+		}
+	}
+	return true
 }
 
 // TestHelpMatchesFlags checks that every flag a spec declares is defined by
@@ -84,9 +102,9 @@ func TestHelpMatchesFlags(t *testing.T) {
 	var got *flags
 	onHelp = func(f *flags) { got = f }
 	t.Cleanup(func() { onHelp = func(*flags) {} })
-	for _, c := range commands() {
+	for _, c := range allCommands() {
 		got = nil
-		run(c.name, "--help")
+		run(append(strings.Fields(c.name), "--help")...)
 		if got == nil {
 			t.Errorf("%s --help did not reach the flag parser", c.name)
 			continue
@@ -115,9 +133,66 @@ func TestDescribeLayout(t *testing.T) {
 	}
 }
 
+func TestDescribeProjectAdd(t *testing.T) {
+	c, _ := lookup("project add")
+	got := describe(c)
+	usage := "  gentry project add [" + msg.Text(msg.ArgProjectID) + "] --knowledge " + msg.Text(msg.ArgPath) +
+		" [--prefix " + msg.Text(msg.ArgPrefix) + "] [--json]\n"
+	if !strings.Contains(got, usage) {
+		t.Errorf("usage line %q missing:\n%s", usage, got)
+	}
+	// The second line of a description keeps the column.
+	first, second, _ := strings.Cut(msg.Text(msg.FlagPrefixDesc), "\n")
+	at := strings.Index(got, first)
+	column := len([]rune(got[strings.LastIndex(got[:at], "\n")+1 : at]))
+	if !strings.Contains(got, "\n"+strings.Repeat(" ", column)+second+"\n") {
+		t.Errorf("continuation line not indented to column %d:\n%s", column, got)
+	}
+}
+
+func TestGroupHelp(t *testing.T) {
+	g, _ := topLevel("project")
+	want := groupHelp(g)
+	for _, args := range [][]string{{"help", "project"}, {"project", "--help"}, {"project", "-h"}} {
+		code, stdout, stderr := run(args...)
+		if code != contract.ExitOK || stderr != "" || stdout != want {
+			t.Errorf("%v: exit code %d, stderr %q, output:\n%s", args, code, stderr, stdout)
+		}
+	}
+	for _, a := range g.actionNames() {
+		if !strings.Contains(want, "\n  "+a+" ") {
+			t.Errorf("action %s is not listed:\n%s", a, want)
+		}
+	}
+
+	actions := strings.Join(g.actionNames(), ", ")
+	tests := []struct {
+		args   []string
+		stderr string
+	}{
+		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + " " + msg.Text(msg.HintActions, actions)},
+		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + " " + msg.Text(msg.HintActions, actions)},
+		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + " " + msg.Text(msg.HintActions, actions)},
+		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + " " + msg.Text(msg.HintActions, actions)},
+		{[]string{"project", "list", "extra"}, msg.Text(msg.ErrUnexpectedArgs, "project list")},
+		{[]string{"project", "list", "--foo"}, msg.Text(msg.ErrUnknownFlag, "project list", "--foo")},
+	}
+	for _, tt := range tests {
+		code, stdout, stderr := run(tt.args...)
+		if code != contract.ExitUsage || stdout != "" || stderr != tt.stderr+"\n" {
+			t.Errorf("%v: exit code %d, stdout %q, stderr %q, want %q", tt.args, code, stdout, stderr, tt.stderr)
+		}
+	}
+	// An unknown action fails in JSON when asked, as an unknown command.
+	code, stdout, _ := run("project", "foo", "--json")
+	if code != contract.ExitUsage || !strings.Contains(stdout, `"code":"`+contract.CodeInvalidArgument+`"`) {
+		t.Errorf("project foo --json: exit code %d, output %q", code, stdout)
+	}
+}
+
 func TestServiceCommandHelp(t *testing.T) {
 	_, list, _ := run("help")
-	for _, args := range [][]string{{"help", "events"}, {"events", "--help"}, {"help", "hook"}, {"hook", "-h"}} {
+	for _, args := range [][]string{{"help", "events"}, {"events", "--help"}, {"help", "hook"}, {"hook", "-h"}, {"help", "help"}, {"help", "--help"}} {
 		code, stdout, stderr := run(args...)
 		if code != contract.ExitOK || stderr != "" || stdout != list {
 			t.Errorf("%v: exit code %d, stderr %q; want the command list, got:\n%s", args, code, stderr, stdout)

@@ -16,6 +16,10 @@ type VersionOutput struct {
 	// pseudo-version for a development build.
 	Gentry string `json:"gentry"`
 
+	// Latest format version of the project knowledge this build supports; knowledge
+	// in a newer format is refused.
+	KnowledgeFormat int `json:"knowledge_format"`
+
 	// Version of the state store schema this build supports. It grows with every
 	// change of the schema; a store with a newer schema is refused.
 	StateSchema int `json:"state_schema"`
@@ -33,6 +37,9 @@ func (j *VersionOutput) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["gentry"]; raw != nil && !ok {
 		return fmt.Errorf("field gentry in VersionOutput: required")
 	}
+	if _, ok := raw["knowledge_format"]; raw != nil && !ok {
+		return fmt.Errorf("field knowledge_format in VersionOutput: required")
+	}
 	if _, ok := raw["state_schema"]; raw != nil && !ok {
 		return fmt.Errorf("field state_schema in VersionOutput: required")
 	}
@@ -46,6 +53,9 @@ func (j *VersionOutput) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Gentry)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "gentry", 1)
+	}
+	if 1 > plain.KnowledgeFormat {
+		return fmt.Errorf("field %s: must be >= %v", "knowledge_format", 1)
 	}
 	if 1 > plain.StateSchema {
 		return fmt.Errorf("field %s: must be >= %v", "state_schema", 1)

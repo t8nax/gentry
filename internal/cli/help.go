@@ -13,8 +13,9 @@ import (
 // helpGap separates a name from its description in the help columns.
 const helpGap = 3
 
-// runHelp prints the command list, or the help of the command named in args.
-// A service command has no help of its own: the list is printed for it.
+// runHelp prints the command list, or the help of the command (and action)
+// named in args, as --help does. A service command has no help of its own:
+// the list is printed for it.
 func runHelp(args []string, env Env) int {
 	f := newFlags("help")
 	if code, done := f.parse(args, env); done {
@@ -24,56 +25,105 @@ func runHelp(args []string, env Env) int {
 		io.WriteString(env.Stdout, commandList())
 		return contract.ExitOK
 	}
-	c, ok := lookup(f.args[0])
+	c, ok := topLevel(f.args[0])
 	if !ok {
 		return fail(env, unknownCommand(f.args[0]))
+	}
+	if len(f.args) == 2 {
+		if c.actions == nil {
+			return fail(env, extraArgs("help", f.args[1:]))
+		}
+		a, ok := c.action(f.args[1])
+		if !ok {
+			return fail(env, unknownAction(c, f.args[1]))
+		}
+		c = a
 	}
 	return commandHelp(c, env)
 }
 
-// commandHelp prints the help of c, or the command list for a service command.
+// commandHelp prints the help of c: the description of a command, the action
+// list of a group, or the command list for a service command.
 func commandHelp(c command, env Env) int {
-	if c.hidden() {
+	switch {
+	case c.hidden():
 		io.WriteString(env.Stdout, commandList())
-	} else {
+	case c.actions != nil:
+		io.WriteString(env.Stdout, groupHelp(c))
+	default:
 		io.WriteString(env.Stdout, describe(c))
 	}
 	return contract.ExitOK
 }
 
-// commandList is the list of commands by section, in the order of commands().
-func commandList() string {
-	var cmds []command
-	var sections []msg.Key
+// row is a name and its description in a help column.
+type row struct{ name, desc string }
+
+// nameWidth is the width of the widest name of rows, in runes.
+func nameWidth(rows []row) int {
 	width := 0
+	for _, r := range rows {
+		width = max(width, len([]rune(r.name)))
+	}
+	return width
+}
+
+// writeRows prints rows as two columns, names padded to width; a description
+// of several lines keeps its indent.
+func writeRows(b *strings.Builder, rows []row, width int) {
+	indent := "\n" + strings.Repeat(" ", 2+width+helpGap)
+	for _, r := range rows {
+		// fmt pads by runes, so Cyrillic names line up.
+		fmt.Fprintf(b, "  %-*s%s\n", width+helpGap, r.name, strings.ReplaceAll(r.desc, "\n", indent))
+	}
+}
+
+// commandList is the list of top-level commands by section, in the order of
+// commands(); the actions of a group are in the help of the group.
+func commandList() string {
+	var sections []msg.Key
+	bySection := map[msg.Key][]row{}
 	for _, c := range commands() {
 		if c.hidden() {
 			continue
 		}
-		cmds = append(cmds, c)
 		if !slices.Contains(sections, c.section) {
 			sections = append(sections, c.section)
 		}
-		width = max(width, len(c.name))
+		bySection[c.section] = append(bySection[c.section], row{c.name, msg.Text(c.summary)})
+	}
+	// One column width for all sections, as one table.
+	width := 0
+	for _, rows := range bySection {
+		width = max(width, nameWidth(rows))
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n%s\n", msg.Text(msg.HelpIntro), msg.Text(msg.HelpUsage))
 	for _, s := range sections {
 		fmt.Fprintf(&b, "\n%s\n", msg.Text(s))
-		for _, c := range cmds {
-			if c.section == s {
-				fmt.Fprintf(&b, "  %-*s%s\n", width+helpGap, c.name, msg.Text(c.summary))
-			}
-		}
+		writeRows(&b, bySection[s], width)
 	}
 	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HelpMore))
+	return b.String()
+}
+
+// groupHelp is the help of a group: what it is for and its actions.
+func groupHelp(g command) string {
+	var rows []row
+	for _, a := range g.actions {
+		rows = append(rows, row{strings.TrimPrefix(a.name, g.name+" "), msg.Text(a.summary)})
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n%s\n  %s\n\n%s\n", msg.Text(g.desc), msg.Text(msg.HelpUsageTitle),
+		msg.Text(msg.HelpGroupUsage, g.name), msg.Text(msg.HelpActions))
+	writeRows(&b, rows, nameWidth(rows))
+	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HelpGroupMore, g.name))
 	return b.String()
 }
 
 // describe is the help of one command: what it does, the call line, every
 // argument and flag.
 func describe(c command) string {
-	type row struct{ name, desc string }
 	var args, flags []row
 	usage := []string{"gentry", c.name}
 	for _, a := range c.args {
@@ -90,23 +140,20 @@ func describe(c command) string {
 			name += " " + msg.Text(f.value)
 		}
 		flags = append(flags, row{name, f.desc()})
-		usage = append(usage, "["+name+"]")
+		if !f.required {
+			name = "[" + name + "]"
+		}
+		usage = append(usage, name)
 	}
 
-	width := 0
-	for _, r := range slices.Concat(args, flags) {
-		width = max(width, len([]rune(r.name)))
-	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n%s\n  %s\n", msg.Text(c.desc), msg.Text(msg.HelpUsageTitle), strings.Join(usage, " "))
+	// Arguments and flags share one column width.
+	width := nameWidth(slices.Concat(args, flags))
 	section := func(title msg.Key, rows []row) {
-		if len(rows) == 0 {
-			return
-		}
-		fmt.Fprintf(&b, "\n%s\n", msg.Text(title))
-		for _, r := range rows {
-			// fmt pads by runes, so Cyrillic names line up.
-			fmt.Fprintf(&b, "  %-*s%s\n", width+helpGap, r.name, r.desc)
+		if len(rows) > 0 {
+			fmt.Fprintf(&b, "\n%s\n", msg.Text(title))
+			writeRows(&b, rows, width)
 		}
 	}
 	section(msg.HelpArgs, args)

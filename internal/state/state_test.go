@@ -35,7 +35,7 @@ func TestOpenCreatesStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v != SchemaVersion() || v != 1 {
+	if v != SchemaVersion() || v != 2 {
 		t.Errorf("schema version %d, want %d", v, SchemaVersion())
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -159,8 +159,8 @@ func TestMigrationKeepsCopy(t *testing.T) {
 	t.Cleanup(func() { migrations = orig })
 
 	s = mustOpen(t, path)
-	if v, _ := schemaVersion(s.db); v != 2 {
-		t.Errorf("schema version %d, want 2", v)
+	if v, _ := schemaVersion(s.db); v != len(orig)+1 {
+		t.Errorf("schema version %d, want %d", v, len(orig)+1)
 	}
 	if _, err := s.db.Exec(`INSERT INTO extra (x) VALUES ('ok')`); err != nil {
 		t.Errorf("migration not applied: %v", err)
@@ -170,13 +170,13 @@ func TestMigrationKeepsCopy(t *testing.T) {
 	}
 
 	migrations = orig
-	c, err := OpenRead(path + ".schema-1.bak")
+	c, err := OpenRead(fmt.Sprintf("%s.schema-%d.bak", path, len(orig)))
 	if err != nil {
 		t.Fatalf("copy before migration: %v", err)
 	}
 	defer c.Close()
-	if v, _ := schemaVersion(c.db); v != 1 {
-		t.Errorf("copy has schema %d, want 1", v)
+	if v, _ := schemaVersion(c.db); v != len(orig) {
+		t.Errorf("copy has schema %d, want %d", v, len(orig))
 	}
 	if events, _ := c.Events(0); len(events) != 1 {
 		t.Errorf("copy has %d events, want 1", len(events))

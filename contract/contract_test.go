@@ -14,6 +14,11 @@ func TestSchemasCompile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	events, err := fs.Glob(Schemas, "schemas/events/*.json")
+	if err != nil || len(events) == 0 {
+		t.Fatalf("no event schemas embedded: %v", err)
+	}
+	names = append(names, events...)
 	if len(names) == 0 {
 		t.Fatal("no schemas embedded")
 	}
@@ -39,14 +44,14 @@ func TestSchemasCompile(t *testing.T) {
 
 func TestVersionOutputRequiredFields(t *testing.T) {
 	var v VersionOutput
-	if err := json.Unmarshal([]byte(`{"gentry":"0.1.0","contract":0,"state_schema":1,"future_field":1}`), &v); err != nil {
+	if err := json.Unmarshal([]byte(`{"gentry":"0.1.0","contract":0,"state_schema":1,"knowledge_format":1,"future_field":1}`), &v); err != nil {
 		t.Errorf("unknown fields must be accepted: %v", err)
 	}
-	err := json.Unmarshal([]byte(`{"contract":0,"state_schema":1}`), &v)
+	err := json.Unmarshal([]byte(`{"contract":0,"state_schema":1,"knowledge_format":1}`), &v)
 	if err == nil || !strings.Contains(err.Error(), "gentry") {
 		t.Errorf("missing gentry must be rejected, got %v", err)
 	}
-	err = json.Unmarshal([]byte(`{"gentry":"0.1.0","contract":0}`), &v)
+	err = json.Unmarshal([]byte(`{"gentry":"0.1.0","contract":0,"knowledge_format":1}`), &v)
 	if err == nil || !strings.Contains(err.Error(), "state_schema") {
 		t.Errorf("missing state_schema must be rejected, got %v", err)
 	}

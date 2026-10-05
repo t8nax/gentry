@@ -1,0 +1,74 @@
+package git
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/t8nax/gentry/internal/gittest"
+	"github.com/t8nax/gentry/internal/paths"
+)
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "gentry-test-")
+	if err != nil {
+		panic(err)
+	}
+	if err := gittest.Isolate(dir); err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+func TestRootAndWorktrees(t *testing.T) {
+	root, _ := paths.Canonical(t.TempDir())
+	shop := gittest.Repo(t, filepath.Join(root, "shop"))
+	fix := gittest.Worktree(t, shop, filepath.Join(root, "shop-fix"), "fix")
+	sub := filepath.Join(fix, "src")
+	os.MkdirAll(sub, 0o755)
+
+	if got, err := Root(sub); err != nil || got != fix {
+		t.Errorf("Root(%s) = %q, %v; want %q", sub, got, err, fix)
+	}
+	if _, err := Root(root); !errors.Is(err, ErrNotRepo) {
+		t.Errorf("Root outside git: got %v, want ErrNotRepo", err)
+	}
+	list, err := Worktrees(fix)
+	want := []Worktree{{Path: shop, Main: true}, {Path: fix}}
+	if err != nil || len(list) != 2 || list[0] != want[0] || list[1] != want[1] {
+		t.Errorf("Worktrees = %+v, %v; want %+v", list, err, want)
+	}
+}
+
+func TestInitAndCommit(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "knowledge")
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := HasCommits(dir); ok || err != nil {
+		t.Errorf("new repository: HasCommits = %v, %v", ok, err)
+	}
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o644)
+	if err := Commit(dir, "a.txt", "Подключение проекта shop к Gentry"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := HasCommits(dir); !ok {
+		t.Error("no commit after Commit")
+	}
+	// Only the named file is committed.
+	if out := gittest.Run(t, dir, "status", "--porcelain"); out != "?? b.txt\n" {
+		t.Errorf("status %q", out)
+	}
+	if out := gittest.Run(t, dir, "log", "--format=%s"); out != "Подключение проекта shop к Gentry\n" {
+		t.Errorf("log %q", out)
+	}
+
+	var ce *CommandError
+	if err := Commit(dir, "missing.txt", "x"); !errors.As(err, &ce) || ce.Output == "" {
+		t.Errorf("failed command: got %v", err)
+	}
+}

@@ -266,6 +266,11 @@ func (t *Tx) QueryRow(query string, args ...any) *sql.Row {
 	return t.tx.QueryRow(query, args...)
 }
 
+// Query runs a query in the transaction.
+func (t *Tx) Query(query string, args ...any) (*sql.Rows, error) {
+	return t.tx.Query(query, args...)
+}
+
 // Write runs fn in a transaction and commits it. If the store is busy or an
 // I/O error occurs, the whole transaction is retried, so fn must not have
 // effects outside the transaction. An error returned by fn rolls the

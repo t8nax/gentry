@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -63,6 +64,7 @@ type AddResult struct {
 	RepoCreated      bool     // the knowledge repository was created now
 	Added            []string // worktrees added to the pool, the main one first
 	Unchanged        bool     // the project was already connected so
+	Unpooled         []string // worktrees of the repository in no pool, as git lists them
 }
 
 // NotRepoError means the command does not run in a git worktree.
@@ -196,16 +198,21 @@ func Add(st *state.Store, req AddRequest) (AddResult, error) {
 	// Check before touching the knowledge, so that a refusal leaves no trace;
 	// the transaction checks again.
 	var existing state.Project
+	var unpooled []string
 	unchanged := false
 	if err := st.Write(func(tx *state.Tx) error {
 		var err error
 		existing, unchanged, err = check(tx, p, pool)
+		if err != nil || !unchanged {
+			return err
+		}
+		unpooled, err = outside(tx, list)
 		return err
 	}); err != nil {
 		return AddResult{}, err
 	}
 	if unchanged {
-		return AddResult{Project: existing, Unchanged: true}, nil
+		return AddResult{Project: existing, Unchanged: true, Unpooled: unpooled}, nil
 	}
 
 	res := AddResult{Project: p, KnowledgeCreated: kind != kindExisting, RepoCreated: kind == kindNewRepo}
@@ -215,7 +222,11 @@ func Add(st *state.Store, req AddRequest) (AddResult, error) {
 
 	err = st.Write(func(tx *state.Tx) error {
 		existing, unchanged, err = check(tx, p, pool)
-		if err != nil || unchanged {
+		if err != nil {
+			return err
+		}
+		if unchanged {
+			unpooled, err = outside(tx, list)
 			return err
 		}
 		if err := tx.AddProject(p); err != nil {
@@ -234,17 +245,35 @@ func Add(st *state.Store, req AddRequest) (AddResult, error) {
 				return err
 			}
 		}
-		return nil
+		unpooled, err = outside(tx, list)
+		return err
 	})
 	if err != nil {
 		return AddResult{}, err
 	}
 	if unchanged {
 		// Connected by another gentry meanwhile.
-		return AddResult{Project: existing, Unchanged: true}, nil
+		return AddResult{Project: existing, Unchanged: true, Unpooled: unpooled}, nil
 	}
 	res.Added = pool
+	res.Unpooled = unpooled
 	return res, nil
+}
+
+// outside returns the worktrees of list that are in no pool: the operator is
+// told about them, as Add does not add them on its own.
+func outside(tx *state.Tx, list []git.Worktree) ([]string, error) {
+	worktrees, err := tx.Worktrees()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, g := range list {
+		if !slices.ContainsFunc(worktrees, func(w state.Worktree) bool { return paths.Same(w.Path, g.Path) }) {
+			out = append(out, g.Path)
+		}
+	}
+	return out, nil
 }
 
 // check tells whether p can be recorded with the worktrees of pool, or is

@@ -29,17 +29,17 @@ func runProjectAdd(args []string, env Env) int {
 		return code
 	}
 	if !knowledge.Set || knowledge.Value == "" {
-		return fail(env, missingArgument("project add", "knowledge", msg.Text(msg.ErrKnowledgeFlagMissing), ""))
+		return fail(env, missingArgument("project add", "knowledge", msg.Text(msg.ErrKnowledgeFlagMissing), msg.Text(msg.HintKnowledgeFlag)))
 	}
 	var id string
 	if len(f.args) > 0 {
 		id = f.args[0]
 		if !project.ValidID(id) {
-			return fail(env, invalidArgument("project add", "project", id, msg.Text(msg.ErrProjectIDInvalid, id), ""))
+			return fail(env, invalidArgument("project add", "project", id, msg.Text(msg.ErrProjectIDInvalid, id), msg.Text(msg.HintProjectIDInvalid)))
 		}
 	}
 	if prefix.Set && !project.ValidPrefix(prefix.Value) {
-		return fail(env, flagValueInvalid("--prefix", prefix.Value, msg.Text(msg.ErrPrefixInvalid, prefix.Value)))
+		return fail(env, flagValueInvalid("--prefix", prefix.Value, msg.Text(msg.ErrPrefixInvalid, prefix.Value), msg.Text(msg.HintPrefixInvalid)))
 	}
 	dir, err := os.Getwd()
 	if err != nil {
@@ -79,21 +79,28 @@ func runProjectAdd(args []string, env Env) int {
 		}
 		return contract.ExitOK
 	}
-	if res.Unchanged {
-		fmt.Fprintln(env.Stdout, msg.Text(msg.ProjectUnchanged, p.ID))
-		return contract.ExitOK
-	}
 	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.ProjectAdded, p.ID))
-	if res.RepoCreated {
-		fmt.Fprintln(&b, msg.Text(msg.ProjectKnowledgeNew, p.Knowledge))
+	if res.Unchanged {
+		fmt.Fprintln(&b, msg.Text(msg.ProjectUnchanged, p.ID))
 	} else {
-		fmt.Fprintln(&b, msg.Text(msg.ProjectKnowledge, p.Knowledge))
+		fmt.Fprintln(&b, msg.Text(msg.ProjectAdded, p.ID))
+		if res.RepoCreated {
+			fmt.Fprintln(&b, msg.Text(msg.ProjectKnowledgeNew, p.Knowledge))
+		} else {
+			fmt.Fprintln(&b, msg.Text(msg.ProjectKnowledge, p.Knowledge))
+		}
+		fmt.Fprintln(&b, msg.Text(msg.ProjectPrefix, p.Prefix))
+		fmt.Fprintln(&b, msg.Text(msg.ProjectMainWorktree, p.MainWorktree))
+		for _, w := range res.Added[1:] {
+			fmt.Fprintln(&b, msg.Text(msg.ProjectWorktreeAdded, w))
+		}
 	}
-	fmt.Fprintln(&b, msg.Text(msg.ProjectPrefix, p.Prefix))
-	fmt.Fprintln(&b, msg.Text(msg.ProjectMainWorktree, p.MainWorktree))
-	for _, w := range res.Added[1:] {
-		fmt.Fprintln(&b, msg.Text(msg.ProjectWorktreeAdded, w))
+	// Other worktrees of the repository are not added on their own: the
+	// operator decides where Gentry may work.
+	if len(res.Unpooled) > 0 {
+		b.WriteString("\n")
+		writeList(&b, msg.Text(msg.ProjectUnpooled), res.Unpooled)
+		fmt.Fprintln(&b, msg.Text(msg.HintProjectUnpooled))
 	}
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK
@@ -127,10 +134,12 @@ func runProjectList(args []string, env Env) int {
 		fmt.Fprintln(env.Stdout, msg.Text(msg.ProjectsNone))
 		return contract.ExitOK
 	}
-	var b strings.Builder
+	rows := [][]string{{msg.Text(msg.ColProject), msg.Text(msg.ColPrefix), msg.Text(msg.ColKnowledge), msg.Text(msg.ColMainWorktree)}}
 	for _, p := range projects {
-		fmt.Fprintln(&b, msg.Text(msg.ProjectLine, p.ID, p.Prefix, p.Knowledge, p.MainWorktree))
+		rows = append(rows, []string{p.ID, p.Prefix, p.Knowledge, orNone(p.MainWorktree)})
 	}
+	var b strings.Builder
+	writeTable(&b, rows)
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK
 }
@@ -202,7 +211,7 @@ func projectFailure(err error) failure {
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeKnowledgeNewer,
-			message: msg.Text(msg.ErrKnowledgeNewer, newer.Path, newer.Format, newer.Supported),
+			message: msg.Text(msg.ErrKnowledgeNewer, newer.Format, newer.Supported),
 			hint:    msg.Text(msg.HintKnowledgeNewer),
 			details: map[string]any{"path": newer.Path, "format": newer.Format, "supported": newer.Supported},
 		}
@@ -211,11 +220,11 @@ func projectFailure(err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeKnowledgeMismatch,
 			message: msg.Text(msg.ErrKnowledgeMismatch, mismatch.Value, mismatch.KnowledgeValue),
-			hint:    msg.Text(msg.HintKnowledgeMismatch),
+			hint:    msg.Text(msg.HintKnowledgeMismatch, mismatch.KnowledgeValue),
 			details: map[string]any{"value": mismatch.Value, "knowledge_value": mismatch.KnowledgeValue},
 		}
 	case errors.As(err, &noID):
-		return missingArgument("project add", "project", msg.Text(msg.ErrProjectIDMissing), "")
+		return missingArgument("project add", "project", msg.Text(msg.ErrProjectIDMissing), msg.Text(msg.HintProjectIDMissing))
 	case errors.As(err, &noPrefix):
 		return missingArgument("project add", "prefix", msg.Text(msg.ErrPrefixUnderivable, noPrefix.ID), msg.Text(msg.HintPrefixUnderivable))
 	case errors.As(err, &exists):
@@ -227,6 +236,7 @@ func projectFailure(err error) failure {
 		}
 		if exists.Clone {
 			f.message = msg.Text(msg.ErrProjectClone, exists.Project, exists.MainWorktree)
+			f.hint = msg.Text(msg.HintProjectClone, exists.Project)
 		}
 		return f
 	case errors.As(err, &taken):
@@ -241,7 +251,7 @@ func projectFailure(err error) failure {
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeWorktreeTaken,
-			message: msg.Text(msg.ErrWorktreeTaken, wtTaken.Path, wtTaken.Project),
+			message: msg.Text(msg.ErrWorktreeTaken, wtTaken.Project, wtTaken.Path),
 			details: map[string]any{"path": wtTaken.Path, "project": wtTaken.Project},
 		}
 	case errors.As(err, &pathErr):
@@ -265,7 +275,7 @@ func knowledgeFailure(e *project.KnowledgeError) failure {
 		f.message, f.hint = msg.Text(msg.ErrKnowledgeNested, e.Path, e.Worktree), msg.Text(msg.HintKnowledgeNested)
 		f.details["worktree"] = e.Worktree
 	default:
-		f.message, f.hint = msg.Text(msg.ErrKnowledgeBadFile, e.Path, e.Cause), msg.Text(msg.HintKnowledgeBadFile)
+		f.message, f.hint = msg.Text(msg.ErrKnowledgeBadFile, e.Cause), msg.Text(msg.HintKnowledgeBadFile, e.Path)
 	}
 	return f
 }

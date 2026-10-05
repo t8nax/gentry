@@ -33,11 +33,11 @@ func fail(env Env, f failure) int {
 		}
 		// Fall back to text: the failure must reach the operator anyway.
 	}
-	text := f.message
+	// The hint is a line of its own, right under the message (principle 12).
+	fmt.Fprintln(env.Stderr, f.message)
 	if f.hint != "" {
-		text += " " + f.hint
+		fmt.Fprintln(env.Stderr, f.hint)
 	}
-	fmt.Fprintln(env.Stderr, text)
 	return f.exit
 }
 
@@ -90,11 +90,12 @@ func flagValueMissing(flag string) failure {
 }
 
 // flagValueInvalid is for a flag value the command cannot accept.
-func flagValueInvalid(flag, value, message string) failure {
+func flagValueInvalid(flag, value, message, hint string) failure {
 	return failure{
 		exit:    contract.ExitUsage,
 		code:    contract.CodeFlagValue,
 		message: message,
+		hint:    hint,
 		details: map[string]any{"flag": flag, "value": value},
 	}
 }
@@ -116,8 +117,8 @@ func stateFailure(err error) failure {
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeStateUnavailable,
-			message: msg.Text(msg.ErrStateUnavailable, ue.Path, ue.Err),
-			hint:    msg.Text(msg.HintStateUnavail),
+			message: msg.Text(msg.ErrStateUnavailable, ue.Err),
+			hint:    msg.Text(msg.HintStateUnavail, ue.Path),
 			details: map[string]any{"path": ue.Path},
 		}
 	}

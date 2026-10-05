@@ -125,7 +125,8 @@ func TestDescribeLayout(t *testing.T) {
 		msg.Text(msg.HelpUsageTitle) + "\n" +
 		"  gentry setup " + msg.Text(msg.ArgTool) + " [--json]\n\n" +
 		msg.Text(msg.HelpArgs) + "\n" +
-		"  " + msg.Text(msg.ArgTool) + "   " + msg.Text(msg.ArgToolDesc, "claude") + "\n\n" +
+		// The second line of the description keeps the column.
+		"  " + msg.Text(msg.ArgTool) + "   " + strings.ReplaceAll(msg.Text(msg.ArgToolDesc, "claude"), "\n", "\n"+strings.Repeat(" ", 2+len([]rune(msg.Text(msg.ArgTool)))+3)) + "\n\n" +
 		msg.Text(msg.HelpFlags) + "\n" +
 		"  --json" + strings.Repeat(" ", len([]rune(msg.Text(msg.ArgTool)))-len("--json")+3) + msg.Text(msg.FlagJSON) + "\n"
 	if got := describe(c); got != want {
@@ -170,10 +171,10 @@ func TestGroupHelp(t *testing.T) {
 		args   []string
 		stderr string
 	}{
-		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + " " + msg.Text(msg.HintActions, actions)},
-		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + " " + msg.Text(msg.HintActions, actions)},
-		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + " " + msg.Text(msg.HintActions, actions)},
-		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + " " + msg.Text(msg.HintActions, actions)},
+		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + "\n" + msg.Text(msg.HintActions, actions)},
+		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + "\n" + msg.Text(msg.HintActions, actions)},
+		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n" + msg.Text(msg.HintActions, actions)},
+		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n" + msg.Text(msg.HintActions, actions)},
 		{[]string{"project", "list", "extra"}, msg.Text(msg.ErrUnexpectedArgs, "project list")},
 		{[]string{"project", "list", "--foo"}, msg.Text(msg.ErrUnknownFlag, "project list", "--foo")},
 	}
@@ -213,7 +214,7 @@ func TestHelpErrors(t *testing.T) {
 		args   []string
 		stderr string
 	}{
-		{[]string{"help", "foo"}, msg.Text(msg.ErrUnknownCommand, "foo") + " " + msg.Text(msg.HintUnknownCommand)},
+		{[]string{"help", "foo"}, msg.Text(msg.ErrUnknownCommand, "foo") + "\n" + msg.Text(msg.HintUnknownCommand)},
 		{[]string{"help", "setup", "claude"}, msg.Text(msg.ErrExtraArgs, "help", "claude")},
 		{[]string{"help", "--foo"}, msg.Text(msg.ErrUnknownFlag, "help", "--foo")},
 		// help has no --json, so it refuses the flag in text, not in JSON.

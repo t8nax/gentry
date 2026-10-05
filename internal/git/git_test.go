@@ -72,3 +72,21 @@ func TestInitAndCommit(t *testing.T) {
 		t.Errorf("failed command: got %v", err)
 	}
 }
+
+func TestBranch(t *testing.T) {
+	root, _ := paths.Canonical(t.TempDir())
+	shop := gittest.Repo(t, filepath.Join(root, "shop"))
+	fix := gittest.Worktree(t, shop, filepath.Join(root, "shop-fix"), "fix/refund")
+
+	if got, err := Branch(fix); err != nil || got != "fix/refund" {
+		t.Errorf("Branch(%s) = %q, %v; want fix/refund", fix, got, err)
+	}
+	gittest.Run(t, fix, "checkout", "--quiet", "--detach")
+	if got, err := Branch(fix); err != nil || got != "" {
+		t.Errorf("detached: Branch = %q, %v; want no branch", got, err)
+	}
+	var ce *CommandError
+	if _, err := Branch(root); !errors.As(err, &ce) {
+		t.Errorf("outside git: got %v, want a failed command", err)
+	}
+}

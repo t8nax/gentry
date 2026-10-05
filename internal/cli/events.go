@@ -3,9 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/msg"
@@ -23,14 +21,14 @@ type eventLine struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-// localTime is the time format of the text output.
-const localTime = "2006-01-02 15:04:05"
-
-// runEvents prints the event journal. It only reads: without a state store
-// the journal is empty, and no store is created.
+// runEvents prints the event journal as JSON lines, one per event: its
+// callers are programs, such as the panel, so it has no text output. --json is
+// accepted, as by every command, and changes nothing but the form of a
+// failure. It only reads: without a state store the journal is empty, and no
+// store is created.
 func runEvents(args []string, env Env) int {
 	f := newFlags("events")
-	asJSON := f.Bool("json")
+	f.Bool("json")
 	after := f.String("after")
 	if code, done := f.parse(args, env); done {
 		return code
@@ -39,7 +37,7 @@ func runEvents(args []string, env Env) int {
 	if after.Set {
 		n, err := strconv.ParseInt(after.Value, 10, 64)
 		if err != nil || n < 0 {
-			return fail(env, flagValueInvalid("--after", after.Value, msg.Text(msg.ErrEventsAfter, after.Value)))
+			return fail(env, flagValueInvalid("--after", after.Value, msg.Text(msg.ErrEventsAfter, after.Value), msg.Text(msg.HintEventsAfter)))
 		}
 		from = n
 	}
@@ -49,28 +47,13 @@ func runEvents(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 
-	if *asJSON {
-		enc := json.NewEncoder(env.Stdout)
-		enc.SetEscapeHTML(false)
-		for _, e := range events {
-			line := eventLine{Seq: e.Seq, Time: e.Time.UTC().Format(state.TimeFormat), Type: e.Type, Project: e.Project, Task: e.Task, Data: e.Data}
-			if err := enc.Encode(line); err != nil {
-				return fail(env, internal(err))
-			}
+	enc := json.NewEncoder(env.Stdout)
+	enc.SetEscapeHTML(false)
+	for _, e := range events {
+		line := eventLine{Seq: e.Seq, Time: e.Time.UTC().Format(state.TimeFormat), Type: e.Type, Project: e.Project, Task: e.Task, Data: e.Data}
+		if err := enc.Encode(line); err != nil {
+			return fail(env, internal(err))
 		}
-		return contract.ExitOK
-	}
-	switch {
-	case len(events) > 0:
-		var b strings.Builder
-		for _, e := range events {
-			fmt.Fprintf(&b, "%d  %s  %s  %s  %s\n", e.Seq, e.Time.Local().Format(localTime), dash(e.Project), dash(e.Task), e.Type)
-		}
-		fmt.Fprint(env.Stdout, b.String())
-	case after.Set:
-		fmt.Fprintln(env.Stdout, msg.Text(msg.EventsNoneAfter, from))
-	default:
-		fmt.Fprintln(env.Stdout, msg.Text(msg.EventsEmpty))
 	}
 	return contract.ExitOK
 }
@@ -97,11 +80,4 @@ func readEvents(from int64) ([]state.Event, *failure) {
 		return nil, &f
 	}
 	return events, nil
-}
-
-func dash(s string) string {
-	if s == "" {
-		return "—"
-	}
-	return s
 }

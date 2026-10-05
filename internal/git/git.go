@@ -111,6 +111,20 @@ func Worktrees(dir string) ([]Worktree, error) {
 	return list, nil
 }
 
+// Branch returns the branch checked out in the worktree of dir, or "" if the
+// worktree is not on a branch.
+func Branch(dir string) (string, error) {
+	out, err := run(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	var ce *CommandError
+	if errors.As(err, &ce) && ce.Output == "" {
+		return "", nil // detached HEAD: symbolic-ref fails silently
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // Init creates a repository in dir, creating dir if needed.
 func Init(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {

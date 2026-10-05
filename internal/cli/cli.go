@@ -88,6 +88,28 @@ func commands() []command {
 			},
 		},
 		{
+			name: "worktree", section: msg.HelpSectionProjects, summary: msg.CmdWorktreeSummary, desc: msg.CmdWorktreeDesc,
+			actions: []command{
+				{
+					name: "worktree add", summary: msg.CmdWorktreeAddSummary, desc: msg.CmdWorktreeAddDesc,
+					args: []argSpec{{name: msg.ArgPath, desc: descText(msg.ArgWorktreePathDesc), optional: true}},
+					flags: []flagSpec{
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagWorktreeAddProject)},
+						jsonFlag,
+					},
+					run: runWorktreeAdd,
+				},
+				{
+					name: "worktree list", summary: msg.CmdWorktreeListSummary, desc: msg.CmdWorktreeListDesc,
+					flags: []flagSpec{
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagWorktreeListProject)},
+						jsonFlag,
+					},
+					run: runWorktreeList,
+				},
+			},
+		},
+		{
 			name: "setup", section: msg.HelpSectionMaint, summary: msg.CmdSetupSummary, desc: msg.CmdSetupDesc,
 			args: []argSpec{{name: msg.ArgTool, desc: func() string {
 				return msg.Text(msg.ArgToolDesc, strings.Join(tools, ", "))

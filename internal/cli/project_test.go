@@ -51,7 +51,7 @@ func TestProjectAddText(t *testing.T) {
 		t.Errorf("repeat: %q, want %q", stdout, want)
 	}
 	_, stdout, _ = run("project", "list")
-	if want := msg.Text(msg.ProjectLine, "shop", "SHOP", know, shop) + "\n"; stdout != want {
+	if want := table(projectHeader(), []string{"shop", "SHOP", know, shop}); stdout != want {
 		t.Errorf("list: %q, want %q", stdout, want)
 	}
 }
@@ -164,9 +164,30 @@ func TestProjectAddRefusalText(t *testing.T) {
 	root := shopDir(t)
 	t.Chdir(root)
 	_, _, stderr := run("project", "add", "shop", "--knowledge", "k")
-	if want := msg.Text(msg.ErrNotGitRepo, root) + " " + msg.Text(msg.HintNotGitRepo) + "\n"; stderr != want {
+	if want := msg.Text(msg.ErrNotGitRepo, root) + "\n" + msg.Text(msg.HintNotGitRepo) + "\n"; stderr != want {
 		t.Errorf("got %q, want %q", stderr, want)
 	}
+
+	// Every refusal of the command line names what to do on its own line.
+	t.Chdir(filepath.Join(root, "shop"))
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"shop"}, msg.Text(msg.ErrKnowledgeFlagMissing) + "\n" + msg.Text(msg.HintKnowledgeFlag)},
+		{[]string{"--knowledge", "../new"}, msg.Text(msg.ErrProjectIDMissing) + "\n" + msg.Text(msg.HintProjectIDMissing)},
+		{[]string{"Shop", "--knowledge", "../k"}, msg.Text(msg.ErrProjectIDInvalid, "Shop") + "\n" + msg.Text(msg.HintProjectIDInvalid)},
+		{[]string{"shop", "--knowledge", "../k", "--prefix", "s"}, msg.Text(msg.ErrPrefixInvalid, "s") + "\n" + msg.Text(msg.HintPrefixInvalid)},
+	}
+	for _, tt := range tests {
+		if _, _, stderr := run(append([]string{"project", "add"}, tt.args...)...); stderr != tt.want+"\n" {
+			t.Errorf("%v: got %q, want %q", tt.args, stderr, tt.want)
+		}
+	}
+}
+
+func projectHeader() []string {
+	return []string{msg.Text(msg.ColProject), msg.Text(msg.ColPrefix), msg.Text(msg.ColKnowledge), msg.Text(msg.ColMainWorktree)}
 }
 
 func jsonEqual(a, b any) bool {

@@ -106,6 +106,7 @@ func TestAddCreatesKnowledge(t *testing.T) {
 		KnowledgeCreated: true,
 		RepoCreated:      true,
 		Added:            []string{f.shop},
+		Unpooled:         []string{f.path("shop-fix")},
 	}
 	if !reflect.DeepEqual(res, want) {
 		t.Errorf("got %+v, want %+v", res, want)
@@ -161,7 +162,7 @@ func TestAddFromSecondaryWorktree(t *testing.T) {
 
 	// Again from the third worktree: nothing changes, it is not added.
 	res = f.mustAdd(t, two, "", f.path("shop-knowledge"), "")
-	if !res.Unchanged || len(res.Added) != 0 {
+	if !res.Unchanged || len(res.Added) != 0 || !reflect.DeepEqual(res.Unpooled, []string{two}) {
 		t.Errorf("repeat: %+v", res)
 	}
 	if len(f.events(t)) != 3 {

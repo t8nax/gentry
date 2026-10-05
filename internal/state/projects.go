@@ -60,6 +60,20 @@ func (s *Store) Projects() ([]Project, error) {
 	return ps, nil
 }
 
+// Worktrees returns the worktrees of all projects by path.
+func (s *Store) Worktrees() ([]Worktree, error) {
+	var ws []Worktree
+	err := s.retry(func() error {
+		var err error
+		ws, err = worktrees(s.db)
+		return err
+	})
+	if err != nil {
+		return nil, s.unavailable(err)
+	}
+	return ws, nil
+}
+
 func projects(q querier) ([]Project, error) {
 	rows, err := q.Query(`SELECT p.id, p.prefix, p.knowledge, p.added, coalesce(w.path, '')
 		FROM projects p LEFT JOIN worktrees w ON w.project = p.id AND w.main = 1

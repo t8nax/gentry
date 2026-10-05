@@ -50,19 +50,11 @@ func writeEvents(t *testing.T, events ...[3]string) {
 
 func TestEventsWithoutStore(t *testing.T) {
 	dir := emptyHome(t)
-	tests := []struct {
-		args []string
-		want string
-	}{
-		{[]string{"events"}, msg.Text(msg.EventsEmpty) + "\n"},
-		{[]string{"events", "--after", "5"}, msg.Text(msg.EventsNoneAfter, 5) + "\n"},
-		{[]string{"events", "--after=5"}, msg.Text(msg.EventsNoneAfter, 5) + "\n"},
-		{[]string{"events", "--json"}, ""},
-	}
-	for _, tt := range tests {
-		code, stdout, stderr := run(tt.args...)
-		if code != contract.ExitOK || stdout != tt.want || stderr != "" {
-			t.Errorf("%v: exit code %d, stdout %q, stderr %q; want stdout %q", tt.args, code, stdout, stderr, tt.want)
+	// An empty journal is an empty stream.
+	for _, args := range [][]string{{"events"}, {"events", "--after", "5"}, {"events", "--after=5"}, {"events", "--json"}} {
+		code, stdout, stderr := run(args...)
+		if code != contract.ExitOK || stdout != "" || stderr != "" {
+			t.Errorf("%v: exit code %d, stdout %q, stderr %q; want nothing", args, code, stdout, stderr)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, "state")); !os.IsNotExist(err) {
@@ -74,26 +66,15 @@ func TestEvents(t *testing.T) {
 	emptyHome(t)
 	writeEvents(t, [3]string{"task.taken", "shop", "SHOP-7"}, [3]string{"settings.changed", "", ""})
 
-	code, stdout, stderr := run("events")
+	code, stdout, stderr := run("events", "--json")
 	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("exit code %d, stderr %q", code, stderr)
 	}
+	// Without --json the output is the same: there is no text form.
+	if _, plain, _ := run("events"); plain != stdout {
+		t.Errorf("without --json:\n%s\nwant:\n%s", plain, stdout)
+	}
 	lines := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("want 2 lines, got %q", stdout)
-	}
-	if f := strings.Split(lines[0], "  "); len(f) != 5 || f[0] != "1" || f[2] != "shop" || f[3] != "SHOP-7" || f[4] != "task.taken" || len(f[1]) != len(localTime) {
-		t.Errorf("unexpected line: %q", lines[0])
-	}
-	if f := strings.Split(lines[1], "  "); len(f) != 5 || f[0] != "2" || f[2] != "—" || f[3] != "—" || f[4] != "settings.changed" {
-		t.Errorf("unexpected line: %q", lines[1])
-	}
-
-	code, stdout, _ = run("events", "--json")
-	if code != contract.ExitOK {
-		t.Fatalf("exit code %d", code)
-	}
-	lines = strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("want 2 JSON lines, got %q", stdout)
 	}
@@ -126,7 +107,7 @@ func TestEvents(t *testing.T) {
 		t.Errorf("events after 1: %q", stdout)
 	}
 	_, stdout, _ = run("events", "--after", "2")
-	if stdout != msg.Text(msg.EventsNoneAfter, 2)+"\n" {
+	if stdout != "" {
 		t.Errorf("events after 2: %q", stdout)
 	}
 }
@@ -139,8 +120,8 @@ func TestEventsUsageErrors(t *testing.T) {
 		code    string
 		details map[string]any
 	}{
-		{[]string{"events", "--after", "abc"}, msg.Text(msg.ErrEventsAfter, "abc"), contract.CodeFlagValue, map[string]any{"flag": "--after", "value": "abc"}},
-		{[]string{"events", "--after", "-1"}, msg.Text(msg.ErrEventsAfter, "-1"), contract.CodeFlagValue, map[string]any{"flag": "--after", "value": "-1"}},
+		{[]string{"events", "--after", "abc"}, msg.Text(msg.ErrEventsAfter, "abc") + "\n" + msg.Text(msg.HintEventsAfter), contract.CodeFlagValue, map[string]any{"flag": "--after", "value": "abc"}},
+		{[]string{"events", "--after", "-1"}, msg.Text(msg.ErrEventsAfter, "-1") + "\n" + msg.Text(msg.HintEventsAfter), contract.CodeFlagValue, map[string]any{"flag": "--after", "value": "-1"}},
 		{[]string{"events", "--after"}, msg.Text(msg.ErrFlagValueMissing, "--after"), contract.CodeFlagValue, map[string]any{"flag": "--after"}},
 		{[]string{"events", "--after", "--json"}, msg.Text(msg.ErrFlagValueMissing, "--after"), contract.CodeFlagValue, map[string]any{"flag": "--after"}},
 		{[]string{"events", "extra"}, msg.Text(msg.ErrUnexpectedArgs, "events"), contract.CodeUnexpectedArgs, map[string]any{"command": "events"}},
@@ -187,7 +168,7 @@ func TestEventsNewerStore(t *testing.T) {
 	}
 
 	code, _, stderr := run("events")
-	want := msg.Text(msg.ErrStateNewer, 7, state.SchemaVersion()) + " " + msg.Text(msg.HintStateNewer) + "\n"
+	want := msg.Text(msg.ErrStateNewer, 7, state.SchemaVersion()) + "\n" + msg.Text(msg.HintStateNewer) + "\n"
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("exit code %d, stderr %q, want %q", code, stderr, want)
 	}

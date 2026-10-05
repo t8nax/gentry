@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/worktree-list.json",
+  "title": "WorktreeListOutput",
+  "description": "Output of `gentry worktree list --json`.",
+  "type": "object",
+  "properties": {
+    "worktrees": {
+      "description": "Worktrees of the project, or of all projects when none is named or found by the directory: by project, the main worktree first, then by path.",
+      "type": "array",
+      "items": {
+        "title": "WorktreeListItem",
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "Absolute path of the worktree root.",
+            "type": "string",
+            "minLength": 1
+          },
+          "project": {
+            "description": "Identifier of the project whose pool has the worktree.",
+            "type": "string",
+            "minLength": 1
+          },
+          "main": {
+            "description": "Whether this is the main worktree of the project.",
+            "type": "boolean"
+          },
+          "exists": {
+            "description": "Whether the worktree directory exists.",
+            "type": "boolean"
+          },
+          "branch": {
+            "description": "Branch checked out in the worktree, read from git at the call; absent when the worktree is not on a branch or its directory does not exist.",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["path", "project", "main", "exists"]
+      }
+    }
+  },
+  "required": ["worktrees"]
+}

@@ -194,7 +194,7 @@ func TestErrorsJSON(t *testing.T) {
 
 func TestErrorText(t *testing.T) {
 	_, stdout, stderr := run("foo")
-	want := msg.Text(msg.ErrUnknownCommand, "foo") + " " + msg.Text(msg.HintUnknownCommand) + "\n"
+	want := msg.Text(msg.ErrUnknownCommand, "foo") + "\n" + msg.Text(msg.HintUnknownCommand) + "\n"
 	if stdout != "" || stderr != want {
 		t.Errorf("stdout %q, stderr %q, want stderr %q", stdout, stderr, want)
 	}
@@ -215,8 +215,8 @@ func TestHook(t *testing.T) {
 		code   string
 		stderr string
 	}{
-		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + " " + msg.Text(msg.HintHookEvents, "session-start")},
-		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + " " + msg.Text(msg.HintHookEvents, "session-start")},
+		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + "\n" + msg.Text(msg.HintHookEvents, "session-start")},
+		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + "\n" + msg.Text(msg.HintHookEvents, "session-start")},
 		{[]string{"hook", "session-start", "extra"}, contract.CodeUnexpectedArgs, msg.Text(msg.ErrExtraArgs, "hook", "extra")},
 	}
 	for _, tt := range tests {

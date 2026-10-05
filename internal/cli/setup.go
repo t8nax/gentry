@@ -38,8 +38,6 @@ func runSetup(args []string, env Env) int {
 	case !slices.Contains(tools, f.args[0]):
 		t := f.args[0]
 		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), msg.Text(msg.HintSetupTools, list)))
-	case len(f.args) > 1:
-		return fail(env, extraArgs("setup", f.args[1:]))
 	}
 
 	dir, err := home.Integration(claude.Tool)

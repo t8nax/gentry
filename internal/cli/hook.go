@@ -26,8 +26,6 @@ func runHook(args []string, env Env) int {
 	case !slices.Contains(hook.Events, f.args[0]):
 		e := f.args[0]
 		return fail(env, invalidArgument("hook", "event", e, msg.Text(msg.ErrHookEventUnknown, e), msg.Text(msg.HintHookEvents, events)))
-	case len(f.args) > 1:
-		return fail(env, extraArgs("hook", f.args[1:]))
 	}
 	runSessionStart(env.Stdout)
 	return contract.ExitOK

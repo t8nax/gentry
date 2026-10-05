@@ -21,21 +21,76 @@ type Env struct {
 	json bool // --json is among the arguments: failures are printed as JSON
 }
 
+// command is a gentry command. Its arguments and flags are declared here and
+// nowhere else: the help is built from them, and newFlags accepts only them.
 type command struct {
 	name    string
-	summary msg.Key
-	hidden  bool // a service command, not shown in the help
+	section msg.Key // heading of the help section; empty for a service command
+	summary msg.Key // one line in the command list
+	desc    msg.Key // first paragraph of the command help
+	args    []argSpec
+	flags   []flagSpec
 	run     func(args []string, env Env) int
 }
 
+// hidden reports whether c is a service command: not shown in the help.
+func (c command) hidden() bool { return c.section == "" }
+
+// argSpec is a positional argument. The command checks required arguments
+// itself, to name them in its own words; flags.parse refuses extra ones.
+type argSpec struct {
+	name     msg.Key // placeholder, e.g. <ИИ-инструмент>
+	desc     func() string
+	optional bool
+}
+
+// flagSpec is a flag. A flag with a value placeholder takes a value.
+type flagSpec struct {
+	name  string  // without dashes
+	value msg.Key // placeholder of the value; empty for a boolean flag
+	desc  func() string
+}
+
+// descText returns a description that is the text of k.
+func descText(k msg.Key) func() string {
+	return func() string { return msg.Text(k) }
+}
+
+var jsonFlag = flagSpec{name: "json", desc: descText(msg.FlagJSON)}
+
 func commands() []command {
 	return []command{
-		{name: "version", summary: msg.CmdVersionSummary, run: runVersion},
-		{name: "setup", summary: msg.CmdSetupSummary, run: runSetup},
-		{name: "help", summary: msg.CmdHelpSummary, run: runHelp},
-		{name: "hook", hidden: true, run: runHook},
-		{name: "events", hidden: true, run: runEvents},
+		{
+			name: "setup", section: msg.HelpSectionMaint, summary: msg.CmdSetupSummary, desc: msg.CmdSetupDesc,
+			args: []argSpec{{name: msg.ArgTool, desc: func() string {
+				return msg.Text(msg.ArgToolDesc, strings.Join(tools, ", "))
+			}}},
+			flags: []flagSpec{jsonFlag},
+			run:   runSetup,
+		},
+		{
+			name: "version", section: msg.HelpSectionMaint, summary: msg.CmdVersionSummary, desc: msg.CmdVersionDesc,
+			flags: []flagSpec{{name: "json", desc: descText(msg.FlagVersionJSON)}},
+			run:   runVersion,
+		},
+		{
+			name: "help", section: msg.HelpSectionMaint, summary: msg.CmdHelpSummary, desc: msg.CmdHelpDesc,
+			args: []argSpec{{name: msg.ArgCommand, desc: descText(msg.ArgCommandDesc), optional: true}},
+			run:  runHelp,
+		},
+		{name: "hook", args: []argSpec{{}}, run: runHook},
+		{name: "events", flags: []flagSpec{{name: "json"}, {name: "after", value: msg.ArgNumber}}, run: runEvents},
 	}
+}
+
+// lookup returns the command named name.
+func lookup(name string) (command, bool) {
+	for _, c := range commands() {
+		if c.name == name {
+			return c, true
+		}
+	}
+	return command{}, false
 }
 
 // Run executes the command given by args (without the program name)
@@ -49,12 +104,25 @@ func Run(args []string, env Env) int {
 	if name == "-h" || name == "--help" {
 		return runHelp(nil, env)
 	}
-	for _, c := range commands() {
-		if c.name == name {
-			return c.run(args[1:], env)
+	if c, ok := lookup(name); ok {
+		// A command without --json refuses it in text: JSON output would
+		// suggest the flag is supported.
+		env.json = env.json && c.acceptsJSON()
+		return c.run(args[1:], env)
+	}
+	// An unknown command fails in JSON when asked: a client newer than this
+	// gentry learns from the code that the command does not exist yet.
+	return fail(env, unknownCommand(name))
+}
+
+// acceptsJSON reports whether c declares the --json flag.
+func (c command) acceptsJSON() bool {
+	for _, f := range c.flags {
+		if f.name == "json" {
+			return true
 		}
 	}
-	return fail(env, unknownCommand(name))
+	return false
 }
 
 // hasJSONFlag reports whether --json is among the flags, so that even a
@@ -71,37 +139,11 @@ func hasJSONFlag(args []string) bool {
 	return false
 }
 
-func runHelp(args []string, env Env) int {
-	if len(args) > 0 {
-		return fail(env, unexpectedArgs("help"))
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n\n%s\n\n%s\n", msg.Text(msg.HelpIntro), msg.Text(msg.HelpUsage), msg.Text(msg.HelpCommands))
-	var cmds []command
-	for _, c := range commands() {
-		if !c.hidden {
-			cmds = append(cmds, c)
-		}
-	}
-	width := 0
-	for _, c := range cmds {
-		width = max(width, len(c.name))
-	}
-	for _, c := range cmds {
-		fmt.Fprintf(&b, "  %-*s  %s\n", width, c.name, msg.Text(c.summary))
-	}
-	io.WriteString(env.Stdout, b.String())
-	return contract.ExitOK
-}
-
 func runVersion(args []string, env Env) int {
 	f := newFlags("version")
 	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
-	}
-	if len(f.args) > 0 {
-		return fail(env, unexpectedArgs("version"))
 	}
 	out := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version, StateSchema: state.SchemaVersion()}
 	if *asJSON {

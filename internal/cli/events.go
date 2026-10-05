@@ -35,9 +35,6 @@ func runEvents(args []string, env Env) int {
 	if code, done := f.parse(args, env); done {
 		return code
 	}
-	if len(f.args) > 0 {
-		return fail(env, unexpectedArgs("events"))
-	}
 	var from int64
 	if after.Set {
 		n, err := strconv.ParseInt(after.Value, 10, 64)

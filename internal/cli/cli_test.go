@@ -33,7 +33,7 @@ func TestHelp(t *testing.T) {
 			t.Errorf("%v: unexpected stderr: %q", args, stderr)
 		}
 		for _, c := range commands() {
-			if c.hidden {
+			if c.hidden() {
 				continue
 			}
 			if !strings.Contains(stdout, c.name) {

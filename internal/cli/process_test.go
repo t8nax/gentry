@@ -50,7 +50,7 @@ func TestProcessRemoteText(t *testing.T) {
 	gittest.Run(t, root, "init", "--quiet", "--bare", remote)
 
 	_, stdout, _ := run("process", "status")
-	if want := "Удалённый репозиторий: —\nСинхронизирован: —\n\nПодключить удалённый репозиторий: gentry process remote <адрес>\n"; stdout != want {
+	if want := "Удалённый репозиторий не подключён.\n\nПодключить удалённый репозиторий: gentry process remote <адрес>\n"; stdout != want {
 		t.Errorf("status without a remote:\n%s\nwant:\n%s", stdout, want)
 	}
 	code, stdout, stderr := run("process", "remote", remote)

@@ -319,6 +319,7 @@ const (
 	ProcessReceived               Key = "process.received"
 	ProcessSent                   Key = "process.sent"
 	ProcessRemote                 Key = "process.remote"
+	ProcessNoRemote               Key = "process.no_remote"
 	ProcessSyncedAt               Key = "process.synced_at"
 	ProcessUnsent                 Key = "process.unsent"
 	ProcessConflicts              Key = "process.conflicts"

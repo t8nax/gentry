@@ -585,12 +585,16 @@ func runProcessStatus(args []string, env Env) int {
 		return contract.ExitOK
 	}
 	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.ProcessRemote, orNone(st.Remote)))
-	synced := msg.Text(msg.ValueNone)
-	if st.Synced != nil {
-		synced = localTime(*st.Synced)
+	if st.Remote == "" {
+		fmt.Fprintln(&b, msg.Text(msg.ProcessNoRemote))
+	} else {
+		fmt.Fprintln(&b, msg.Text(msg.ProcessRemote, st.Remote))
+		synced := msg.Text(msg.ValueNone)
+		if st.Synced != nil {
+			synced = localTime(*st.Synced)
+		}
+		fmt.Fprintln(&b, msg.Text(msg.ProcessSyncedAt, synced))
 	}
-	fmt.Fprintln(&b, msg.Text(msg.ProcessSyncedAt, synced))
 	for _, l := range []struct {
 		heading msg.Key
 		kinds   []process.Kind

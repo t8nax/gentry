@@ -317,6 +317,7 @@ var ru = catalog{
 		ProcessReceived:               "Получено:",
 		ProcessSent:                   "Отправлено:",
 		ProcessRemote:                 "Удалённый репозиторий: %s",
+		ProcessNoRemote:               "Удалённый репозиторий не подключён.",
 		ProcessSyncedAt:               "Синхронизирован: %s",
 		ProcessUnsent:                 "Не отправлено:",
 		ProcessConflicts:              "Конфликты:",

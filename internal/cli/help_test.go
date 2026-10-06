@@ -68,7 +68,11 @@ func TestCommandHelp(t *testing.T) {
 				t.Errorf("%s: argument without a name or description", c.name)
 				continue
 			}
-			if !strings.Contains(want, "  "+msg.Text(a.name)+" ") || !containsLines(want, a.desc()) {
+			name := msg.Text(a.name)
+			if a.many {
+				name += "..."
+			}
+			if !strings.Contains(want, "  "+name+" ") || !containsLines(want, a.desc()) {
 				t.Errorf("%s: argument %s is not described:\n%s", c.name, msg.Text(a.name), want)
 			}
 		}

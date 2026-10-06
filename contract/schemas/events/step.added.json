@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/step.added.json",
+  "title": "StepAddedData",
+  "description": "Data of the step.added event: steps were added to the current stage of the task in the envelope.",
+  "type": "object",
+  "properties": {
+    "node": {
+      "description": "Node of the current pass.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of the current pass.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "steps": {
+      "description": "Steps added, in order.",
+      "type": "array",
+      "items": {
+        "title": "StepAddedStep",
+        "type": "object",
+        "properties": {
+          "number": {
+            "description": "Number of the step.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "description": "The step.",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "number",
+          "title"
+        ]
+      }
+    },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "node",
+    "round",
+    "steps",
+    "source"
+  ]
+}

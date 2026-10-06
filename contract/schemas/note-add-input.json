@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/note-add-input.json",
+  "title": "NoteAddInput",
+  "description": "Input of `gentry note add --input`. An unknown field is an error. The source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "text": {
+      "description": "Text of the note; may have several lines.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "additionalProperties": false
+}

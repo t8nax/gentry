@@ -9,8 +9,14 @@ import "time"
 import "unicode/utf8"
 
 type TaskListItem struct {
+	// The scenario of the task is passed, as in Task.
+	Finished bool `json:"finished"`
+
 	// Identifier of the task, such as SHOP-1.
 	Id string `json:"id"`
+
+	// Progress of the task, as in Task.
+	Progress TaskProgress `json:"progress"`
 
 	// Identifier of the project.
 	Project string `json:"project"`
@@ -18,8 +24,8 @@ type TaskListItem struct {
 	// Scenario of the task.
 	Scenario TaskScenario `json:"scenario"`
 
-	// Current stage of the task.
-	Stage TaskStage `json:"stage"`
+	// Current stage of the task; absent once the scenario is passed.
+	Stage *TaskStage `json:"stage,omitempty,omitzero"`
 
 	// State of the task, as in Task.
 	State TaskListOutputTasksElemState `json:"state"`
@@ -40,17 +46,20 @@ func (j *TaskListItem) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
+	if _, ok := raw["finished"]; raw != nil && !ok {
+		return fmt.Errorf("field finished in TaskListItem: required")
+	}
 	if _, ok := raw["id"]; raw != nil && !ok {
 		return fmt.Errorf("field id in TaskListItem: required")
+	}
+	if _, ok := raw["progress"]; raw != nil && !ok {
+		return fmt.Errorf("field progress in TaskListItem: required")
 	}
 	if _, ok := raw["project"]; raw != nil && !ok {
 		return fmt.Errorf("field project in TaskListItem: required")
 	}
 	if _, ok := raw["scenario"]; raw != nil && !ok {
 		return fmt.Errorf("field scenario in TaskListItem: required")
-	}
-	if _, ok := raw["stage"]; raw != nil && !ok {
-		return fmt.Errorf("field stage in TaskListItem: required")
 	}
 	if _, ok := raw["state"]; raw != nil && !ok {
 		return fmt.Errorf("field state in TaskListItem: required")

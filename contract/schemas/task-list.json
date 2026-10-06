@@ -12,21 +12,46 @@
         "title": "TaskListItem",
         "type": "object",
         "properties": {
-          "id": { "description": "Identifier of the task, such as SHOP-1.", "type": "string", "minLength": 1 },
-          "project": { "description": "Identifier of the project.", "type": "string", "minLength": 1 },
-          "title": { "description": "Title of the task.", "type": "string", "minLength": 1 },
+          "id": {
+            "description": "Identifier of the task, such as SHOP-1.",
+            "type": "string",
+            "minLength": 1
+          },
+          "project": {
+            "description": "Identifier of the project.",
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "description": "Title of the task.",
+            "type": "string",
+            "minLength": 1
+          },
           "state": {
             "description": "State of the task, as in Task.",
             "type": "string",
-            "enum": ["active", "waiting", "closed", "cancelled"]
+            "enum": [
+              "active",
+              "waiting",
+              "closed",
+              "cancelled"
+            ]
           },
           "scenario": {
             "description": "Scenario of the task.",
             "$ref": "./task.json#/$defs/scenario"
           },
           "stage": {
-            "description": "Current stage of the task.",
+            "description": "Current stage of the task; absent once the scenario is passed.",
             "$ref": "./task.json#/$defs/stage"
+          },
+          "finished": {
+            "description": "The scenario of the task is passed, as in Task.",
+            "type": "boolean"
+          },
+          "progress": {
+            "description": "Progress of the task, as in Task.",
+            "$ref": "./task.json#/$defs/progress"
           },
           "worktree": {
             "description": "Absolute path of the worktree the task holds; absent once the task released it.",
@@ -39,9 +64,20 @@
             "format": "date-time"
           }
         },
-        "required": ["id", "project", "title", "state", "scenario", "stage", "taken"]
+        "required": [
+          "id",
+          "project",
+          "title",
+          "state",
+          "scenario",
+          "finished",
+          "progress",
+          "taken"
+        ]
       }
     }
   },
-  "required": ["tasks"]
+  "required": [
+    "tasks"
+  ]
 }

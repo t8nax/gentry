@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/artifact.saved.json",
+  "title": "ArtifactSavedData",
+  "description": "Data of the artifact.saved event: an artifact of the task in the envelope was saved.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "Name of the artifact.",
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "description": "Kind of the artifact: file or link.",
+      "type": "string",
+      "enum": [
+        "file",
+        "link"
+      ]
+    },
+    "url": {
+      "description": "Address of a link.",
+      "type": "string",
+      "minLength": 1
+    },
+    "replaced": {
+      "description": "An artifact of the same name was replaced.",
+      "type": "boolean"
+    },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "kind",
+    "replaced",
+    "source"
+  ]
+}

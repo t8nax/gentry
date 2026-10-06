@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/note.added.json",
+  "title": "NoteAddedData",
+  "description": "Data of the note.added event: a note was added to the task in the envelope.",
+  "type": "object",
+  "properties": {
+    "number": {
+      "description": "Number of the note.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "text": {
+      "description": "Text of the note.",
+      "type": "string",
+      "minLength": 1
+    },
+    "node": {
+      "description": "Node of the pass the note was added at.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of that pass.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "number",
+    "text",
+    "node",
+    "round",
+    "source"
+  ]
+}

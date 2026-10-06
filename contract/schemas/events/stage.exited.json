@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/stage.exited.json",
+  "title": "StageExitedData",
+  "description": "Data of the stage.exited event: the task in the envelope closed its current stage by an exit and took a transition.",
+  "type": "object",
+  "properties": {
+    "node": {
+      "description": "Node of the pass closed.",
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "description": "Stage of that node.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of the pass closed.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "kind": {
+      "description": "Kind of the exit: artifact — an artifact of the task, result — the result of an event, negative — a negative result with where it was looked for.",
+      "type": "string",
+      "enum": [
+        "artifact",
+        "result",
+        "negative"
+      ]
+    },
+    "text": {
+      "description": "Text of the exit.",
+      "type": "string",
+      "minLength": 1
+    },
+    "artifact": {
+      "description": "Name of the artifact of an exit of kind artifact.",
+      "type": "string",
+      "minLength": 1
+    },
+    "to": {
+      "description": "The node taken, or finish.",
+      "type": "string",
+      "minLength": 1
+    },
+    "reason": {
+      "description": "Why the transition was taken; absent if not given.",
+      "type": "string",
+      "minLength": 1
+    },
+    "returns": {
+      "description": "Which return by the transition this is, for a return.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "finished": {
+      "description": "The scenario of the task is passed.",
+      "type": "boolean"
+    },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "node",
+    "stage",
+    "round",
+    "kind",
+    "text",
+    "to",
+    "finished",
+    "source"
+  ]
+}

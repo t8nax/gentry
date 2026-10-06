@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/stage-skip-input.json",
+  "title": "StageSkipInput",
+  "description": "Input of `gentry stage skip --input`. An unknown field is an error. The source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "description": "Why the stage is skipped; at a fork, also why the transition is taken.",
+      "type": "string",
+      "minLength": 1
+    },
+    "to": {
+      "description": "The node to go to, or finish; required at a fork.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false
+}

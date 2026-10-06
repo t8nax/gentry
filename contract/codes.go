@@ -51,12 +51,20 @@ const (
 	CodeLibraryConflict      = "library_conflict"        // the synchronization before library apply found the library changed on another machine: the draft is not applied; details: conflict_dir
 	CodeInputInvalid         = "input_invalid"           // --input cannot be read, is not a JSON object, has an unknown field or a field that is not a string; details: input, field if any
 	CodeMissingField         = "missing_field"           // a required field of the command is not given, by a flag or in --input; details: command, field
-	CodeFieldInvalid         = "field_invalid"           // a field has a value the command cannot accept; details: field, reason (open list: too_long, multiline)
+	CodeFieldInvalid         = "field_invalid"           // a field has a value the command cannot accept; details: field, reason (open list: too_long, multiline, invalid_name, invalid_url, not_found, too_large)
 	CodeWorktreeNotPooled    = "worktree_not_pooled"     // the directory is not a worktree of a pool; details: path
 	CodeWorktreeBusy         = "worktree_busy"           // the worktree holds a task already; details: path, task
 	CodeWorktreeDirty        = "worktree_dirty"          // the worktree has uncommitted changes; details: path, files
 	CodeTaskNotFound         = "task_not_found"          // no task has the identifier; details: task
 	CodeTaskUndetermined     = "task_undetermined"       // no task is named and the current directory holds none; details: dir
+	CodeScenarioFinished     = "scenario_finished"       // the scenario of the task is passed: no stage to show, close or add steps to; details: task
+	CodeTransitionNotFound   = "transition_not_found"    // the node has no transition to the node named; details: node, to, transitions
+	CodeReturnLimit          = "return_limit"            // the limit of returns by the transition is reached; details: node, to, limit
+	CodeStepsEmpty           = "steps_empty"             // the stage has no steps to close it by an exit; details: node, stage
+	CodeStepsOpen            = "steps_open"              // the stage has steps neither done nor dropped; details: node, steps (numbers)
+	CodeStepNotFound         = "step_not_found"          // the current stage has no step of that number; details: step
+	CodeStepClosed           = "step_closed"             // the step is done or dropped already; details: step, state
+	CodeArtifactNotFound     = "artifact_not_found"      // the exit names an artifact the task has not saved; details: artifact
 	CodeInternal             = "internal"                // a failure inside Gentry
 )
 
@@ -80,9 +88,9 @@ const (
 	ProblemReservedNode          = "reserved_node"           // a node is named finish
 	ProblemUnreachable           = "unreachable"             // a node is not reachable from the start node
 	ProblemDeadEnd               = "dead_end"                // the end of the scenario is not reachable from a node
-	ProblemUnlimitedLoop         = "unlimited_loop"          // a loop has no transition with a limit of rounds
-	ProblemLimitOutsideLoop      = "limit_outside_loop"      // a transition with a limit of rounds closes no loop
-	ProblemLimitWithoutCondition = "limit_without_condition" // a transition with a limit of rounds has no condition
+	ProblemUnlimitedLoop         = "unlimited_loop"          // a loop has no transition with a limit of returns
+	ProblemLimitOutsideLoop      = "limit_outside_loop"      // a transition with a limit of returns closes no loop
+	ProblemLimitWithoutCondition = "limit_without_condition" // a transition with a limit of returns has no condition
 	ProblemSeveralDefaults       = "several_defaults"        // a node has more than one transition without a condition
 	ProblemDuplicateTransition   = "duplicate_transition"    // a node has two transitions to one node
 )

@@ -23,6 +23,7 @@ const (
 
 // Task is a task of a project.
 type Task struct {
+	ID          int64 // the row of the task in the store
 	Project     string
 	Prefix      string // prefix of the project: with Number it makes the key, SHOP-1
 	Number      int
@@ -76,11 +77,33 @@ func (t *Tx) TakeNumber(project string) (int, error) {
 // AddTask records a task taken now and returns it with its time of taking.
 func (t *Tx) AddTask(task Task) (Task, error) {
 	task.Taken = now()
-	_, err := t.tx.Exec(`INSERT INTO tasks (project, number, title, statement, source, state, scenario, node, flow_commit, worktree, taken)
+	res, err := t.tx.Exec(`INSERT INTO tasks (project, number, title, statement, source, state, scenario, node, flow_commit, worktree, taken)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.Project, task.Number, task.Title, task.Statement, task.Source, task.State, task.Scenario, task.Node,
 		task.FlowCommit, nullable(task.Worktree), task.Taken.UTC().Format(TimeFormat))
+	if err != nil {
+		return Task{}, err
+	}
+	task.ID, err = res.LastInsertId()
 	return task, err
+}
+
+// Task returns the task of row id as the transaction sees it.
+func (t *Tx) Task(id int64) (Task, error) {
+	ts, err := tasks(t.tx, `WHERE t.id = ?`, id)
+	if err != nil {
+		return Task{}, err
+	}
+	if len(ts) == 0 {
+		return Task{}, fmt.Errorf("task %d: %w", id, sql.ErrNoRows)
+	}
+	return ts[0], nil
+}
+
+// SetNode moves the task to node: the next node of its scenario, or Finish.
+func (t *Tx) SetNode(task int64, node string) error {
+	_, err := t.tx.Exec(`UPDATE tasks SET node = ? WHERE id = ?`, node, task)
+	return err
 }
 
 // TaskIn returns the task that holds the worktree at path.
@@ -152,7 +175,7 @@ func snapshot(q rowQuerier, project, commit string) (FlowSnapshot, bool, error) 
 
 // tasks returns the tasks that match where, a clause on the tasks t.
 func tasks(q querier, where string, args ...any) ([]Task, error) {
-	rows, err := q.Query(`SELECT t.project, p.prefix, t.number, t.title, t.statement, t.source, t.state, t.scenario,
+	rows, err := q.Query(`SELECT t.id, t.project, p.prefix, t.number, t.title, t.statement, t.source, t.state, t.scenario,
 			t.node, t.flow_commit, f.applied, coalesce(t.worktree, ''), t.taken
 		FROM tasks t
 		JOIN projects p ON p.id = t.project
@@ -167,7 +190,7 @@ func tasks(q querier, where string, args ...any) ([]Task, error) {
 	for rows.Next() {
 		var t Task
 		var applied, taken string
-		if err := rows.Scan(&t.Project, &t.Prefix, &t.Number, &t.Title, &t.Statement, &t.Source, &t.State, &t.Scenario,
+		if err := rows.Scan(&t.ID, &t.Project, &t.Prefix, &t.Number, &t.Title, &t.Statement, &t.Source, &t.State, &t.Scenario,
 			&t.Node, &t.FlowCommit, &applied, &t.Worktree, &taken); err != nil {
 			return nil, err
 		}

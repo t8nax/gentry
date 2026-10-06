@@ -160,6 +160,10 @@ func Take(st *state.Store, req TakeRequest) (state.Task, error) {
 		if err != nil {
 			return err
 		}
+		if _, err := tx.AddPass(state.Pass{Task: task.ID, Node: task.Node, Stage: stageOfNode(req.Scenario, task.Node),
+			Round: 1, Entered: task.Taken}); err != nil {
+			return err
+		}
 		task.FlowApplied = applied.Time
 		projects, err := tx.Projects()
 		if err != nil {
@@ -261,16 +265,22 @@ func Current(tasks []state.Task, worktrees []state.Worktree, dir string) (state.
 	return t, nil
 }
 
-// View is a task with the names of its scenario and stage in its flow.
+// View is a task with the names of its scenario and stage in its flow, its
+// path and its progress.
 type View struct {
 	state.Task
 	ScenarioTitle string
-	Stage         string // the stage of the current node
+	Stage         string // the stage of the current node; empty once the scenario is passed
 	StageTitle    string
+	Round         int  // the round of the current pass
+	Finished      bool // the scenario is passed
+	Progress      Progress
+	Path          []state.Pass // the passes in the order entered, each with its stage
+	Flow          *flow.Flow   // nil if the snapshot cannot be read
 }
 
-// Views returns the tasks with the names from their snapshots; each snapshot
-// is read once.
+// Views returns the tasks with the names from their snapshots and their
+// paths; each snapshot is read once.
 func Views(st *state.Store, tasks []state.Task) ([]View, error) {
 	flows := map[[2]string]*flow.Flow{}
 	views := make([]View, len(tasks))
@@ -284,7 +294,11 @@ func Views(st *state.Store, tasks []state.Task) ([]View, error) {
 			}
 			flows[k] = fl
 		}
-		views[i] = view(t, fl)
+		passes, err := st.TaskPath(t)
+		if err != nil {
+			return nil, err
+		}
+		views[i] = view(t, fl, passes)
 	}
 	return views, nil
 }
@@ -296,39 +310,58 @@ func snapshotFlow(st *state.Store, project, commit string) (*flow.Flow, error) {
 	if err != nil || !ok {
 		return nil, err
 	}
-	snap, err := flow.DecodeSnapshot([]byte(s.Content))
+	fl, err := readSnapshot(s.Content)
 	if err != nil {
 		return nil, nil
 	}
-	res, err := flow.ReadSnapshot(snap)
-	if err != nil {
-		return nil, nil
-	}
-	return res.Flow, nil
+	return fl, nil
 }
 
-// view names the scenario and the stage of t in its flow fl; without the
-// flow the stage is named by the node.
-func view(t state.Task, fl *flow.Flow) View {
-	v := View{Task: t, Stage: t.Node}
-	if fl == nil {
-		return v
+// view names the scenario and the stage of t in its flow fl and counts its
+// progress along passes; without the flow the stage is named by the node.
+func view(t state.Task, fl *flow.Flow, passes []state.Pass) View {
+	v := View{Task: t, Stage: t.Node, Finished: t.Node == flow.Finish, Flow: fl}
+	if v.Finished {
+		v.Stage = ""
 	}
-	s, ok := fl.Scenario(t.Scenario)
+	var sc flow.Scenario
+	ok := false
+	if fl != nil {
+		sc, ok = fl.Scenario(t.Scenario)
+	}
+	for _, p := range passes {
+		if p.Stage == "" {
+			p.Stage = p.Node
+			if ok {
+				p.Stage = stageOfNode(sc, p.Node)
+			}
+		}
+		v.Path = append(v.Path, p)
+	}
+	if n := len(v.Path); n > 0 && v.Path[n-1].Current() {
+		v.Round = v.Path[n-1].Round
+		v.Stage = v.Path[n-1].Stage
+	}
 	if !ok {
 		return v
 	}
-	v.ScenarioTitle = s.Title
-	for _, n := range s.Nodes {
-		if n.ID == t.Node {
-			v.Stage = n.Stage
-		}
+	v.ScenarioTitle = sc.Title
+	if !v.Finished {
+		v.Stage = stageOfNode(sc, t.Node)
 	}
 	if st, ok := fl.Stage(v.Stage); ok {
 		v.StageTitle = st.Title
 	}
+	v.Progress = progressOf(sc, v.Path, t.Node)
 	return v
 }
 
-// ViewOf returns the view of a task just taken with flow fl.
-func ViewOf(t state.Task, fl *flow.Flow) View { return view(t, fl) }
+// StageTitleOf returns the title of a stage in the flow of v, or "" if the
+// flow has no such stage.
+func (v View) StageTitleOf(stage string) string {
+	if v.Flow == nil {
+		return ""
+	}
+	st, _ := v.Flow.Stage(stage)
+	return st.Title
+}

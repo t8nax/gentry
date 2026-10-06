@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/step.done.json",
+  "title": "StepDoneData",
+  "description": "Data of the step.done event: a step of the current stage of the task in the envelope was marked done.",
+  "type": "object",
+  "properties": {
+    "node": {
+      "description": "Node of the current pass.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of the current pass.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "number": {
+      "description": "Number of the step.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "check": {
+      "description": "How the result was checked; absent if not given.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "node",
+    "round",
+    "number",
+    "source"
+  ]
+}

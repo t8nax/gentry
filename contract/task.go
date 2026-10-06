@@ -10,6 +10,10 @@ import "unicode/utf8"
 
 // A task of a project.
 type Task struct {
+	// The scenario of the task is passed: the task stays in work until it is closed,
+	// and has no stage.
+	Finished bool `json:"finished"`
+
 	// The commit that applied the flow of the task: the task follows that flow to its
 	// end, whatever is applied later.
 	Flow Applied `json:"flow"`
@@ -18,15 +22,18 @@ type Task struct {
 	// SHOP-1. The event envelope names the task by it.
 	Id string `json:"id"`
 
+	// Progress of the task through its scenario.
+	Progress TaskProgress `json:"progress"`
+
 	// Identifier of the project.
 	Project string `json:"project"`
 
 	// Scenario of the task in the flow of the task.
 	Scenario TaskScenario `json:"scenario"`
 
-	// Current stage of the task. Its exit, instruction and transitions are given by
-	// `gentry stage show`.
-	Stage TaskStage `json:"stage"`
+	// Current stage of the task; absent once the scenario is passed. Its exit,
+	// instruction and transitions are given by `gentry stage show`.
+	Stage *TaskStage `json:"stage,omitempty,omitzero"`
 
 	// State of the task: active — in work, waiting — waits for the operator, closed —
 	// done, cancelled — given up.
@@ -43,6 +50,55 @@ type Task struct {
 
 	// Absolute path of the worktree the task holds; absent once the task released it.
 	Worktree *string `json:"worktree,omitempty,omitzero"`
+}
+
+// Progress of a task: stages passed of all stages of its way to the end. Ahead of
+// a fork the total is a range, from the shortest way to the longest.
+type TaskProgress struct {
+	// Number of the nodes of the scenario closed by an exit or a skip; a return does
+	// not lower it.
+	Passed int `json:"passed"`
+
+	// passed plus the nodes not passed yet on the longest way to the end, without
+	// returns; equals total_min unless a fork is ahead.
+	TotalMax int `json:"total_max"`
+
+	// passed plus the nodes not passed yet on the shortest way to the end, without
+	// returns.
+	TotalMin int `json:"total_min"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *TaskProgress) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["passed"]; raw != nil && !ok {
+		return fmt.Errorf("field passed in TaskProgress: required")
+	}
+	if _, ok := raw["total_max"]; raw != nil && !ok {
+		return fmt.Errorf("field total_max in TaskProgress: required")
+	}
+	if _, ok := raw["total_min"]; raw != nil && !ok {
+		return fmt.Errorf("field total_min in TaskProgress: required")
+	}
+	type Plain TaskProgress
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if 0 > plain.Passed {
+		return fmt.Errorf("field %s: must be >= %v", "passed", 0)
+	}
+	if 0 > plain.TotalMax {
+		return fmt.Errorf("field %s: must be >= %v", "total_max", 0)
+	}
+	if 0 > plain.TotalMin {
+		return fmt.Errorf("field %s: must be >= %v", "total_min", 0)
+	}
+	*j = TaskProgress(plain)
+	return nil
 }
 
 // Scenario of the task in the flow of the task.
@@ -87,6 +143,10 @@ type TaskStage struct {
 	// Node of the scenario the task is at.
 	Node string `json:"node"`
 
+	// Number of the pass of the node in the task, from 1: a return to the node starts
+	// the next round.
+	Round int `json:"round"`
+
 	// Title of the stage.
 	Title string `json:"title"`
 }
@@ -103,6 +163,9 @@ func (j *TaskStage) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["node"]; raw != nil && !ok {
 		return fmt.Errorf("field node in TaskStage: required")
 	}
+	if _, ok := raw["round"]; raw != nil && !ok {
+		return fmt.Errorf("field round in TaskStage: required")
+	}
 	if _, ok := raw["title"]; raw != nil && !ok {
 		return fmt.Errorf("field title in TaskStage: required")
 	}
@@ -116,6 +179,9 @@ func (j *TaskStage) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Node)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "node", 1)
+	}
+	if 1 > plain.Round {
+		return fmt.Errorf("field %s: must be >= %v", "round", 1)
 	}
 	*j = TaskStage(plain)
 	return nil
@@ -225,20 +291,23 @@ func (j *Task) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
+	if _, ok := raw["finished"]; raw != nil && !ok {
+		return fmt.Errorf("field finished in Task: required")
+	}
 	if _, ok := raw["flow"]; raw != nil && !ok {
 		return fmt.Errorf("field flow in Task: required")
 	}
 	if _, ok := raw["id"]; raw != nil && !ok {
 		return fmt.Errorf("field id in Task: required")
 	}
+	if _, ok := raw["progress"]; raw != nil && !ok {
+		return fmt.Errorf("field progress in Task: required")
+	}
 	if _, ok := raw["project"]; raw != nil && !ok {
 		return fmt.Errorf("field project in Task: required")
 	}
 	if _, ok := raw["scenario"]; raw != nil && !ok {
 		return fmt.Errorf("field scenario in Task: required")
-	}
-	if _, ok := raw["stage"]; raw != nil && !ok {
-		return fmt.Errorf("field stage in Task: required")
 	}
 	if _, ok := raw["state"]; raw != nil && !ok {
 		return fmt.Errorf("field state in Task: required")

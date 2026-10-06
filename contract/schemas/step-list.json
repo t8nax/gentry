@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/step-list.json",
+  "title": "StepListOutput",
+  "description": "Output of `gentry step add`, `gentry step done` and `gentry step drop` with --json: the steps of the current pass.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "Identifier of the task, such as SHOP-1.",
+      "type": "string",
+      "minLength": 1
+    },
+    "node": {
+      "description": "Node of the current pass.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of the current pass.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "steps": {
+      "description": "Steps of the current pass in the order added.",
+      "type": "array",
+      "items": {
+        "$ref": "./task-step.json"
+      }
+    },
+    "added": {
+      "description": "Numbers of the steps added; only for step add.",
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    }
+  },
+  "required": [
+    "task",
+    "node",
+    "round",
+    "steps"
+  ]
+}

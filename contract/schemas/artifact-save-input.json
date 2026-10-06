@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/artifact-save-input.json",
+  "title": "ArtifactSaveInput",
+  "description": "Input of `gentry artifact save --input`: file or url, not both. An unknown field is an error. The source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "Name of the artifact: Latin letters, digits, dot, hyphen and underscore.",
+      "type": "string",
+      "minLength": 1
+    },
+    "file": {
+      "description": "File to keep a copy of.",
+      "type": "string",
+      "minLength": 1
+    },
+    "url": {
+      "description": "Address of the artifact, with http:// or https://.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false
+}

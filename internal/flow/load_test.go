@@ -214,7 +214,7 @@ func TestProblemOrder(t *testing.T) {
 	}
 	want := []string{
 		"Сценарий bug: начальный узел brnch не найден.",
-		"Сценарий feature: у цикла implementation → review → implementation нет предела кругов.",
+		"Сценарий feature: у цикла implementation → review → implementation нет предела возвратов.",
 		"Этап plan-bug: не заполнено поле «exit».",
 		"Этап review: субагент reviewr не найден.",
 		"Файл не относится к флоу: stages/merge.yml",

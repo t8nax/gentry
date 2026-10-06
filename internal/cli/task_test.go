@@ -81,7 +81,8 @@ func TestTaskTakeText(t *testing.T) {
 		"Проект: shop",
 		"Состояние: в работе",
 		"Сценарий: Фича (feature)",
-		"Этап: Ветка (branch)",
+		"Этап: Ветка (branch), круг 1",
+		"Прогресс: 0 из 5",
 		"Взята: <время>",
 		"Флоу задачи применён: <время>",
 		"Постановка записана: оператором",
@@ -89,6 +90,11 @@ func TestTaskTakeText(t *testing.T) {
 		"",
 		"Постановка:",
 		"  " + statement,
+		"",
+		"ЭТАП   КРУГ  ИТОГ  ПЕРЕХОД",
+		"Ветка  1     идёт  —",
+		"",
+		"У этапа нет шагов.",
 	}, "\n") + "\n"
 	if code != contract.ExitOK || stderr != "" || masked(stdout) != want {
 		t.Errorf("task show: exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
@@ -111,7 +117,7 @@ func TestTaskTakeText(t *testing.T) {
 	}
 	t.Chdir(filepath.Dir(shop))
 	_, stdout, _ = run("task", "show", "shop-2")
-	if !strings.HasSuffix(stdout, "Постановка:\n  Первая строка.\n\n  Третья строка.\n") || !strings.Contains(stdout, "Этап: Ветка (branch)\n") {
+	if !strings.Contains(stdout, "Постановка:\n  Первая строка.\n\n  Третья строка.\n\n") || !strings.Contains(stdout, "Этап: Ветка (branch), круг 1\n") {
 		t.Errorf("task show shop-2:\n%s", stdout)
 	}
 

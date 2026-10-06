@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/step-done-input.json",
+  "title": "StepDoneInput",
+  "description": "Input of `gentry step done --input`. An unknown field is an error. The source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "step": {
+      "description": "Number of the step of the current stage.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "check": {
+      "description": "How the result of the step was checked.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "step"
+  ],
+  "additionalProperties": false
+}

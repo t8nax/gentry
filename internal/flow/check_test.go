@@ -70,21 +70,21 @@ func TestGraphProblems(t *testing.T) {
 			"  branch: { stage: branch, next: implementation }\n"+
 				"  implementation: { stage: implementation, next: review }\n"+
 				"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n      - to: finish\n"), []Problem{
-			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 5, "Сценарий bug: у цикла implementation → review → implementation нет предела кругов."},
+			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 5, "Сценарий bug: у цикла implementation → review → implementation нет предела возвратов."},
 		}},
 		{"unlimited self loop", bug("review",
 			"  review:\n    stage: review\n    next:\n      - to: review\n        if: ещё круг\n      - to: finish\n"), []Problem{
-			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 4, "Сценарий bug: у цикла review → review нет предела кругов."},
+			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 4, "Сценарий bug: у цикла review → review нет предела возвратов."},
 		}},
 		{"limits", bug("plan",
 			"  plan:\n    stage: plan-bug\n    next:\n      - to: review\n        if: план готов\n        max_rounds: 2\n"+
 				"  review:\n    stage: review\n    next:\n      - to: review\n        max_rounds: 3\n      - to: finish\n        if: замечаний нет\n"), []Problem{
-			{contract.ProblemLimitOutsideLoop, "scenarios/bug.yaml", 7, "Сценарий bug: у перехода plan → review указан предел кругов, но переход не замыкает цикл."},
-			{contract.ProblemLimitWithoutCondition, "scenarios/bug.yaml", 13, "Сценарий bug: у перехода review → review с пределом кругов нет условия."},
+			{contract.ProblemLimitOutsideLoop, "scenarios/bug.yaml", 7, "Сценарий bug: у перехода plan → review указан предел возвратов, но переход не замыкает цикл."},
+			{contract.ProblemLimitWithoutCondition, "scenarios/bug.yaml", 13, "Сценарий bug: у перехода review → review с пределом возвратов нет условия."},
 		}},
 		{"limit to the end", bug("plan",
 			"  plan:\n    stage: plan-bug\n    next:\n      - to: finish\n        if: план готов\n        max_rounds: 2\n"), []Problem{
-			{contract.ProblemLimitOutsideLoop, "scenarios/bug.yaml", 7, "Сценарий bug: у перехода plan → finish указан предел кругов, но переход не замыкает цикл."},
+			{contract.ProblemLimitOutsideLoop, "scenarios/bug.yaml", 7, "Сценарий bug: у перехода plan → finish указан предел возвратов, но переход не замыкает цикл."},
 		}},
 		{"transitions of a node", bug("review",
 			"  review:\n    stage: review\n    next:\n      - to: merge\n        if: замечаний нет\n      - to: merge\n      - to: finish\n"+

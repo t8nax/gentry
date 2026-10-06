@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
@@ -158,7 +159,11 @@ func runTaskTake(args []string, env Env) int {
 	if err != nil {
 		return fail(env, taskFailure(err))
 	}
-	v := task.ViewOf(t, res.Flow)
+	views, err := task.Views(st, []state.Task{t})
+	if err != nil {
+		return fail(env, stateFailure(err))
+	}
+	v := views[0]
 
 	if *asJSON {
 		if err := writeJSON(env, contract.TaskTakeOutput{Task: taskJSON(v), Sync: syncJSON(s)}); err != nil {
@@ -259,6 +264,7 @@ func openTaskFlow(projectID string) (*process.Repo, flow.Places, *failure) {
 
 func runTaskShow(args []string, env Env) int {
 	f := newFlags("task show")
+	full := f.Bool("path")
 	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
@@ -293,9 +299,29 @@ func runTaskShow(args []string, env Env) int {
 		return fail(env, stateFailure(err))
 	}
 	v := views[0]
+	notes, err := st.Notes(t.ID)
+	if err != nil {
+		return fail(env, stateFailure(err))
+	}
+	artifacts, err := st.Artifacts(t.ID)
+	if err != nil {
+		return fail(env, stateFailure(err))
+	}
 
 	if *asJSON {
-		if err := writeJSON(env, contract.TaskShowOutput{Task: taskJSON(v)}); err != nil {
+		out := contract.TaskShowOutput{Task: taskJSON(v), Path: []contract.TaskPass{}, Notes: []contract.TaskNote{},
+			Artifacts: []contract.TaskArtifact{}}
+		for _, p := range v.Path {
+			out.Path = append(out.Path, passJSON(p))
+		}
+		for _, n := range notes {
+			out.Notes = append(out.Notes, noteJSON(n))
+		}
+		for _, a := range artifacts {
+			path, _ := task.ArtifactPath(t, a.Name)
+			out.Artifacts = append(out.Artifacts, artifactJSON(a, path))
+		}
+		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
 		}
 		return contract.ExitOK
@@ -306,7 +332,10 @@ func runTaskShow(args []string, env Env) int {
 	fmt.Fprintln(&b, msg.Text(msg.TaskProject, t.Project))
 	fmt.Fprintln(&b, msg.Text(msg.TaskState, stateWord(t.State)))
 	fmt.Fprintln(&b, msg.Text(msg.TaskScenario, named(v.ScenarioTitle, t.Scenario)))
-	fmt.Fprintln(&b, msg.Text(msg.TaskStage, named(v.StageTitle, v.Stage)))
+	fmt.Fprintln(&b, msg.Text(msg.TaskStage, stageRound(v.StageTitle, v.Stage, v.Round, v.Finished)))
+	if v.Flow != nil {
+		fmt.Fprintln(&b, msg.Text(msg.ProgressLine, progressText(v.Progress)))
+	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskTakenAt, localTime(t.Taken)))
 	fmt.Fprintln(&b, msg.Text(msg.TaskFlowApplied, localTime(t.FlowApplied)))
 	fmt.Fprintln(&b, msg.Text(msg.TaskSource, sourceWord(t.Source)))
@@ -315,6 +344,19 @@ func runTaskShow(args []string, env Env) int {
 	}
 	b.WriteString("\n")
 	writeText(&b, msg.Text(msg.TaskStatement), t.Statement)
+	if *full {
+		writePasses(&b, v)
+	} else {
+		writePath(&b, v)
+	}
+	if len(notes) > 0 {
+		b.WriteString("\n")
+		writeNotes(&b, notes)
+	}
+	if len(artifacts) > 0 {
+		b.WriteString("\n")
+		writeArtifacts(&b, t, artifacts)
+	}
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK
 }
@@ -415,8 +457,8 @@ func runTaskList(args []string, env Env) int {
 			item := contract.TaskListItem{
 				Id: v.Key(), Project: v.Project, Title: v.Title, State: contract.TaskListOutputTasksElemState(v.State),
 				Scenario: contract.TaskScenario{Id: v.Scenario, Title: v.ScenarioTitle},
-				Stage:    contract.TaskStage{Node: v.Node, Id: v.Stage, Title: v.StageTitle},
-				Taken:    v.Taken,
+				Stage:    stageJSON(v), Finished: v.Finished, Progress: progressJSON(v.Progress),
+				Taken: v.Taken,
 			}
 			if v.Worktree != "" {
 				w := v.Worktree
@@ -444,8 +486,12 @@ func runTaskList(args []string, env Env) int {
 	}
 	rows := [][]string{header}
 	for _, v := range views {
+		stage := orNone(oneLine(v.StageTitle))
+		if v.Finished {
+			stage = msg.Text(msg.StageFinished)
+		}
 		row := []string{v.Key(), v.Title, stateWord(v.State), orNone(oneLine(v.ScenarioTitle)),
-			orNone(oneLine(v.StageTitle)), orNone(v.Worktree)}
+			stage, orNone(v.Worktree)}
 		if scope == "" {
 			row = append([]string{v.Project}, row...)
 		}
@@ -497,7 +543,9 @@ func taskJSON(v task.View) contract.Task {
 	t := contract.Task{
 		Id: v.Key(), Project: v.Project, Title: v.Title, State: contract.TaskState(v.State),
 		Scenario:  contract.TaskScenario{Id: v.Scenario, Title: v.ScenarioTitle},
-		Stage:     contract.TaskStage{Node: v.Node, Id: v.Stage, Title: v.StageTitle},
+		Stage:     stageJSON(v),
+		Finished:  v.Finished,
+		Progress:  progressJSON(v.Progress),
 		Flow:      contract.Applied{Commit: v.FlowCommit, Time: v.FlowApplied},
 		Statement: contract.TaskStatement{Text: v.Statement, Source: contract.TaskStatementSource(v.Source)},
 		Taken:     v.Taken,
@@ -507,6 +555,117 @@ func taskJSON(v task.View) contract.Task {
 		t.Worktree = &w
 	}
 	return t
+}
+
+// stageJSON returns the current stage of v as the contract has it; nil once
+// the scenario is passed.
+func stageJSON(v task.View) *contract.TaskStage {
+	if v.Finished {
+		return nil
+	}
+	return &contract.TaskStage{Node: v.Node, Id: v.Stage, Title: v.StageTitle, Round: max(v.Round, 1)}
+}
+
+// progressJSON returns a progress as the contract has it.
+func progressJSON(p task.Progress) contract.TaskProgress {
+	return contract.TaskProgress{Passed: p.Passed, TotalMin: p.Min, TotalMax: p.Max}
+}
+
+// writePath prints the path of a task as a table, one pass per row, and the
+// steps of its current stage.
+func writePath(b *strings.Builder, v task.View) {
+	if len(v.Path) == 0 {
+		return
+	}
+	b.WriteString("\n")
+	rows := [][]string{{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)}}
+	for _, p := range v.Path {
+		next := msg.Text(msg.ValueNone)
+		if !p.Current() {
+			next = nodeName(p.Next)
+		}
+		rows = append(rows, []string{passStage(v, p), strconv.Itoa(p.Round), outcomeWord(p), next})
+	}
+	writeTable(b, rows)
+	if n := len(v.Path); v.Path[n-1].Current() {
+		b.WriteString("\n")
+		writeStepTable(b, v.Path[n-1].Steps)
+	}
+}
+
+// writePasses prints the path of a task in full, each pass a block: its
+// outcome, exit, transition, reason, who closed it and its steps.
+func writePasses(b *strings.Builder, v task.View) {
+	for _, p := range v.Path {
+		b.WriteString("\n")
+		fmt.Fprintln(b, msg.Text(msg.StageRound, named(v.StageTitleOf(p.Stage), p.Stage), p.Round))
+		fmt.Fprintln(b, msg.Text(msg.OutcomeLine, outcomeWord(p)))
+		if p.Current() {
+			b.WriteString("\n")
+			writeStepTable(b, p.Steps)
+			continue
+		}
+		if p.Outcome == state.OutcomeExit {
+			fmt.Fprintln(b, msg.Text(msg.ExitTextLine, oneLine(p.ExitText)))
+		}
+		fmt.Fprintln(b, msg.Text(msg.TransitionLine, nodeName(p.Next)))
+		if p.Reason != "" {
+			fmt.Fprintln(b, msg.Text(msg.ReasonLine, oneLine(p.Reason)))
+		}
+		fmt.Fprintln(b, msg.Text(msg.RecordedLine, recordedWord(v, p)))
+		fmt.Fprintln(b, msg.Text(msg.ClosedLine, localTime(p.Closed)))
+		if len(p.Steps) > 0 {
+			b.WriteString("\n")
+			writeStepTable(b, p.Steps)
+		}
+	}
+}
+
+// passStage names the stage of a pass by its title, or by its identifier.
+func passStage(v task.View, p state.Pass) string {
+	if t := oneLine(v.StageTitleOf(p.Stage)); t != "" {
+		return t
+	}
+	return p.Stage
+}
+
+// outcomeWord names how a pass was closed, or that it goes on.
+func outcomeWord(p state.Pass) string {
+	switch {
+	case p.Current():
+		return msg.Text(msg.OutcomeCurrent)
+	case p.Outcome == state.OutcomeSkip:
+		return msg.Text(msg.OutcomeSkip)
+	}
+	return exitKindWord(p.ExitKind, p.Artifact)
+}
+
+// recordedWord names who closed a pass: a stage of the operator closed by
+// the agent is recorded from the operator's words.
+func recordedWord(v task.View, p state.Pass) string {
+	if p.Source != state.SourceAgent {
+		return msg.Text(msg.TaskSourceOperator)
+	}
+	if v.Flow != nil {
+		if st, ok := v.Flow.Stage(p.Stage); ok && st.Executor == flow.Operator {
+			return msg.Text(msg.TaskSourceAgent)
+		}
+	}
+	return msg.Text(msg.RecordedByAgent)
+}
+
+// writeArtifacts prints the artifacts of a task as a table.
+func writeArtifacts(b *strings.Builder, t state.Task, artifacts []state.Artifact) {
+	rows := [][]string{{msg.Text(msg.ColArtifact), msg.Text(msg.ColKind), msg.Text(msg.ColSaved), msg.Text(msg.ColPlace)}}
+	for _, a := range artifacts {
+		kind, place := msg.Text(msg.ArtifactKindLink), a.URL
+		if a.Kind == state.ArtifactFile {
+			kind = msg.Text(msg.ArtifactKindFile)
+			place, _ = task.ArtifactPath(t, a.Name)
+		}
+		rows = append(rows, []string{a.Name, kind, localTime(a.Saved), place})
+	}
+	writeTable(b, rows)
 }
 
 // taskFailure turns an error of a task command into a failure.

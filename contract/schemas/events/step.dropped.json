@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/step.dropped.json",
+  "title": "StepDroppedData",
+  "description": "Data of the step.dropped event: a step of the current stage of the task in the envelope was dropped.",
+  "type": "object",
+  "properties": {
+    "node": {
+      "description": "Node of the current pass.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of the current pass.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "number": {
+      "description": "Number of the step.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason": {
+      "description": "Why the step was dropped.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "node",
+    "round",
+    "number",
+    "reason",
+    "source"
+  ]
+}

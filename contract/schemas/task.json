@@ -23,15 +23,28 @@
     "state": {
       "description": "State of the task: active — in work, waiting — waits for the operator, closed — done, cancelled — given up.",
       "type": "string",
-      "enum": ["active", "waiting", "closed", "cancelled"]
+      "enum": [
+        "active",
+        "waiting",
+        "closed",
+        "cancelled"
+      ]
     },
     "scenario": {
       "description": "Scenario of the task in the flow of the task.",
       "$ref": "#/$defs/scenario"
     },
     "stage": {
-      "description": "Current stage of the task. Its exit, instruction and transitions are given by `gentry stage show`.",
+      "description": "Current stage of the task; absent once the scenario is passed. Its exit, instruction and transitions are given by `gentry stage show`.",
       "$ref": "#/$defs/stage"
+    },
+    "finished": {
+      "description": "The scenario of the task is passed: the task stays in work until it is closed, and has no stage.",
+      "type": "boolean"
+    },
+    "progress": {
+      "description": "Progress of the task through its scenario.",
+      "$ref": "#/$defs/progress"
     },
     "worktree": {
       "description": "Absolute path of the worktree the task holds; absent once the task released it.",
@@ -55,10 +68,16 @@
         "source": {
           "description": "Who passed the title and the statement: operator — the operator, agent — the agent wrote them from the words of the operator.",
           "type": "string",
-          "enum": ["operator", "agent"]
+          "enum": [
+            "operator",
+            "agent"
+          ]
         }
       },
-      "required": ["text", "source"]
+      "required": [
+        "text",
+        "source"
+      ]
     },
     "taken": {
       "description": "Time the task was taken in UTC, RFC 3339 with milliseconds.",
@@ -66,7 +85,18 @@
       "format": "date-time"
     }
   },
-  "required": ["id", "project", "title", "state", "scenario", "stage", "flow", "statement", "taken"],
+  "required": [
+    "id",
+    "project",
+    "title",
+    "state",
+    "scenario",
+    "finished",
+    "progress",
+    "flow",
+    "statement",
+    "taken"
+  ],
   "$defs": {
     "scenario": {
       "title": "TaskScenario",
@@ -83,7 +113,10 @@
           "type": "string"
         }
       },
-      "required": ["id", "title"]
+      "required": [
+        "id",
+        "title"
+      ]
     },
     "stage": {
       "title": "TaskStage",
@@ -103,9 +136,46 @@
         "title": {
           "description": "Title of the stage.",
           "type": "string"
+        },
+        "round": {
+          "description": "Number of the pass of the node in the task, from 1: a return to the node starts the next round.",
+          "type": "integer",
+          "minimum": 1
         }
       },
-      "required": ["node", "id", "title"]
+      "required": [
+        "node",
+        "id",
+        "title",
+        "round"
+      ]
+    },
+    "progress": {
+      "title": "TaskProgress",
+      "description": "Progress of a task: stages passed of all stages of its way to the end. Ahead of a fork the total is a range, from the shortest way to the longest.",
+      "type": "object",
+      "properties": {
+        "passed": {
+          "description": "Number of the nodes of the scenario closed by an exit or a skip; a return does not lower it.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_min": {
+          "description": "passed plus the nodes not passed yet on the shortest way to the end, without returns.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_max": {
+          "description": "passed plus the nodes not passed yet on the longest way to the end, without returns; equals total_min unless a fork is ahead.",
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "passed",
+        "total_min",
+        "total_max"
+      ]
     }
   }
 }

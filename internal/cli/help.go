@@ -128,6 +128,9 @@ func describe(c command) string {
 	usage := []string{"gentry", c.name}
 	for _, a := range c.args {
 		name := msg.Text(a.name)
+		if a.many {
+			name += "..."
+		}
 		args = append(args, row{name, a.desc()})
 		if a.optional {
 			name = "[" + name + "]"

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-artifact.json",
+  "title": "TaskArtifact",
+  "description": "An artifact of a task: a copy of a file kept by Gentry, or a link Gentry does not visit.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "Name of the artifact: Latin letters, digits, dot, hyphen and underscore.",
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "description": "Kind of the artifact: file — a copy of a file, link — an address.",
+      "type": "string",
+      "enum": [
+        "file",
+        "link"
+      ]
+    },
+    "url": {
+      "description": "Address of a link.",
+      "type": "string",
+      "minLength": 1
+    },
+    "path": {
+      "description": "Absolute path of the copy of a file.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "description": "Who saved the artifact: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    },
+    "saved": {
+      "description": "Time the artifact was saved in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "name",
+    "kind",
+    "source",
+    "saved"
+  ]
+}

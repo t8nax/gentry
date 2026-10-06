@@ -163,7 +163,7 @@ func TestFlowShowText(t *testing.T) {
   branch → plan → implementation → review → merge → конец
 
 Условные переходы:
-  review → implementation, не более 3 кругов: ревью выявило существенные замечания
+  review → implementation, не более 3 возвратов: ревью выявило существенные замечания
 
 УЗЕЛ            ЭТАП            ИСПОЛНИТЕЛЬ
 branch          branch          orchestrator

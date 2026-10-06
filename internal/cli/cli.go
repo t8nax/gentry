@@ -47,6 +47,7 @@ type argSpec struct {
 	name     msg.Key // placeholder, e.g. <ИИ-инструмент>
 	desc     func() string
 	optional bool
+	many     bool // the argument may be given several times; only the last one
 }
 
 // flagSpec is a flag. A flag with a value placeholder takes a value. The
@@ -193,9 +194,12 @@ func commands() []command {
 				},
 				{
 					name: "task show", summary: msg.CmdTaskShowSummary, desc: msg.CmdTaskShowDesc,
-					args:  []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
-					flags: []flagSpec{jsonFlag},
-					run:   runTaskShow,
+					args: []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
+					flags: []flagSpec{
+						{name: "path", desc: descText(msg.FlagTaskShowPath)},
+						jsonFlag,
+					},
+					run: runTaskShow,
 				},
 				{
 					name: "task list", summary: msg.CmdTaskListSummary, desc: msg.CmdTaskListDesc,
@@ -206,6 +210,102 @@ func commands() []command {
 						jsonFlag,
 					},
 					run: runTaskList,
+				},
+			},
+		},
+		{
+			name: "stage", section: msg.HelpSectionTasks, summary: msg.CmdStageSummary, desc: msg.CmdStageDesc,
+			actions: []command{
+				{
+					name: "stage show", summary: msg.CmdStageShowSummary, desc: msg.CmdStageShowDesc,
+					flags: []flagSpec{taskFlag, jsonFlag},
+					run:   runStageShow,
+				},
+				{
+					name: "stage exit", summary: msg.CmdStageExitSummary, desc: msg.CmdStageExitDesc,
+					flags: []flagSpec{
+						{name: "kind", value: msg.ArgKind, desc: descText(msg.FlagExitKind)},
+						{name: "text", value: msg.ArgText, desc: descText(msg.FlagExitText)},
+						{name: "artifact", value: msg.ArgName, desc: descText(msg.FlagExitArtifact)},
+						{name: "to", value: msg.ArgNode, desc: descText(msg.FlagExitTo)},
+						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagExitReason)},
+						taskFlag,
+						inputFlag("kind, text, artifact, to, reason", false),
+						jsonFlag,
+					},
+					run: runStageExit,
+				},
+				{
+					name: "stage skip", summary: msg.CmdStageSkipSummary, desc: msg.CmdStageSkipDesc,
+					flags: []flagSpec{
+						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagSkipReason)},
+						{name: "to", value: msg.ArgNode, desc: descText(msg.FlagExitTo)},
+						taskFlag,
+						inputFlag("reason, to", false),
+						jsonFlag,
+					},
+					run: runStageSkip,
+				},
+			},
+		},
+		{
+			name: "step", section: msg.HelpSectionTasks, summary: msg.CmdStepSummary, desc: msg.CmdStepDesc,
+			actions: []command{
+				{
+					name: "step add", summary: msg.CmdStepAddSummary, desc: msg.CmdStepAddDesc,
+					args:  []argSpec{{name: msg.ArgStep, desc: descText(msg.ArgStepDesc), many: true}},
+					flags: []flagSpec{taskFlag, inputFlag("steps", true), jsonFlag},
+					run:   runStepAdd,
+				},
+				{
+					name: "step done", summary: msg.CmdStepDoneSummary, desc: msg.CmdStepDoneDesc,
+					args: []argSpec{{name: msg.ArgNumber, desc: descText(msg.ArgStepNumberDesc)}},
+					flags: []flagSpec{
+						{name: "check", value: msg.ArgCheck, desc: descText(msg.FlagStepCheck)},
+						taskFlag,
+						inputFlag("step, check", true),
+						jsonFlag,
+					},
+					run: runStepDone,
+				},
+				{
+					name: "step drop", summary: msg.CmdStepDropSummary, desc: msg.CmdStepDropDesc,
+					args: []argSpec{{name: msg.ArgNumber, desc: descText(msg.ArgStepNumberDesc)}},
+					flags: []flagSpec{
+						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagStepReason)},
+						taskFlag,
+						inputFlag("step, reason", true),
+						jsonFlag,
+					},
+					run: runStepDrop,
+				},
+			},
+		},
+		{
+			name: "note", section: msg.HelpSectionTasks, summary: msg.CmdNoteSummary, desc: msg.CmdNoteDesc,
+			actions: []command{
+				{
+					name: "note add", summary: msg.CmdNoteAddSummary, desc: msg.CmdNoteAddDesc,
+					args:  []argSpec{{name: msg.ArgText, desc: descText(msg.ArgNoteDesc)}},
+					flags: []flagSpec{taskFlag, inputFlag("text", true), jsonFlag},
+					run:   runNoteAdd,
+				},
+			},
+		},
+		{
+			name: "artifact", section: msg.HelpSectionTasks, summary: msg.CmdArtifactSummary, desc: msg.CmdArtifactDesc,
+			actions: []command{
+				{
+					name: "artifact save", summary: msg.CmdArtifactSaveSummary, desc: msg.CmdArtifactSaveDesc,
+					args: []argSpec{{name: msg.ArgName, desc: descText(msg.ArgArtifactNameDesc)}},
+					flags: []flagSpec{
+						{name: "file", value: msg.ArgPath, desc: descText(msg.FlagArtifactFile), group: "source"},
+						{name: "url", value: msg.ArgURL, desc: descText(msg.FlagArtifactURL), group: "source"},
+						taskFlag,
+						inputFlag("name, file, url", true),
+						jsonFlag,
+					},
+					run: runArtifactSave,
 				},
 			},
 		},

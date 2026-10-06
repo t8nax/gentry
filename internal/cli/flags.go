@@ -109,7 +109,7 @@ func (f *flags) parse(args []string, env Env) (code int, done bool) {
 func (f *flags) checkArgs(env Env) (code int, done bool) {
 	n := len(f.cmd.args)
 	switch {
-	case len(f.args) <= n:
+	case len(f.args) <= n, n > 0 && f.cmd.args[n-1].many:
 		return 0, false
 	case n == 0:
 		return fail(env, unexpectedArgs(f.cmd.name)), true

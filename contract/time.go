@@ -46,9 +46,39 @@ func (t TaskListItem) MarshalJSON() ([]byte, error) {
 	return withTime(plain(t), "taken", t.Taken)
 }
 
-// withTime marshals v with its field name holding t in TimeFormat. Fields
-// keep the order of the other outputs: by name.
+// MarshalJSON writes the times of entering and closing in TimeFormat.
+func (p TaskPass) MarshalJSON() ([]byte, error) {
+	type plain TaskPass
+	return withTimes(plain(p), map[string]*time.Time{"entered": &p.Entered, "closed": p.Closed})
+}
+
+// MarshalJSON writes the times of adding and closing in TimeFormat.
+func (s TaskStep) MarshalJSON() ([]byte, error) {
+	type plain TaskStep
+	return withTimes(plain(s), map[string]*time.Time{"added": &s.Added, "closed": s.Closed})
+}
+
+// MarshalJSON writes the time of adding in TimeFormat.
+func (n TaskNote) MarshalJSON() ([]byte, error) {
+	type plain TaskNote
+	return withTime(plain(n), "added", n.Added)
+}
+
+// MarshalJSON writes the time of saving in TimeFormat.
+func (a TaskArtifact) MarshalJSON() ([]byte, error) {
+	type plain TaskArtifact
+	return withTime(plain(a), "saved", a.Saved)
+}
+
+// withTime marshals v with its field name holding t in TimeFormat.
 func withTime(v any, name string, t time.Time) ([]byte, error) {
+	return withTimes(v, map[string]*time.Time{name: &t})
+}
+
+// withTimes marshals v with each of its fields named in times holding the
+// time in TimeFormat; a nil time leaves the field as it is, absent. Fields
+// keep the order of the other outputs: by name.
+func withTimes(v any, times map[string]*time.Time) ([]byte, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
@@ -57,8 +87,13 @@ func withTime(v any, name string, t time.Time) ([]byte, error) {
 	if err := json.Unmarshal(b, &fields); err != nil {
 		return nil, err
 	}
-	if fields[name], err = json.Marshal(t.UTC().Format(TimeFormat)); err != nil {
-		return nil, err
+	for name, t := range times {
+		if t == nil {
+			continue
+		}
+		if fields[name], err = json.Marshal(t.UTC().Format(TimeFormat)); err != nil {
+			return nil, err
+		}
 	}
 	return json.Marshal(fields)
 }

@@ -53,6 +53,12 @@ func loadMigrations() []string {
 	return scripts
 }
 
+// fills complete the move to a schema where a script cannot: fills[v] runs
+// right after migrations[v-1], in the same transaction.
+var fills = map[int]func(tx *sql.Tx) error{
+	pathSchema: fillPath,
+}
+
 // SchemaVersion returns the schema version this build of Gentry knows.
 func SchemaVersion() int { return len(migrations) }
 
@@ -234,6 +240,11 @@ func (s *Store) migrate() error {
 		for ; v < SchemaVersion(); v++ {
 			if _, err := tx.tx.Exec(migrations[v]); err != nil {
 				return fmt.Errorf("schema %d: %w", v+1, err)
+			}
+			if fill := fills[v+1]; fill != nil {
+				if err := fill(tx.tx); err != nil {
+					return fmt.Errorf("schema %d: %w", v+1, err)
+				}
 			}
 		}
 		_, err = tx.tx.Exec(`INSERT INTO meta (key, value) VALUES ('schema_version', ?)

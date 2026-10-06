@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-pass.json",
+  "title": "TaskPass",
+  "description": "A pass of a task through a node of its scenario: one per entry into the node. The current pass has no fields of closing.",
+  "type": "object",
+  "properties": {
+    "node": {
+      "description": "Node of the scenario.",
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "description": "Stage of the node.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Number of the pass of the node in the task, from 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "entered": {
+      "description": "Time the task entered the node in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "outcome": {
+      "description": "How the pass was closed: exit — by an exit, skip — the stage was skipped.",
+      "type": "string",
+      "enum": [
+        "exit",
+        "skip"
+      ]
+    },
+    "exit": {
+      "title": "TaskPassExit",
+      "description": "The exit of a pass closed by an exit.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Kind of the exit: artifact — an artifact of the task, result — the result of an event, negative — a negative result with where it was looked for.",
+          "type": "string",
+          "enum": [
+            "artifact",
+            "result",
+            "negative"
+          ]
+        },
+        "text": {
+          "description": "Text of the exit.",
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact": {
+          "description": "Name of the artifact of an exit of kind artifact.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ]
+    },
+    "to": {
+      "description": "The node taken from the node, or finish for the end of the scenario.",
+      "type": "string",
+      "minLength": 1
+    },
+    "reason": {
+      "description": "Why the transition was taken, at a fork; why the stage was skipped, for a skip.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "description": "Who closed the pass: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    },
+    "closed": {
+      "description": "Time the pass was closed in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "steps": {
+      "description": "Steps of the pass in the order added.",
+      "type": "array",
+      "items": {
+        "$ref": "./task-step.json"
+      }
+    }
+  },
+  "required": [
+    "node",
+    "stage",
+    "round",
+    "entered",
+    "steps"
+  ]
+}

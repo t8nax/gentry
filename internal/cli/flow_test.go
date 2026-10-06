@@ -253,7 +253,7 @@ func TestFlowDraftText(t *testing.T) {
 	if stdout != want {
 		t.Errorf("show --draft:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := run("flow", "apply"); masked(stdout) != "Правки флоу применены.\nПроект: shop\nФлоу применён: <время>\n" {
+	if _, stdout, _ := run("flow", "apply"); masked(stdout) != "Изменения флоу применены.\nПроект: shop\nФлоу применён: <время>\n" {
 		t.Errorf("apply:\n%s", stdout)
 	}
 	process := filepath.Dir(p.Library)
@@ -297,7 +297,7 @@ func TestFlowDraftText(t *testing.T) {
 	}
 
 	writeDraft(t, p, map[string]string{"stages/security.md": "", "parts/extra.md": "Лишнее.\n"})
-	if _, stdout, _ := run("flow", "discard"); stdout != "Правки флоу отменены.\nПроект: shop\n" {
+	if _, stdout, _ := run("flow", "discard"); stdout != "Изменения флоу отменены.\nПроект: shop\n" {
 		t.Errorf("discard:\n%s", stdout)
 	}
 	if _, err := os.Stat(filepath.Join(p.Dir, "parts", "extra.md")); !os.IsNotExist(err) {
@@ -483,7 +483,7 @@ func TestFlowBypass(t *testing.T) {
 	writeDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexecutor: reviewer\n"})
 	gittest.Run(t, process, "commit", "--quiet", "-am", "by hand again")
 	code, stdout, stderr := run("flow", "show", "--stage", "review")
-	want := "Изменение флоу проекта shop в обход Gentry стало черновиком: в нём ошибки.\n\nОшибки:\n" +
+	want := "Изменение флоу проекта shop, внесённое без Gentry, содержит ошибки и сохранено как черновик.\n\nОшибки:\n" +
 		"  Этап review: не заполнено поле «exit».\n\nПосмотреть отличия: gentry flow diff --project shop\n\n"
 	if code != contract.ExitOK || stderr != want || !strings.Contains(stdout, "Выход: замечания ревью записаны и разобраны\n") {
 		t.Errorf("exit code %d, stderr:\n%s\nwant:\n%s\noutput:\n%s", code, stderr, want, stdout)
@@ -600,7 +600,7 @@ func TestFlowRefusals(t *testing.T) {
 func TestFlowHelp(t *testing.T) {
 	_, stdout, _ := run("flow", "--help")
 	want := `Показать или изменить флоу проекта.
-Правки в папке флоу — черновик; действующим он становится после применения.
+Изменения в папке флоу — черновик; действующим он становится после применения.
 
 Использование:
   gentry flow <действие> [аргументы] [флаги]
@@ -609,7 +609,7 @@ func TestFlowHelp(t *testing.T) {
   show      Показать флоу проекта
   diff      Показать изменения черновика
   apply     Применить черновик флоу
-  discard   Отменить правки флоу
+  discard   Отменить изменения флоу
 
 Посмотреть описание действия: gentry flow <действие> --help
 `

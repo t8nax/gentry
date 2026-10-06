@@ -61,7 +61,7 @@ func TestProcessRemoteText(t *testing.T) {
 	if want := "Удалённый репозиторий: " + remote + "\nСинхронизирован: <время>\n"; masked(stdout) != want {
 		t.Errorf("status:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := run("process", "remote", remote); !strings.HasSuffix(stdout, "\nПроцесс: совпадает с удалённым\n") {
+	if _, stdout, _ := run("process", "remote", remote); !strings.HasSuffix(stdout, "\nПроцесс: совпадает с удалённым репозиторием\n") {
 		t.Errorf("remote again:\n%s", stdout)
 	}
 
@@ -122,11 +122,11 @@ func TestProcessSyncText(t *testing.T) {
 	a := shopPlaces()
 	writeFiles(t, a.Library, map[string]string{"reviewer.md": "Проверить изменения задачи и тексты.\n"})
 	_, stdout, _ = run("library", "diff")
-	want := "Библиотека применена: <время>\n\nИзменения:\n  Субагент reviewer: изменён\n\nПрименить правки: gentry library apply\n"
+	want := "Библиотека применена: <время>\n\nИзменения:\n  Субагент reviewer: изменён\n\nПрименить изменения: gentry library apply\n"
 	if masked(stdout) != want {
 		t.Errorf("library diff:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := run("library", "apply"); masked(stdout) != "Правки библиотеки применены.\nБиблиотека применена: <время>\n" {
+	if _, stdout, _ := run("library", "apply"); masked(stdout) != "Изменения библиотеки применены.\nБиблиотека применена: <время>\n" {
 		t.Errorf("library apply:\n%s", stdout)
 	}
 	m.onB()
@@ -134,7 +134,7 @@ func TestProcessSyncText(t *testing.T) {
 		t.Errorf("sync on b:\n%s", stdout)
 	}
 	writeFiles(t, b.Library, map[string]string{"reviewer.md": "Черновик.\n"})
-	if _, stdout, _ := run("library", "discard"); stdout != "Правки библиотеки отменены.\n" {
+	if _, stdout, _ := run("library", "discard"); stdout != "Изменения библиотеки отменены.\n" {
 		t.Errorf("library discard:\n%s", stdout)
 	}
 	if b, _ := os.ReadFile(filepath.Join(b.Library, "reviewer.md")); string(b) != "Проверить изменения задачи и тексты.\n" {
@@ -152,7 +152,7 @@ func TestProcessConflictText(t *testing.T) {
 	m.onB()
 	writeDraft(t, b, map[string]string{"stages/review.md": "Проверить изменения по списку машины Б.\n"})
 	code, stdout, stderr := run("flow", "apply")
-	want := "Флоу проекта shop изменён на другой машине; правки этой машины стали черновиком.\nВарианты другой машины: " + b.Conflict +
+	want := "Флоу проекта shop изменён на другой машине; изменения этой машины сохранены как черновик.\nВерсии файлов другой машины: " + b.Conflict +
 		"\n\nИзменены на обеих машинах:\n  Этап review\n\nПосмотреть отличия: gentry flow diff --project shop\n"
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("apply on b: exit code %d, stdout %q, stderr:\n%s\nwant:\n%s", code, stdout, stderr, want)
@@ -209,7 +209,7 @@ func TestProcessOfflineText(t *testing.T) {
 	writeDraft(t, b, map[string]string{"stages/merge.md": "Влить ветку задачи в main без сети.\n"})
 	code, stdout, stderr := run("flow", "apply")
 	if code != contract.ExitOK || stderr != "Отправка отложена: удалённый репозиторий недоступен.\n\n" ||
-		!strings.HasPrefix(stdout, "Правки флоу применены.\n") {
+		!strings.HasPrefix(stdout, "Изменения флоу применены.\n") {
 		t.Errorf("apply offline: exit code %d, stderr %q, output:\n%s", code, stderr, stdout)
 	}
 	if _, _, stderr := run("flow", "show"); stderr != "Синхронизация пропущена: удалённый репозиторий недоступен.\n\n" {
@@ -240,7 +240,7 @@ func TestLibraryRefusals(t *testing.T) {
 	}
 	writeFiles(t, p.Library, map[string]string{"tester.yaml": "capabilities: [read]\n", "notes.txt": "x\n"})
 	code, _, stderr = run("library", "apply")
-	want := "В правках библиотеки есть ошибки.\nПапка библиотеки: " + p.Library + "\n\nОшибки:\n" +
+	want := "В изменениях библиотеки есть ошибки.\nПапка библиотеки: " + p.Library + "\n\nОшибки:\n" +
 		"  Субагент tester: не заполнено поле «purpose».\n  Субагент tester: нет инструкции.\n" +
 		"  Файл не относится к библиотеке субагентов: notes.txt\n"
 	if code != contract.ExitError || stderr != want {
@@ -349,7 +349,7 @@ func TestLibraryBreaksFlow(t *testing.T) {
 	p := shopFlow(t)
 	writeFiles(t, p.Library, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
 	code, stdout, stderr := run("library", "apply")
-	want := "Правки библиотеки вносят ошибки во флоу проектов.\nПапка библиотеки: " + p.Library + "\n\n" +
+	want := "Изменения библиотеки вносят ошибки во флоу проектов.\nПапка библиотеки: " + p.Library + "\n\n" +
 		"Ошибки флоу проекта shop:\n  Этап review: субагент reviewer не найден.\n"
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)

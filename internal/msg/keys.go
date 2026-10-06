@@ -296,6 +296,8 @@ const (
 	HintLibraryApply              Key = "hint.library_apply"
 	ErrLibraryDraftNotFound       Key = "err.library_draft_not_found"
 	ErrLibraryDraftInvalid        Key = "err.library_draft_invalid"
+	ErrLibraryBreaksFlows         Key = "err.library_breaks_flows"
+	LibraryFlowProblems           Key = "library.flow_problems"
 	CmdProcessSummary             Key = "cmd.process.summary"
 	CmdProcessDesc                Key = "cmd.process.desc"
 	CmdProcessRemoteSummary       Key = "cmd.process_remote.summary"

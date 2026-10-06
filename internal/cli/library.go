@@ -141,14 +141,28 @@ func libraryFailure(err error) failure {
 	case errors.As(err, &invalid):
 		var more strings.Builder
 		fmt.Fprintln(&more, msg.Text(msg.LibraryDir, invalid.Dir))
-		more.WriteString("\n")
-		cps := writeProblems(&more, invalid.Problems)
+		cps := []contract.FlowProblem{}
+		if len(invalid.Problems) > 0 {
+			more.WriteString("\n")
+			cps = writeProblems(&more, invalid.Problems)
+		}
+		details := map[string]any{"dir": invalid.Dir, "problems": cps}
+		message := msg.Text(msg.ErrLibraryDraftInvalid)
+		if len(invalid.Flows) > 0 {
+			message = msg.Text(msg.ErrLibraryBreaksFlows)
+			var flows []map[string]any
+			for _, f := range invalid.Flows {
+				more.WriteString("\n")
+				flows = append(flows, map[string]any{"project": f.Project, "problems": writeProblemsAs(&more, msg.Text(msg.LibraryFlowProblems, f.Project), f.Problems)})
+			}
+			details["flows"] = flows
+		}
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeLibraryDraftInvalid,
-			message: msg.Text(msg.ErrLibraryDraftInvalid),
+			message: message,
 			more:    more.String(),
-			details: map[string]any{"dir": invalid.Dir, "problems": cps},
+			details: details,
 		}
 	}
 	return flowFailure(err, flow.Places{})

@@ -6,14 +6,56 @@ import "encoding/json"
 import "fmt"
 import "unicode/utf8"
 
+type LibraryBrokenFlow struct {
+	// Problems of the flow with the draft of the library, in the order of files and
+	// lines.
+	Problems []FlowProblem `json:"problems"`
+
+	// Identifier of the project.
+	Project string `json:"project"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *LibraryBrokenFlow) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["problems"]; raw != nil && !ok {
+		return fmt.Errorf("field problems in LibraryBrokenFlow: required")
+	}
+	if _, ok := raw["project"]; raw != nil && !ok {
+		return fmt.Errorf("field project in LibraryBrokenFlow: required")
+	}
+	type Plain LibraryBrokenFlow
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.Problems != nil && len(plain.Problems) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "problems", 1)
+	}
+	if utf8.RuneCountInString(string(plain.Project)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
+	}
+	*j = LibraryBrokenFlow(plain)
+	return nil
+}
+
 // Details of the error library_draft_invalid: the draft of the library of
-// subagents has problems, so it is not applied.
+// subagents has problems, or breaks the active flow of a project, so it is not
+// applied.
 type LibraryDraftInvalidDetails struct {
 	// Absolute path of the library directory.
 	Dir string `json:"dir"`
 
+	// Active flows that are valid with the active library and not with the draft, by
+	// project; absent if there are none. A valid draft is refused for them.
+	Flows []LibraryBrokenFlow `json:"flows,omitempty,omitzero"`
+
 	// All problems of the draft by subagent, and files that do not belong to the
-	// library last. The file of a problem is its path inside the library.
+	// library last. The file of a problem is its path inside the library. Empty if
+	// the draft itself is valid and only breaks flows.
 	Problems []FlowProblem `json:"problems"`
 }
 
@@ -36,9 +78,6 @@ func (j *LibraryDraftInvalidDetails) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
-	}
-	if plain.Problems != nil && len(plain.Problems) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "problems", 1)
 	}
 	*j = LibraryDraftInvalidDetails(plain)
 	return nil

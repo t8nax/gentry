@@ -342,3 +342,35 @@ func TestProjectAddMakesFlowDir(t *testing.T) {
 		t.Errorf("flow directory: %v", err)
 	}
 }
+
+// TestLibraryBreaksFlow checks that a library that breaks an active flow is
+// not applied.
+func TestLibraryBreaksFlow(t *testing.T) {
+	p := shopFlow(t)
+	writeFiles(t, p.Library, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
+	code, stdout, stderr := run("library", "apply")
+	want := "Правки библиотеки вносят ошибки во флоу проектов.\nПапка библиотеки: " + p.Library + "\n\n" +
+		"Ошибки флоу проекта shop:\n  Этап review: субагент reviewer не найден.\n"
+	if code != contract.ExitError || stdout != "" || stderr != want {
+		t.Errorf("exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)
+	}
+	_, stdout, _ = run("library", "apply", "--json")
+	var out struct {
+		Error struct {
+			Details json.RawMessage `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	validate(t, "schemas/library-draft-invalid.json", string(out.Error.Details))
+	if want := `{"dir":` + jsonString(p.Library) + `,"flows":[{"problems":[{"code":"unknown_executor","file":"stages/review.yaml","line":3,` +
+		`"message":"Этап review: субагент reviewer не найден."}],"project":"shop"}],"problems":[]}`; string(out.Error.Details) != want {
+		t.Errorf("details:\n%s\nwant:\n%s", out.Error.Details, want)
+	}
+
+	// Once the flow does without the subagent, the library is applied.
+	writeDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания ревью записаны и разобраны\nexecutor: orchestrator\ninclude: [review-checklist]\n"})
+	mustRun(t, "flow", "apply")
+	mustRun(t, "library", "apply")
+}

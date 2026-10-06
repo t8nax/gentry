@@ -17,9 +17,17 @@ type NoLibraryDraftError struct{ Dir string }
 
 func (e *NoLibraryDraftError) Error() string { return e.Dir + ": no library draft" }
 
-// LibraryInvalidError means the draft of the library has problems.
+// LibraryInvalidError means the draft of the library has problems, or
+// breaks the active flow of a project.
 type LibraryInvalidError struct {
 	Dir      string
+	Problems []Problem      // of the library itself
+	Flows    []FlowProblems // of the flows the draft breaks, by project
+}
+
+// FlowProblems are the problems of the flow of a project.
+type FlowProblems struct {
+	Project  string
 	Problems []Problem
 }
 
@@ -118,7 +126,56 @@ func LibraryApply(r *process.Repo) (process.Applied, error) {
 	if problems := ReadLibrary(working); len(problems) > 0 {
 		return process.Applied{}, &LibraryInvalidError{Dir: dir, Problems: problems}
 	}
+	broken, err := brokenFlows(r, working)
+	if err != nil {
+		return process.Applied{}, err
+	}
+	if len(broken) > 0 {
+		return process.Applied{}, &LibraryInvalidError{Dir: dir, Flows: broken}
+	}
 	return r.Apply(process.Library, working, "Apply the library of subagents", "library apply")
+}
+
+// brokenFlows returns the problems of the active flows that are valid with
+// the active library and not with library: a flow with problems before is
+// not the fault of the library.
+func brokenFlows(r *process.Repo, library process.Files) ([]FlowProblems, error) {
+	active, err := r.Active(process.Library)
+	if err != nil {
+		return nil, err
+	}
+	kinds, err := r.Kinds()
+	if err != nil {
+		return nil, err
+	}
+	var out []FlowProblems
+	for _, k := range kinds {
+		if k.IsLibrary() {
+			continue
+		}
+		files, err := r.Active(k)
+		if err != nil {
+			return nil, err
+		}
+		if len(files) == 0 {
+			continue
+		}
+		before, err := Read(files, active, nil)
+		if err != nil {
+			return nil, err
+		}
+		if len(before.Problems) > 0 {
+			continue
+		}
+		after, err := Read(files, library, nil)
+		if err != nil {
+			return nil, err
+		}
+		if len(after.Problems) > 0 {
+			out = append(out, FlowProblems{Project: k.Project, Problems: after.Problems})
+		}
+	}
+	return out, nil
 }
 
 // LibraryDiscard brings the library directory back to the active library and

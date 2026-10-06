@@ -294,6 +294,8 @@ var ru = catalog{
 		HintLibraryApply:              "Применить правки: gentry library apply",
 		ErrLibraryDraftNotFound:       "У библиотеки субагентов нет черновика.",
 		ErrLibraryDraftInvalid:        "В правках библиотеки есть ошибки.",
+		ErrLibraryBreaksFlows:         "Правки библиотеки вносят ошибки во флоу проектов.",
+		LibraryFlowProblems:           "Ошибки флоу проекта %s:",
 		CmdProcessSummary:             "Синхронизировать процесс оператора между машинами",
 		CmdProcessDesc:                "Синхронизировать процесс оператора между машинами.\nПроцесс — флоу проектов и библиотека субагентов; он хранится в git и передаётся через удалённый репозиторий.",
 		CmdProcessRemoteSummary:       "Подключить удалённый репозиторий процесса",

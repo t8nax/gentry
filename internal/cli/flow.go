@@ -667,6 +667,12 @@ func flowInvalid(places flow.Places, problems []flow.Problem) failure {
 // writeProblems prints the problems as a list and returns them as the
 // contract has them.
 func writeProblems(b *strings.Builder, problems []flow.Problem) []contract.FlowProblem {
+	return writeProblemsAs(b, msg.Text(msg.FlowProblems), problems)
+}
+
+// writeProblemsAs prints the problems as a list under heading and returns
+// them as the contract has them.
+func writeProblemsAs(b *strings.Builder, heading string, problems []flow.Problem) []contract.FlowProblem {
 	cps := make([]contract.FlowProblem, 0, len(problems))
 	var lines []string
 	for _, p := range problems {
@@ -682,7 +688,7 @@ func writeProblems(b *strings.Builder, problems []flow.Problem) []contract.FlowP
 		cps = append(cps, cp)
 		lines = append(lines, p.Message)
 	}
-	writeList(b, msg.Text(msg.FlowProblems), lines)
+	writeList(b, heading, lines)
 	return cps
 }
 

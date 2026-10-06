@@ -28,6 +28,9 @@ func Gentry(exe, description string) Description {
 		Description: description,
 		Hooks: []Hook{
 			{Event: hook.SessionStart, Command: []string{exe, "hook", hook.SessionStart}},
+			{Event: hook.PreTool, Command: []string{exe, "hook", hook.PreTool}},
+			{Event: hook.PostTool, Command: []string{exe, "hook", hook.PostTool}},
+			{Event: hook.Stop, Command: []string{exe, "hook", hook.Stop}},
 		},
 	}
 }

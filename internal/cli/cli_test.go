@@ -14,6 +14,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/buildinfo"
+	"github.com/t8nax/gentry/internal/hook"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/project"
 	"github.com/t8nax/gentry/internal/state"
@@ -227,8 +228,8 @@ func TestHook(t *testing.T) {
 		code   string
 		stderr string
 	}{
-		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + "\n\n" + msg.Text(msg.HintHookEvents, "session-start")},
-		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + "\n\n" + msg.Text(msg.HintHookEvents, "session-start")},
+		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + "\n\n" + msg.Text(msg.HintHookEvents, "session-start, pre-tool, post-tool, stop")},
+		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + "\n\n" + msg.Text(msg.HintHookEvents, "session-start, pre-tool, post-tool, stop")},
 		{[]string{"hook", "session-start", "extra"}, contract.CodeUnexpectedArgs, msg.Text(msg.ErrExtraArgs, "hook", "extra")},
 	}
 	for _, tt := range tests {
@@ -258,12 +259,12 @@ func TestSessionStartNeverBreaksSession(t *testing.T) {
 	orig := sessionStart
 	t.Cleanup(func() { sessionStart = orig })
 
-	failures := map[string]func(io.Writer) error{
-		"panic": func(w io.Writer) error {
+	failures := map[string]func(io.Writer, hook.Input) error{
+		"panic": func(w io.Writer, _ hook.Input) error {
 			io.WriteString(w, "partial")
 			panic("boom")
 		},
-		"error": func(w io.Writer) error {
+		"error": func(w io.Writer, _ hook.Input) error {
 			io.WriteString(w, "partial")
 			return errors.New("boom")
 		},
@@ -276,7 +277,7 @@ func TestSessionStartNeverBreaksSession(t *testing.T) {
 		}
 	}
 
-	sessionStart = func(w io.Writer) error {
+	sessionStart = func(w io.Writer, _ hook.Input) error {
 		_, err := io.WriteString(w, "introduction")
 		return err
 	}

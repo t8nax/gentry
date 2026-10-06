@@ -16,6 +16,7 @@ import (
 
 // Env is the environment a command runs in.
 type Env struct {
+	Stdin  io.Reader // nil for none
 	Stdout io.Writer
 	Stderr io.Writer
 
@@ -173,6 +174,39 @@ func commands() []command {
 				},
 				{name: "process sync", summary: msg.CmdProcessSyncSummary, desc: msg.CmdProcessSyncDesc, flags: []flagSpec{jsonFlag}, run: runProcessSync},
 				{name: "process status", summary: msg.CmdProcessStatusSummary, desc: msg.CmdProcessStatusDesc, flags: []flagSpec{jsonFlag}, run: runProcessStatus},
+			},
+		},
+		{
+			name: "task", section: msg.HelpSectionTasks, summary: msg.CmdTaskSummary, desc: msg.CmdTaskDesc,
+			actions: []command{
+				{
+					name: "task take", summary: msg.CmdTaskTakeSummary, desc: msg.CmdTaskTakeDesc,
+					flags: []flagSpec{
+						{name: "scenario", value: msg.ArgScenario, desc: descText(msg.FlagTaskScenario)},
+						{name: "title", value: msg.ArgTitle, desc: descText(msg.FlagTaskTitle)},
+						{name: "statement", value: msg.ArgText, desc: descText(msg.FlagTaskStatement)},
+						{name: "worktree", value: msg.ArgPath, desc: descText(msg.FlagTaskWorktree)},
+						{name: "input", value: msg.ArgFile, desc: descText(msg.FlagTaskInput)},
+						jsonFlag,
+					},
+					run: runTaskTake,
+				},
+				{
+					name: "task show", summary: msg.CmdTaskShowSummary, desc: msg.CmdTaskShowDesc,
+					args:  []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
+					flags: []flagSpec{jsonFlag},
+					run:   runTaskShow,
+				},
+				{
+					name: "task list", summary: msg.CmdTaskListSummary, desc: msg.CmdTaskListDesc,
+					flags: []flagSpec{
+						{name: "all", desc: descText(msg.FlagTaskListAll), group: "filter"},
+						{name: "state", value: msg.ArgState, desc: descText(msg.FlagTaskListState), group: "filter"},
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagTaskListProject)},
+						jsonFlag,
+					},
+					run: runTaskList,
+				},
 			},
 		},
 		{

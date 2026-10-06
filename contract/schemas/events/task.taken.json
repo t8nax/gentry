@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/task.taken.json",
+  "title": "TaskTakenData",
+  "description": "Data of the task.taken event: the task in the event envelope was taken in a worktree of the project in the envelope.",
+  "type": "object",
+  "properties": {
+    "title": { "description": "Title of the task.", "type": "string", "minLength": 1 },
+    "scenario": { "description": "Identifier of the scenario.", "type": "string", "minLength": 1 },
+    "node": { "description": "Start node of the scenario: the task is at it.", "type": "string", "minLength": 1 },
+    "worktree": { "description": "Absolute path of the worktree the task holds.", "type": "string", "minLength": 1 },
+    "flow_commit": { "description": "Hash of the commit that applied the flow of the task.", "type": "string", "minLength": 1 },
+    "source": {
+      "description": "Who passed the title and the statement: operator or agent.",
+      "type": "string",
+      "enum": ["operator", "agent"]
+    }
+  },
+  "required": ["title", "scenario", "node", "worktree", "flow_commit", "source"]
+}

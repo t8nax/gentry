@@ -90,3 +90,31 @@ func TestBranch(t *testing.T) {
 		t.Errorf("outside git: got %v, want a failed command", err)
 	}
 }
+
+func TestChanged(t *testing.T) {
+	shop := gittest.Repo(t, filepath.Join(t.TempDir(), "shop"))
+	write := func(name, text string) {
+		t.Helper()
+		p := filepath.Join(shop, filepath.FromSlash(name))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(".gitignore", "*.log\n")
+	write("cart.go", "package shop\n")
+	gittest.Run(t, shop, "add", ".")
+	gittest.Run(t, shop, "commit", "--quiet", "-m", "files")
+	if files, err := Changed(shop); err != nil || len(files) != 0 {
+		t.Fatalf("clean worktree: %v, %v", files, err)
+	}
+
+	write("build.log", "ignored")
+	write("backend/payments/refund.go", "package payments\n")
+	gittest.Run(t, shop, "mv", "cart.go", "basket.go")
+	files, err := Changed(shop)
+	want := []string{"basket.go", "backend/payments/refund.go"}
+	if err != nil || len(files) != 2 || files[0] != want[0] || files[1] != want[1] {
+		t.Errorf("Changed = %q, %v; want %q", files, err, want)
+	}
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-take.json",
+  "title": "TaskTakeOutput",
+  "description": "Output of `gentry task take --json`: the task is taken in the worktree.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "The task taken.",
+      "$ref": "./task.json"
+    },
+    "sync": {
+      "description": "What the synchronization of the command did; present only when there is something to tell.",
+      "$ref": "./sync.json"
+    }
+  },
+  "required": ["task"]
+}

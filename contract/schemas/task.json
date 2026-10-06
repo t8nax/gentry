@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task.json",
+  "title": "Task",
+  "description": "A task of a project.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "description": "Identifier of the task: the prefix of the project and the number, such as SHOP-1. The event envelope names the task by it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "project": {
+      "description": "Identifier of the project.",
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "description": "Title of the task: one line of up to 80 characters.",
+      "type": "string",
+      "minLength": 1
+    },
+    "state": {
+      "description": "State of the task: active — in work, waiting — waits for the operator, closed — done, cancelled — given up.",
+      "type": "string",
+      "enum": ["active", "waiting", "closed", "cancelled"]
+    },
+    "scenario": {
+      "description": "Scenario of the task in the flow of the task.",
+      "$ref": "#/$defs/scenario"
+    },
+    "stage": {
+      "description": "Current stage of the task. Its exit, instruction and transitions are given by `gentry stage show`.",
+      "$ref": "#/$defs/stage"
+    },
+    "worktree": {
+      "description": "Absolute path of the worktree the task holds; absent once the task released it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "flow": {
+      "description": "The commit that applied the flow of the task: the task follows that flow to its end, whatever is applied later.",
+      "$ref": "./applied.json"
+    },
+    "statement": {
+      "title": "TaskStatement",
+      "description": "Statement of the task as passed, with its source.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "description": "Text of the statement.",
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "description": "Who passed the title and the statement: operator — the operator, agent — the agent wrote them from the words of the operator.",
+          "type": "string",
+          "enum": ["operator", "agent"]
+        }
+      },
+      "required": ["text", "source"]
+    },
+    "taken": {
+      "description": "Time the task was taken in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["id", "project", "title", "state", "scenario", "stage", "flow", "statement", "taken"],
+  "$defs": {
+    "scenario": {
+      "title": "TaskScenario",
+      "description": "Scenario of the task in the flow of the task.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Identifier of the scenario.",
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "description": "Title of the scenario.",
+          "type": "string"
+        }
+      },
+      "required": ["id", "title"]
+    },
+    "stage": {
+      "title": "TaskStage",
+      "description": "Current stage of the task. Its exit, instruction and transitions are given by `gentry stage show`.",
+      "type": "object",
+      "properties": {
+        "node": {
+          "description": "Node of the scenario the task is at.",
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "description": "Identifier of the stage of the node.",
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "description": "Title of the stage.",
+          "type": "string"
+        }
+      },
+      "required": ["node", "id", "title"]
+    }
+  }
+}

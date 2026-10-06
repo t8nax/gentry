@@ -177,6 +177,30 @@ func Branch(dir string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// Changed returns the files of the worktree of dir with uncommitted changes,
+// staged or not, and the new files, by path relative to the worktree root
+// with forward slashes. Files git ignores are left out.
+func Changed(dir string) ([]string, error) {
+	out, err := run(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	records := strings.Split(out, "\x00")
+	for i := 0; i < len(records); i++ {
+		r := records[i]
+		if len(r) < 4 {
+			continue
+		}
+		files = append(files, r[3:])
+		// A rename or a copy is followed by the path it came from.
+		if r[0] == 'R' || r[0] == 'C' {
+			i++
+		}
+	}
+	return files, nil
+}
+
 // Init creates a repository in dir, creating dir if needed.
 func Init(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {

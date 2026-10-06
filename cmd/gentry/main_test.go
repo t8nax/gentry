@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
 )
 
@@ -22,5 +23,8 @@ func isolated(m *testing.M) int {
 	os.Setenv(home.EnvVar, dir)
 	os.Setenv("HOME", dir)
 	os.Setenv("USERPROFILE", dir)
+	if err := gittest.Isolate(dir); err != nil {
+		panic(err)
+	}
 	return m.Run()
 }

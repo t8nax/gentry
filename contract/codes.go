@@ -49,6 +49,14 @@ const (
 	CodeProcessBusy          = "process_busy"            // another command of Gentry holds the process repository too long; details: path
 	CodeFlowConflict         = "flow_conflict"           // the synchronization before flow apply found the flow changed on another machine: the draft is not applied; details: project, conflict_dir
 	CodeLibraryConflict      = "library_conflict"        // the synchronization before library apply found the library changed on another machine: the draft is not applied; details: conflict_dir
+	CodeInputInvalid         = "input_invalid"           // --input cannot be read, is not a JSON object, has an unknown field or a field that is not a string; details: input, field if any
+	CodeMissingField         = "missing_field"           // a required field of the command is not given, by a flag or in --input; details: command, field
+	CodeFieldInvalid         = "field_invalid"           // a field has a value the command cannot accept; details: field, reason (open list: too_long, multiline)
+	CodeWorktreeNotPooled    = "worktree_not_pooled"     // the directory is not a worktree of a pool; details: path
+	CodeWorktreeBusy         = "worktree_busy"           // the worktree holds a task already; details: path, task
+	CodeWorktreeDirty        = "worktree_dirty"          // the worktree has uncommitted changes; details: path, files
+	CodeTaskNotFound         = "task_not_found"          // no task has the identifier; details: task
+	CodeTaskUndetermined     = "task_undetermined"       // no task is named and the current directory holds none; details: dir
 	CodeInternal             = "internal"                // a failure inside Gentry
 )
 

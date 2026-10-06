@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-take-input.json",
+  "title": "TaskTakeInput",
+  "description": "Input of `gentry task take --input`: the fields of the task as one object, in a file or on the standard input. An unknown field is an error. The source of the statement is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "scenario": { "description": "Identifier of the scenario of the task.", "type": "string", "minLength": 1 },
+    "title": { "description": "Title of the task: one line of up to 80 characters.", "type": "string", "minLength": 1, "maxLength": 80 },
+    "statement": { "description": "Statement of the task, kept as passed.", "type": "string", "minLength": 1 },
+    "worktree": { "description": "Worktree of the task; the current directory by default.", "type": "string", "minLength": 1 }
+  },
+  "required": ["scenario", "title", "statement"],
+  "additionalProperties": false
+}

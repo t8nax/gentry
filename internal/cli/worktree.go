@@ -88,6 +88,10 @@ func runWorktreeList(args []string, env Env) int {
 	if err != nil {
 		return fail(env, worktreeFailure(err))
 	}
+	held, bad := worktreeTasks()
+	if bad != nil {
+		return fail(env, *bad)
+	}
 
 	if *asJSON {
 		out := contract.WorktreeListOutput{Worktrees: []contract.WorktreeListItem{}}
@@ -95,6 +99,9 @@ func runWorktreeList(args []string, env Env) int {
 			item := contract.WorktreeListItem{Path: w.Path, Project: w.Project, Main: w.Main, Exists: w.Exists}
 			if w.Branch != "" {
 				item.Branch = &w.Branch
+			}
+			if key, ok := held[w.Path]; ok {
+				item.Task = &key
 			}
 			out.Worktrees = append(out.Worktrees, item)
 		}
@@ -109,7 +116,7 @@ func runWorktreeList(args []string, env Env) int {
 	}
 	rows := [][]string{{msg.Text(msg.ColProject), msg.Text(msg.ColWorktree), msg.Text(msg.ColBranch), msg.Text(msg.ColState)}}
 	for _, w := range list {
-		rows = append(rows, []string{w.Project, w.Path, orNone(w.Branch), worktreeState(w)})
+		rows = append(rows, []string{w.Project, w.Path, orNone(w.Branch), worktreeState(w, held[w.Path])})
 	}
 	var b strings.Builder
 	writeTable(&b, rows)
@@ -118,19 +125,44 @@ func runWorktreeList(args []string, env Env) int {
 }
 
 // worktreeState is the state column of the list: whether the worktree is the
-// main one, and whether it is free. A worktree without its directory is not
-// free.
-func worktreeState(w project.WorktreeState) string {
+// main one, and whether it is free or holds the task named by key. A worktree
+// without its directory is not free.
+func worktreeState(w project.WorktreeState, key string) string {
 	var labels []string
 	if w.Main {
 		labels = append(labels, msg.Text(msg.WorktreeMain))
 	}
-	if w.Exists {
+	switch {
+	case key != "":
+		labels = append(labels, msg.Text(msg.WorktreeTask, key))
+	case w.Exists:
 		labels = append(labels, msg.Text(msg.WorktreeFree))
-	} else {
+	}
+	if !w.Exists {
 		labels = append(labels, msg.Text(msg.WorktreeMissing))
 	}
 	return strings.Join(labels, ", ")
+}
+
+// worktreeTasks returns the tasks that hold worktrees by path of the
+// worktree, such as SHOP-1.
+func worktreeTasks() (map[string]string, *failure) {
+	st, bad := openTasks()
+	if bad != nil || st == nil {
+		return nil, bad
+	}
+	defer st.Close()
+	tasks, _, bad := readTasks(st)
+	if bad != nil {
+		return nil, bad
+	}
+	held := map[string]string{}
+	for _, t := range tasks {
+		if t.Worktree != "" {
+			held[t.Worktree] = t.Key()
+		}
+	}
+	return held, nil
 }
 
 // readPool reads the projects and their worktrees; without a state store

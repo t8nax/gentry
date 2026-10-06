@@ -34,6 +34,11 @@
             "description": "Branch checked out in the worktree, read from git at the call; absent when the worktree is not on a branch or its directory does not exist.",
             "type": "string",
             "minLength": 1
+          },
+          "task": {
+            "description": "Identifier of the task that holds the worktree, such as SHOP-1; absent for a free worktree.",
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": ["path", "project", "main", "exists"]

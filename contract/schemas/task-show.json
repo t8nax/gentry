@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-show.json",
+  "title": "TaskShowOutput",
+  "description": "Output of `gentry task show --json`.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "The task named, or the task of the current worktree.",
+      "$ref": "./task.json"
+    }
+  },
+  "required": ["task"]
+}

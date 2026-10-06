@@ -25,11 +25,25 @@ const Tool = "claude"
 // takes milliseconds.
 const hookTimeout = 10
 
+// shellTools matches the tools the agent runs commands with, and so gentry.
+const shellTools = "Bash|PowerShell"
+
+// claudeHook is a Claude Code hook event and the tools it is limited to;
+// empty for all.
+type claudeHook struct {
+	event   string
+	matcher string
+}
+
 // events maps neutral hook events to Claude Code hook events. SessionStart
 // without a matcher fires on every kind of start: startup, resume, clear and
-// compact.
-var events = map[string]string{
-	hook.SessionStart: "SessionStart",
+// compact. A command that fails ends with PostToolUseFailure, not
+// PostToolUse: the mark of its call goes either way.
+var events = map[string][]claudeHook{
+	hook.SessionStart: {{event: "SessionStart"}},
+	hook.PreTool:      {{event: "PreToolUse", matcher: shellTools}},
+	hook.PostTool:     {{event: "PostToolUse", matcher: shellTools}, {event: "PostToolUseFailure", matcher: shellTools}},
+	hook.Stop:         {{event: "Stop"}},
 }
 
 // Plugin is a built plugin: files of the marketplace directory by
@@ -60,17 +74,23 @@ func Build(d integration.Description, gentryVersion string) (Plugin, error) {
 func buildFiles(d integration.Description, version string) (map[string][]byte, error) {
 	hooks := map[string][]any{}
 	for _, h := range d.Hooks {
-		event, ok := events[h.Event]
+		mapped, ok := events[h.Event]
 		if !ok {
 			return nil, fmt.Errorf("claude: unsupported hook event %q", h.Event)
 		}
-		hooks[event] = append(hooks[event], map[string]any{
-			"hooks": []any{map[string]any{
-				"type":    "command",
-				"command": shellCommand(h.Command),
-				"timeout": hookTimeout,
-			}},
-		})
+		for _, ch := range mapped {
+			entry := map[string]any{
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": shellCommand(h.Command),
+					"timeout": hookTimeout,
+				}},
+			}
+			if ch.matcher != "" {
+				entry["matcher"] = ch.matcher
+			}
+			hooks[ch.event] = append(hooks[ch.event], entry)
+		}
 	}
 	plugin := map[string]any{
 		"name":        d.Name,

@@ -22,6 +22,10 @@ type WorktreeListItem struct {
 
 	// Identifier of the project whose pool has the worktree.
 	Project string `json:"project"`
+
+	// Identifier of the task that holds the worktree, such as SHOP-1; absent for a
+	// free worktree.
+	Task *string `json:"task,omitempty,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -55,6 +59,9 @@ func (j *WorktreeListItem) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
+	}
+	if plain.Task != nil && utf8.RuneCountInString(string(*plain.Task)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "task", 1)
 	}
 	*j = WorktreeListItem(plain)
 	return nil

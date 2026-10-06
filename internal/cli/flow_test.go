@@ -4,46 +4,62 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/flow"
+	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
-	"github.com/t8nax/gentry/internal/state"
 )
 
-// emptyShopFlow connects the shop and puts the library of the flow testdata
-// into the process directory; the shop has no flow. It returns the places of
-// the flow. The test runs in the main worktree of the shop.
+// shopPlaces returns the places of the flow of the shop in the process
+// repository of the data root.
+func shopPlaces() flow.Places {
+	process := filepath.Join(os.Getenv(home.EnvVar), "process")
+	return flow.Places{
+		Project:  "shop",
+		Dir:      filepath.Join(process, "shop", "flow"),
+		Library:  filepath.Join(process, "agents"),
+		Conflict: filepath.Join(process, "shop", "conflict"),
+	}
+}
+
+// emptyShopFlow connects the shop and applies the library of the flow
+// testdata; the shop has no flow. It returns the places of the flow. The test
+// runs in the main worktree of the shop.
 func emptyShopFlow(t *testing.T) flow.Places {
 	t.Helper()
 	connectedShop(t)
-	process := filepath.Join(os.Getenv(home.EnvVar), "process")
-	if err := os.CopyFS(filepath.Join(process, "agents"), os.DirFS(filepath.Join(flowTestdata, "agents"))); err != nil {
+	p := shopPlaces()
+	if err := os.CopyFS(p.Library, os.DirFS(filepath.Join(flowTestdata, "agents"))); err != nil {
 		t.Fatal(err)
 	}
-	return flow.PlacesOf(process, "shop")
+	mustRun(t, "library", "apply")
+	return p
 }
 
-// shopFlow connects the shop and applies the flow of the flow testdata as
-// version 1 through a draft. It returns the places of the flow.
+// shopFlow connects the shop and applies the flow of the flow testdata. It
+// returns the places of the flow.
 func shopFlow(t *testing.T) flow.Places {
 	t.Helper()
 	p := emptyShopFlow(t)
-	mustRun(t, "flow", "edit")
-	if err := os.CopyFS(p.Draft+"-src", os.DirFS(filepath.Join(flowTestdata, "shop", "flow-draft"))); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.RemoveAll(p.Draft); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(p.Draft+"-src", p.Draft); err != nil {
-		t.Fatal(err)
-	}
+	copyShopFlow(t, p)
 	mustRun(t, "flow", "apply")
 	return p
+}
+
+// copyShopFlow puts the flow of the flow testdata into the flow directory.
+func copyShopFlow(t *testing.T, p flow.Places) {
+	t.Helper()
+	if err := os.RemoveAll(p.Dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.CopyFS(p.Dir, os.DirFS(filepath.Join(flowTestdata, "shop", "flow"))); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // mustRun runs a command that must succeed and returns its output.
@@ -56,11 +72,25 @@ func mustRun(t *testing.T, args ...string) string {
 	return stdout
 }
 
-// writeDraft writes files of the draft by path inside it.
+// writeDraft writes files of the flow directory by path inside it; an empty
+// text removes the file.
 func writeDraft(t *testing.T, p flow.Places, files map[string]string) {
 	t.Helper()
+	writeFiles(t, p.Dir, files)
+}
+
+// writeFiles writes files of directory dir by path inside it; an empty text
+// removes the file.
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
 	for rel, text := range files {
-		full := filepath.Join(p.Draft, filepath.FromSlash(rel))
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if text == "" {
+			if err := os.Remove(full); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -70,12 +100,19 @@ func writeDraft(t *testing.T, p flow.Places, files map[string]string) {
 	}
 }
 
+// timePattern is a time as the output names it, to the minute.
+var timePattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
+
+// masked replaces the times in an output by <время>: they are those of the
+// commits.
+func masked(s string) string { return timePattern.ReplaceAllString(s, "<время>") }
+
 // security is the change of the example of the plan: a stage security after
 // the review, carried out by the project subagent auditor, and a new
 // instruction of the review.
 func security(t *testing.T, p flow.Places) {
 	t.Helper()
-	feature, err := os.ReadFile(filepath.Join(p.Draft, "scenarios", "feature.yaml"))
+	feature, err := os.ReadFile(filepath.Join(p.Dir, "scenarios", "feature.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,10 +145,10 @@ reviewer  библиотека  review
 `
 
 func TestFlowShowText(t *testing.T) {
-	shopFlow(t)
+	p := shopFlow(t)
 	code, stdout, stderr := run("flow", "show")
-	want := "Проект: shop\nВерсия флоу: 1\n\n" + shopTables + "\nПосмотреть этап подробно: gentry flow show --stage <этап>\n"
-	if code != contract.ExitOK || stderr != "" || stdout != want {
+	want := "Проект: shop\nФлоу применён: <время>\nПапка флоу: " + p.Dir + "\n\n" + shopTables + "\nПосмотреть этап подробно: gentry flow show --stage <этап>\n"
+	if stdout = masked(stdout); code != contract.ExitOK || stderr != "" || stdout != want {
 		t.Errorf("exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}
 
@@ -184,7 +221,6 @@ merge           merge           operator
 
 func TestFlowShowConditional(t *testing.T) {
 	p := shopFlow(t)
-	mustRun(t, "flow", "edit")
 	writeDraft(t, p, map[string]string{"scenarios/bug.yaml": "title: Баг\nstart: triage\nnodes:\n" +
 		"  triage:\n    stage: plan-bug\n    next:\n      - to: merge\n        if: срочно\n      - to: finish\n        if: |\n          не воспроизводится\n          на main\n" +
 		"  merge: { stage: merge, next: finish }\n"})
@@ -198,136 +234,106 @@ func TestFlowShowConditional(t *testing.T) {
 
 func TestFlowDraftText(t *testing.T) {
 	p := emptyShopFlow(t)
-	// Without a flow, edit opens an empty draft.
-	_, stdout, _ := run("flow", "edit")
-	tail := "Проект: shop\nПапка черновика: " + p.Draft + "\n\nПосмотреть черновик: gentry flow show --draft\n"
-	if want := "Создан пустой черновик флоу.\n" + tail; stdout != want {
-		t.Errorf("edit without a flow:\n%s\nwant:\n%s", stdout, want)
+	// The flow directory is there from the connection, with the directories
+	// of a flow as a prompt.
+	for _, d := range []string{"scenarios", "stages", "parts", "agents"} {
+		if fi, err := os.Stat(filepath.Join(p.Dir, d)); err != nil || !fi.IsDir() {
+			t.Errorf("%s: %v", d, err)
+		}
 	}
-	if _, stdout, _ := run("flow", "edit"); stdout != "Черновик уже создан.\n"+tail {
-		t.Errorf("edit again:\n%s", stdout)
-	}
-	if err := os.CopyFS(p.Draft+"-src", os.DirFS(filepath.Join(flowTestdata, "shop", "flow-draft"))); err != nil {
-		t.Fatal(err)
-	}
-	os.RemoveAll(p.Draft)
-	if err := os.Rename(p.Draft+"-src", p.Draft); err != nil {
-		t.Fatal(err)
-	}
+	copyShopFlow(t, p)
 
-	_, stdout, _ = run("flow", "diff")
-	if !strings.HasPrefix(stdout, "Проект: shop\nВерсия флоу: —\n\nИзменения:\n  Сценарий bug: добавлен\n") ||
-		!strings.HasSuffix(stdout, "  Субагент reviewer из библиотеки: добавлен\n\nПрименить черновик: gentry flow apply\n") {
+	_, stdout, _ := run("flow", "diff")
+	if !strings.HasPrefix(stdout, "Проект: shop\nФлоу применён: —\n\nИзменения:\n  Сценарий bug: добавлен\n") ||
+		!strings.HasSuffix(stdout, "  Фрагмент review-checklist: добавлен\n\nПрименить черновик: gentry flow apply\n") {
 		t.Errorf("diff from nothing:\n%s", stdout)
 	}
 	_, stdout, _ = run("flow", "show", "--draft")
-	want := "Проект: shop\nПапка черновика: " + p.Draft + "\nВерсия флоу: —\n\n" + shopTables + "\nПрименить черновик: gentry flow apply\n"
+	want := "Проект: shop\nФлоу применён: —\nПапка флоу: " + p.Dir + "\n\n" + shopTables + "\nПрименить черновик: gentry flow apply\n"
 	if stdout != want {
 		t.Errorf("show --draft:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := run("flow", "apply"); stdout != "Черновик применён.\nПроект: shop\nВерсия флоу: 1\n" {
+	if _, stdout, _ := run("flow", "apply"); masked(stdout) != "Правки флоу применены.\nПроект: shop\nФлоу применён: <время>\n" {
 		t.Errorf("apply:\n%s", stdout)
 	}
-
-	// The next draft is made from the version.
-	_, stdout, _ = run("flow", "edit")
-	if want := "Черновик создан из версии 1.\n" + tail; stdout != want {
-		t.Errorf("edit version 1:\n%s\nwant:\n%s", stdout, want)
+	process := filepath.Dir(p.Library)
+	if log := gittest.Run(t, process, "log", "-1", "--format=%s|%b"); log != "Apply the flow of shop|Gentry: flow apply shop\n\n" {
+		t.Errorf("commit: %q", log)
 	}
+
+	// Editing the files makes a draft.
+	writeDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку задачи в main после ревью.\n"})
 	_, stdout, _ = run("flow", "show")
-	if want := "Проект: shop\nВерсия флоу: 1\nЧерновик существует.\n\n" + shopTables + "\nПосмотреть черновик: gentry flow show --draft\n"; stdout != want {
+	if want := "Проект: shop\nФлоу применён: <время>\nПапка флоу: " + p.Dir + "\nЧерновик существует.\n\n" + shopTables + "\nПосмотреть черновик: gentry flow show --draft\n"; masked(stdout) != want {
 		t.Errorf("show with a draft:\n%s\nwant:\n%s", stdout, want)
 	}
-	_, stdout, _ = run("flow", "diff")
-	if want := "Проект: shop\nВерсия флоу: 1\n\nЧерновик совпадает с действующим флоу.\n\nУдалить черновик: gentry flow discard\n"; stdout != want {
-		t.Errorf("diff unchanged:\n%s\nwant:\n%s", stdout, want)
-	}
-	code, stdout, stderr := run("flow", "apply")
-	if want := "Черновик совпадает с флоу версии 1.\n\nУдалить черновик: gentry flow discard\n"; code != contract.ExitError || stdout != "" || stderr != want {
-		t.Errorf("apply unchanged: exit code %d, stderr:\n%s", code, stderr)
+	// Line ends of another editor are no change.
+	writeDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку задачи в main.\r\n"})
+	code, _, stderr := run("flow", "diff")
+	if want := "У проекта shop нет черновика флоу.\nПапка флоу: " + p.Dir + "\n"; code != contract.ExitError || stderr != want {
+		t.Errorf("diff without changes: exit code %d, stderr:\n%s", code, stderr)
 	}
 
 	security(t, p)
-	// A library subagent changed since the version is a change of the draft.
-	if err := os.WriteFile(filepath.Join(p.Library, "reviewer.md"), []byte("Новая инструкция.\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	_, stdout, _ = run("flow", "diff")
 	want = `Проект: shop
-Версия флоу: 1
+Флоу применён: <время>
 
 Изменения:
   Сценарий feature: изменён
   Этап review: изменён
   Этап security: добавлен
   Субагент auditor: добавлен
-  Субагент reviewer из библиотеки: изменён
 
 Применить черновик: gentry flow apply
 `
-	if stdout != want {
+	if masked(stdout) != want {
 		t.Errorf("diff:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := run("flow", "apply"); stdout != "Черновик применён.\nПроект: shop\nВерсия флоу: 2\n" {
-		t.Errorf("apply version 2:\n%s", stdout)
-	}
+	mustRun(t, "flow", "apply")
 	_, stdout, _ = run("flow", "show")
 	if !strings.Contains(stdout, "\nСУБАГЕНТ  ИСТОЧНИК    ЭТАПЫ\nauditor   проект      security\nreviewer  библиотека  review\n") {
-		t.Errorf("show version 2:\n%s", stdout)
-	}
-	// The version keeps the copy of the library subagent.
-	_, stdout, _ = run("flow", "show", "--agent", "reviewer")
-	if !strings.HasSuffix(stdout, "Инструкция:\n  Новая инструкция.\n") {
-		t.Errorf("reviewer of version 2:\n%s", stdout)
+		t.Errorf("show after apply:\n%s", stdout)
 	}
 
-	mustRun(t, "flow", "edit")
-	if _, stdout, _ := run("flow", "discard"); stdout != "Черновик удалён.\nПроект: shop\n" {
+	writeDraft(t, p, map[string]string{"stages/security.md": "", "parts/extra.md": "Лишнее.\n"})
+	if _, stdout, _ := run("flow", "discard"); stdout != "Правки флоу отменены.\nПроект: shop\n" {
 		t.Errorf("discard:\n%s", stdout)
 	}
-	if _, err := os.Stat(p.Draft); !os.IsNotExist(err) {
-		t.Errorf("draft after discard: %v", err)
+	if _, err := os.Stat(filepath.Join(p.Dir, "parts", "extra.md")); !os.IsNotExist(err) {
+		t.Errorf("an added file after discard: %v", err)
 	}
-	if _, stdout, _ := run("flow", "show"); !strings.HasPrefix(stdout, "Проект: shop\nВерсия флоу: 2\n\n") {
-		t.Errorf("show after discard:\n%s", stdout)
+	if b, err := os.ReadFile(filepath.Join(p.Dir, "stages", "security.md")); err != nil || string(b) != "Проверить изменения на уязвимости.\n" {
+		t.Errorf("a removed file after discard: %q, %v", b, err)
+	}
+	if code, _, _ := run("flow", "show", "--draft"); code != contract.ExitError {
+		t.Errorf("a draft after discard")
 	}
 }
 
 func TestFlowJSON(t *testing.T) {
 	p := emptyShopFlow(t)
-	_, stdout, _ := run("flow", "edit", "--json")
-	validate(t, "schemas/flow-edit.json", stdout)
-	if want := `{"created":true,"dir":` + jsonString(p.Draft) + `,"project":"shop"}` + "\n"; stdout != want {
-		t.Errorf("edit: %s, want %s", stdout, want)
-	}
-	if err := os.CopyFS(p.Draft+"-src", os.DirFS(filepath.Join(flowTestdata, "shop", "flow-draft"))); err != nil {
-		t.Fatal(err)
-	}
-	os.RemoveAll(p.Draft)
-	if err := os.Rename(p.Draft+"-src", p.Draft); err != nil {
-		t.Fatal(err)
-	}
-	_, stdout, _ = run("flow", "apply", "--json")
+	copyShopFlow(t, p)
+	_, stdout, _ := run("flow", "apply", "--json")
 	validate(t, "schemas/flow-apply.json", stdout)
-	if stdout != `{"project":"shop","version":1}`+"\n" {
+	var applied contract.FlowApplyOutput
+	if err := json.Unmarshal([]byte(stdout), &applied); err != nil {
+		t.Fatal(err)
+	}
+	if applied.Project != "shop" || applied.Sent || len(applied.Applied.Commit) != 40 || applied.Sync != nil ||
+		!regexp.MustCompile(`"time":"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.000Z"`).MatchString(stdout) {
 		t.Errorf("apply: %s", stdout)
 	}
 
-	_, stdout, _ = run("flow", "edit", "--json")
-	if want := `{"base_version":1,"created":true,"dir":` + jsonString(p.Draft) + `,"project":"shop"}` + "\n"; stdout != want {
-		t.Errorf("edit version 1: %s, want %s", stdout, want)
-	}
-	if _, stdout, _ := run("flow", "edit", "--json"); !strings.HasPrefix(stdout, `{"base_version":1,"created":false,`) {
-		t.Errorf("edit again: %s", stdout)
-	}
 	security(t, p)
 	_, stdout, _ = run("flow", "diff", "--json")
 	validate(t, "schemas/flow-diff.json", stdout)
-	want := `{"changes":[{"change":"modified","id":"feature","object":"scenario"},` +
+	want := `{"applied":{"commit":"` + applied.Applied.Commit + `",`
+	tail := `"changes":[{"change":"modified","id":"feature","object":"scenario"},` +
 		`{"change":"modified","id":"review","object":"stage"},{"change":"added","id":"security","object":"stage"},` +
-		`{"change":"added","id":"auditor","object":"agent","source":"project"}],"project":"shop","version":1}` + "\n"
-	if stdout != want {
-		t.Errorf("diff: %s, want %s", stdout, want)
+		`{"change":"added","id":"auditor","object":"agent"}],"project":"shop"}` + "\n"
+	if !strings.HasPrefix(stdout, want) || !strings.HasSuffix(stdout, tail) {
+		t.Errorf("diff: %s", stdout)
 	}
 
 	code, stdout, _ := run("flow", "show", "--json")
@@ -339,8 +345,8 @@ func TestFlowJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.Project != "shop" || out.Version == nil || *out.Version != 1 || out.Draft == nil || out.Draft.Dir != p.Draft ||
-		out.Draft.BaseVersion == nil || len(out.Scenarios) != 2 || len(out.Stages) != 6 || len(out.Parts) != 2 || len(out.Agents) != 1 {
+	if out.Project != "shop" || out.Applied == nil || out.Applied.Commit != applied.Applied.Commit || out.Dir != p.Dir ||
+		out.Draft == nil || out.Draft.ConflictDir != nil || len(out.Scenarios) != 2 || len(out.Stages) != 6 || len(out.Parts) != 2 || len(out.Agents) != 1 {
 		t.Errorf("show: %s", stdout)
 	}
 	for _, part := range []string{
@@ -348,6 +354,7 @@ func TestFlowJSON(t *testing.T) {
 		`{"executor":"operator","exit":"ветка задачи влита в main","id":"merge","include":[],"instruction":"Влить ветку задачи в main.\n","title":"Слияние"}`,
 		`"parts":[{"id":"plan-format","text":`,
 		`"agents":[{"capabilities":["read","search"],"id":"reviewer","instruction":"Проверить изменения задачи: поведение, тесты и тексты для оператора.\n","purpose":"ревью изменений задачи — поведение и текст","source":"library"}]`,
+		`"draft":{}`,
 	} {
 		if !strings.Contains(stdout, part) {
 			t.Errorf("show: no %s in\n%s", part, stdout)
@@ -367,18 +374,14 @@ func TestFlowJSON(t *testing.T) {
 	if strings.Contains(stdout, `"plan-bug"`) || !strings.Contains(stdout, `"id":"reviewer"`) {
 		t.Errorf("show --scenario feature: %s", stdout)
 	}
-	_, stdout, _ = run("flow", "show", "--part", "plan-format", "--json")
-	if !strings.Contains(stdout, `"agents":[],`) || !strings.Contains(stdout, `"parts":[{"id":"plan-format"`) || !strings.Contains(stdout, `"stages":[]`) {
-		t.Errorf("show --part: %s", stdout)
-	}
 
 	_, stdout, _ = run("flow", "discard", "--json")
 	validate(t, "schemas/flow-discard.json", stdout)
-	if want := `{"dir":` + jsonString(p.Draft) + `,"project":"shop"}` + "\n"; stdout != want {
+	if want := `{"dir":` + jsonString(p.Dir) + `,"project":"shop"}` + "\n"; stdout != want {
 		t.Errorf("discard: %s, want %s", stdout, want)
 	}
 
-	// Every event of the draft matches its schema.
+	// Every event of the flow and the library matches its schema.
 	_, stdout, _ = run("events")
 	var types []string
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
@@ -386,28 +389,26 @@ func TestFlowJSON(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(e.Type, "flow.") {
+		if !strings.HasPrefix(e.Type, "flow.") && !strings.HasPrefix(e.Type, "library.") {
 			continue
 		}
 		data, _ := json.Marshal(e.Data)
 		validate(t, "schemas/events/"+e.Type+".json", string(data))
-		types = append(types, e.Type+" "+string(data))
+		types = append(types, e.Type)
 	}
-	want = "flow.draft_created {}|flow.applied {\"version\":1}|flow.draft_created {\"base_version\":1}|flow.draft_discarded {}"
-	if got := strings.Join(types, "|"); got != want {
-		t.Errorf("events: %s, want %s", got, want)
+	if got := strings.Join(types, " "); got != "library.applied flow.applied flow.draft_discarded" {
+		t.Errorf("events: %s", got)
 	}
 }
 
 func TestFlowDraftInvalid(t *testing.T) {
 	p := shopFlow(t)
-	mustRun(t, "flow", "edit")
 	writeDraft(t, p, map[string]string{
 		"stages/security.yaml": "title: Безопасность\nexecutor: auditor\n",
 		"stages/security.md":   "Проверить безопасность.\n",
 		"agents/auditor.yaml":  "purpose: проверка безопасности изменений\ncapabilities: [read]\n",
 	})
-	want := "В черновике флоу проекта shop есть ошибки.\nПапка черновика: " + p.Draft + "\n\nОшибки:\n" +
+	want := "В черновике флоу проекта shop есть ошибки.\nПапка флоу: " + p.Dir + "\n\nОшибки:\n" +
 		"  Этап security: не заполнено поле «exit».\n  Субагент auditor: нет инструкции.\n"
 	for _, args := range [][]string{{"flow", "show", "--draft"}, {"flow", "apply"}, {"flow", "show", "--draft", "--stage", "security"}} {
 		code, stdout, stderr := run(args...)
@@ -415,8 +416,8 @@ func TestFlowDraftInvalid(t *testing.T) {
 			t.Errorf("%v: exit code %d, stdout %q, stderr:\n%s\nwant:\n%s", args, code, stdout, stderr, want)
 		}
 	}
-	// Nothing changed: the version is 1, the draft is open.
-	if _, stdout, _ := run("flow", "show"); !strings.HasPrefix(stdout, "Проект: shop\nВерсия флоу: 1\nЧерновик существует.\n") {
+	// Nothing changed: the draft is there.
+	if _, stdout, _ := run("flow", "show"); !strings.Contains(stdout, "\nЧерновик существует.\n") {
 		t.Errorf("show after a refused apply:\n%s", stdout)
 	}
 
@@ -432,7 +433,7 @@ func TestFlowDraftInvalid(t *testing.T) {
 		t.Fatal(err)
 	}
 	validate(t, "schemas/flow-draft-invalid.json", string(out.Error.Details))
-	wantDetails := `{"dir":` + jsonString(p.Draft) + `,"problems":[` +
+	wantDetails := `{"dir":` + jsonString(p.Dir) + `,"problems":[` +
 		`{"code":"missing_field","file":"stages/security.yaml","message":"Этап security: не заполнено поле «exit»."},` +
 		`{"code":"missing_instruction","file":"agents/auditor.yaml","message":"Субагент auditor: нет инструкции."}],"project":"shop"}`
 	if code != contract.ExitError || out.Error.Code != contract.CodeFlowDraftInvalid || string(out.Error.Details) != wantDetails {
@@ -440,28 +441,16 @@ func TestFlowDraftInvalid(t *testing.T) {
 	}
 }
 
-// TestFlowVersionInvalid checks an active version that a later Gentry finds
-// problems in.
-func TestFlowVersionInvalid(t *testing.T) {
-	shopFlow(t)
-	path, err := state.Path()
-	if err != nil {
-		t.Fatal(err)
-	}
-	st, err := state.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = st.Write(func(tx *state.Tx) error {
-		return tx.AddFlowVersion("shop", 2, []byte(`{"files":{"flow.yaml":"on_take: x\n"},"library":{}}`))
-	})
-	st.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+// TestFlowInvalid checks an active flow that this Gentry finds problems in,
+// as one applied by a later Gentry that knows more fields.
+func TestFlowInvalid(t *testing.T) {
+	p := shopFlow(t)
+	writeDraft(t, p, map[string]string{"flow.yaml": "on_take: x\n"})
+	gittest.Run(t, filepath.Dir(p.Library), "add", "--all")
+	gittest.Run(t, filepath.Dir(p.Library), "commit", "--quiet", "-am", "Apply the flow of shop\n\nGentry: flow apply shop")
 	code, stdout, stderr := run("flow", "show")
-	want := "Во флоу проекта shop есть ошибки.\nВерсия флоу: 2\n\nОшибки:\n  Во флоу нет ни одного сценария.\n" +
-		"  Общие правила флоу: поле «on_take» не поддерживается этой версией Gentry.\n\nИсправить флоу: gentry flow edit\n"
+	want := "Во флоу проекта shop есть ошибки.\nПапка флоу: " + p.Dir + "\n\nОшибки:\n" +
+		"  Общие правила флоу: поле «on_take» не поддерживается этой версией Gentry.\n"
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)
 	}
@@ -475,45 +464,89 @@ func TestFlowVersionInvalid(t *testing.T) {
 		t.Fatal(err)
 	}
 	validate(t, "schemas/flow-invalid.json", string(out.Error.Details))
-	if !strings.Contains(string(out.Error.Details), `"project":"shop","version":2`) {
+	if !strings.Contains(string(out.Error.Details), `"project":"shop"`) {
 		t.Errorf("details: %s", out.Error.Details)
 	}
 }
 
-// TestFlowShowByDraftDir checks that the project is found by its draft
-// directory, so the operator can edit the flow and show it in one place.
-func TestFlowShowByDraftDir(t *testing.T) {
+// TestFlowBypass checks a change of the flow committed around Gentry.
+func TestFlowBypass(t *testing.T) {
 	p := shopFlow(t)
-	mustRun(t, "flow", "edit")
-	t.Chdir(filepath.Join(p.Draft, "stages"))
-	if code, stdout, stderr := run("flow", "show", "--draft"); code != contract.ExitOK || !strings.HasPrefix(stdout, "Проект: shop\n") {
+	process := filepath.Dir(p.Library)
+	// Without problems it is taken as it is.
+	writeDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку задачи в main вручную.\n"})
+	gittest.Run(t, process, "commit", "--quiet", "-am", "by hand")
+	if code, _, stderr := run("flow", "show", "--stage", "merge"); code != contract.ExitOK || stderr != "" {
+		t.Errorf("a valid change: exit code %d, stderr:\n%s", code, stderr)
+	}
+	// With problems it becomes a draft, and the checked flow is active.
+	writeDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexecutor: reviewer\n"})
+	gittest.Run(t, process, "commit", "--quiet", "-am", "by hand again")
+	code, stdout, stderr := run("flow", "show", "--stage", "review")
+	want := "Изменение флоу проекта shop в обход Gentry стало черновиком: в нём ошибки.\n\nОшибки:\n" +
+		"  Этап review: не заполнено поле «exit».\n\nПосмотреть отличия: gentry flow diff --project shop\n\n"
+	if code != contract.ExitOK || stderr != want || !strings.Contains(stdout, "Выход: замечания ревью записаны и разобраны\n") {
+		t.Errorf("exit code %d, stderr:\n%s\nwant:\n%s\noutput:\n%s", code, stderr, want, stdout)
+	}
+	if log := gittest.Run(t, process, "log", "-1", "--format=%s"); log != "Restore the flow of shop\n" {
+		t.Errorf("commit: %q", log)
+	}
+	if _, stdout, _ := run("flow", "diff"); !strings.Contains(stdout, "\n  Этап review: изменён\n") {
+		t.Errorf("diff:\n%s", stdout)
+	}
+}
+
+// TestFlowExecutorInDraftLibrary checks a stage carried out by a subagent of
+// the library that is not applied yet.
+func TestFlowExecutorInDraftLibrary(t *testing.T) {
+	p := shopFlow(t)
+	writeFiles(t, p.Library, map[string]string{
+		"tester.yaml": "purpose: тесты\ncapabilities: [read, run]\n",
+		"tester.md":   "Прогнать тесты.\n",
+	})
+	writeDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания записаны\nexecutor: tester\n"})
+	code, _, stderr := run("flow", "apply")
+	if want := "  Этап review: субагент tester есть только в черновике библиотеки.\n"; code != contract.ExitError || !strings.HasSuffix(stderr, want) {
+		t.Errorf("exit code %d, stderr:\n%s", code, stderr)
+	}
+	mustRun(t, "library", "apply")
+	mustRun(t, "flow", "apply")
+}
+
+// TestFlowShowByFlowDir checks that the project is found by its flow
+// directory, so the operator can edit the flow and show it in one place.
+func TestFlowShowByFlowDir(t *testing.T) {
+	p := shopFlow(t)
+	t.Chdir(filepath.Join(p.Dir, "stages"))
+	if code, stdout, stderr := run("flow", "show"); code != contract.ExitOK || !strings.HasPrefix(stdout, "Проект: shop\n") {
 		t.Errorf("exit code %d, stderr %q, output:\n%s", code, stderr, stdout)
 	}
 }
 
 func TestFlowRefusals(t *testing.T) {
 	p := emptyShopFlow(t)
+	dir := "\nПапка флоу: " + p.Dir
 	tests := []struct {
 		name   string
 		args   []string
 		exit   int
 		stderr string
 	}{
-		{"no flow", []string{"flow", "show"}, contract.ExitError, "У проекта shop нет флоу.\n\nСоздать флоу: gentry flow edit"},
-		{"no draft to show", []string{"flow", "show", "--draft"}, contract.ExitError, "У проекта shop нет черновика флоу.\n\nНачать правку: gentry flow edit"},
-		{"no draft to compare", []string{"flow", "diff"}, contract.ExitError, "У проекта shop нет черновика флоу.\n\nНачать правку: gentry flow edit"},
-		{"no draft to apply", []string{"flow", "apply"}, contract.ExitError, "У проекта shop нет черновика флоу.\n\nНачать правку: gentry flow edit"},
-		{"no draft to discard", []string{"flow", "discard"}, contract.ExitError, "У проекта shop нет черновика флоу.\n\nНачать правку: gentry flow edit"},
+		{"no flow", []string{"flow", "show"}, contract.ExitError, "У проекта shop нет флоу." + dir},
+		{"no draft to show", []string{"flow", "show", "--draft"}, contract.ExitError, "У проекта shop нет черновика флоу." + dir},
+		{"no draft to compare", []string{"flow", "diff"}, contract.ExitError, "У проекта shop нет черновика флоу." + dir},
+		{"no draft to apply", []string{"flow", "apply"}, contract.ExitError, "У проекта shop нет черновика флоу." + dir},
+		{"no draft to discard", []string{"flow", "discard"}, contract.ExitError, "У проекта shop нет черновика флоу." + dir},
+		{"edit", []string{"flow", "edit"}, contract.ExitUsage,
+			msg.Text(msg.ErrActionUnknown, "edit", "flow") + "\n\nПосмотреть перечень действий: gentry flow --help"},
 		{"two objects", []string{"flow", "show", "--stage", "review", "--agent", "reviewer"}, contract.ExitUsage,
 			"Флаги --stage и --agent нельзя указывать вместе.\n\nПосмотреть описание команды: gentry flow show --help"},
 		{"empty object", []string{"flow", "show", "--stage="}, contract.ExitUsage, msg.Text(msg.ErrFlagValueMissing, "--stage")},
 		{"argument", []string{"flow", "show", "feature"}, contract.ExitUsage, msg.Text(msg.ErrUnexpectedArgs, "flow show")},
-		{"unknown project", []string{"flow", "edit", "--project", "cart"}, contract.ExitError,
+		{"unknown project", []string{"flow", "diff", "--project", "cart"}, contract.ExitError,
 			"Проект «cart» не подключён.\n\nПосмотреть перечень проектов: gentry project list"},
 		{"empty project", []string{"flow", "diff", "--project="}, contract.ExitUsage, msg.Text(msg.ErrFlagValueMissing, "--project")},
 		{"no action", []string{"flow"}, contract.ExitUsage, msg.Text(msg.ErrActionMissing, "flow") + "\n\nПосмотреть перечень действий: gentry flow --help"},
-		{"unknown action", []string{"flow", "check"}, contract.ExitUsage,
-			msg.Text(msg.ErrActionUnknown, "check", "flow") + "\n\nПосмотреть перечень действий: gentry flow --help"},
 	}
 	for _, tt := range tests {
 		code, stdout, stderr := run(tt.args...)
@@ -524,19 +557,15 @@ func TestFlowRefusals(t *testing.T) {
 
 	code, stdout, _ := run("flow", "show", "--json")
 	validate(t, "schemas/error.json", stdout)
-	if want := `{"error":{"code":"flow_not_found","details":{"project":"shop"},"hint":"Создать флоу: gentry flow edit",` +
+	if want := `{"error":{"code":"flow_not_found","details":{"dir":` + jsonString(p.Dir) + `,"project":"shop"},` +
 		`"message":"У проекта shop нет флоу."}}` + "\n"; code != contract.ExitError || stdout != want {
 		t.Errorf("no flow --json: exit code %d, %s, want %s", code, stdout, want)
 	}
-	_, stdout, _ = run("flow", "show", "--part", "x", "--scenario", "y", "--json")
-	if want := `{"error":{"code":"conflicting_flags","details":{"command":"flow show","flags":["--scenario","--part"]},` +
-		`"hint":"Посмотреть описание команды: gentry flow show --help","message":"Флаги --scenario и --part нельзя указывать вместе."}}` + "\n"; stdout != want {
-		t.Errorf("two objects --json: %s, want %s", stdout, want)
-	}
 
 	// Objects the flow or the draft does not have.
-	shopFlowOver(t, p)
-	mustRun(t, "flow", "edit")
+	copyShopFlow(t, p)
+	mustRun(t, "flow", "apply")
+	writeDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку.\n"})
 	tests = []struct {
 		name   string
 		args   []string
@@ -545,22 +574,14 @@ func TestFlowRefusals(t *testing.T) {
 	}{
 		{"unknown stage", []string{"flow", "show", "--stage", "revew"}, contract.ExitError,
 			"Во флоу проекта shop нет этапа «revew».\n\nПосмотреть перечень объектов: gentry flow show"},
-		{"unknown scenario", []string{"flow", "show", "--scenario", "bg"}, contract.ExitError,
-			"Во флоу проекта shop нет сценария «bg».\n\nПосмотреть перечень объектов: gentry flow show"},
 		{"unknown agent in the draft", []string{"flow", "show", "--draft", "--agent", "auditor"}, contract.ExitError,
 			"В черновике флоу проекта shop нет субагента «auditor».\n\nПосмотреть перечень объектов: gentry flow show --draft"},
-		{"unknown part", []string{"flow", "show", "--part", "x"}, contract.ExitError,
-			"Во флоу проекта shop нет фрагмента «x».\n\nПосмотреть перечень объектов: gentry flow show"},
 	}
 	for _, tt := range tests {
 		code, stdout, stderr := run(tt.args...)
 		if code != tt.exit || stdout != "" || stderr != tt.stderr+"\n" {
 			t.Errorf("%s: exit code %d, stdout %q, stderr %q, want %q", tt.name, code, stdout, stderr, tt.stderr)
 		}
-	}
-	_, stdout, _ = run("flow", "show", "--draft", "--agent", "auditor", "--json")
-	if want := `{"error":{"code":"flow_object_not_found","details":{"draft":true,"id":"auditor","kind":"agent","project":"shop"},`; !strings.HasPrefix(stdout, want) {
-		t.Errorf("unknown agent --json: %s", stdout)
 	}
 
 	// Outside any project, without a state store.
@@ -576,35 +597,19 @@ func TestFlowRefusals(t *testing.T) {
 	}
 }
 
-// shopFlowOver applies the flow of the flow testdata as the next version of
-// the shop whose places are p.
-func shopFlowOver(t *testing.T, p flow.Places) {
-	t.Helper()
-	mustRun(t, "flow", "edit")
-	if err := os.CopyFS(p.Draft+"-src", os.DirFS(filepath.Join(flowTestdata, "shop", "flow-draft"))); err != nil {
-		t.Fatal(err)
-	}
-	os.RemoveAll(p.Draft)
-	if err := os.Rename(p.Draft+"-src", p.Draft); err != nil {
-		t.Fatal(err)
-	}
-	mustRun(t, "flow", "apply")
-}
-
 func TestFlowHelp(t *testing.T) {
 	_, stdout, _ := run("flow", "--help")
 	want := `Показать или изменить флоу проекта.
-Флоу меняется только через черновик.
+Правки в папке флоу — черновик; действующим он становится после применения.
 
 Использование:
   gentry flow <действие> [аргументы] [флаги]
 
 Действия:
   show      Показать флоу проекта
-  edit      Начать правку флоу
   diff      Показать изменения черновика
   apply     Применить черновик флоу
-  discard   Удалить черновик флоу
+  discard   Отменить правки флоу
 
 Посмотреть описание действия: gentry flow <действие> --help
 `

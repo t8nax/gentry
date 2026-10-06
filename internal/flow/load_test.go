@@ -14,10 +14,10 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
-// shop copies the process of testdata — the flow draft of the shop and the
+// shop copies the process of testdata — the flow of the shop and the
 // library of subagents — into a temporary directory, applies changes and
 // returns the places of the flow of the shop. A change is the new text of a
-// file by its path inside the draft; an empty text removes the file or
+// file by its path inside the flow; an empty text removes the file or
 // directory.
 func shop(t *testing.T, changes map[string]string) Places {
 	t.Helper()
@@ -25,9 +25,9 @@ func shop(t *testing.T, changes map[string]string) Places {
 	if err := os.CopyFS(process, os.DirFS("testdata/process")); err != nil {
 		t.Fatal(err)
 	}
-	p := PlacesOf(process, "shop")
+	p := Places{Project: "shop", Dir: filepath.Join(process, "shop", "flow"), Library: filepath.Join(process, "agents")}
 	for rel, text := range changes {
-		full := filepath.Join(p.Draft, filepath.FromSlash(rel))
+		full := filepath.Join(p.Dir, filepath.FromSlash(rel))
 		if text == "" {
 			if err := os.RemoveAll(full); err != nil {
 				t.Fatal(err)
@@ -44,17 +44,17 @@ func shop(t *testing.T, changes map[string]string) Places {
 	return p
 }
 
-// readShop reads the draft of p.
+// readShop reads the flow of p.
 func readShop(t *testing.T, p Places) *Result {
 	t.Helper()
-	res, err := ReadDraft(p.Draft, p.Library)
+	res, err := ReadDir(p.Dir, p.Library)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return res
 }
 
-// load reads the draft of p, which must have no problems.
+// load reads the flow of p, which must have no problems.
 func load(t *testing.T, p Places) *Flow {
 	t.Helper()
 	res := readShop(t, p)
@@ -64,7 +64,7 @@ func load(t *testing.T, p Places) *Flow {
 	return res.Flow
 }
 
-// problems reads the draft of p and returns its problems.
+// problems reads the flow of p and returns its problems.
 func problems(t *testing.T, p Places) []Problem {
 	t.Helper()
 	res := readShop(t, p)
@@ -150,10 +150,10 @@ func TestLoadShop(t *testing.T) {
 	}
 }
 
-func TestReadDraftMissing(t *testing.T) {
+func TestReadDirMissing(t *testing.T) {
 	p := shop(t, nil)
 	var pe *fs.PathError
-	if _, err := ReadDraft(filepath.Join(p.Draft, "none"), p.Library); !errors.As(err, &pe) {
+	if _, err := ReadDir(filepath.Join(p.Dir, "none"), p.Library); !errors.As(err, &pe) {
 		t.Errorf("got %v, want a path error", err)
 	}
 }
@@ -167,7 +167,7 @@ func TestLoadIgnoresHidden(t *testing.T) {
 	if len(res.Problems) > 0 {
 		t.Error(dump(res.Problems))
 	}
-	// Hidden files are not part of the version either.
+	// Hidden files are not part of the snapshot either.
 	for path := range res.Snapshot.Files {
 		if strings.Contains(path, "/.") || strings.HasPrefix(path, ".") {
 			t.Errorf("hidden file %s in the snapshot", path)
@@ -227,10 +227,10 @@ func TestProblemOrder(t *testing.T) {
 // d0 returns the places of an unchanged copy of the shop.
 func d0(t *testing.T) Places { return shop(t, nil) }
 
-// read returns the text of file rel of the draft of p.
+// read returns the text of file rel of the flow of p.
 func read(t *testing.T, p Places, rel string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(p.Draft, filepath.FromSlash(rel)))
+	b, err := os.ReadFile(filepath.Join(p.Dir, filepath.FromSlash(rel)))
 	if err != nil {
 		t.Fatal(err)
 	}

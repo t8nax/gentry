@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-show.json",
   "title": "FlowShowOutput",
-  "description": "Output of `gentry flow show --json`: the active flow of the project with its texts, or with --draft the draft. With an object flag the arrays narrow to the object and what it refers to: for a scenario its stages, their parts and subagents; for a stage its parts and subagent; for a part or a subagent the object alone.",
+  "description": "Output of `gentry flow show --json`: the active flow of the project with its texts, or with --draft the draft: the flow directory with its changes. With an object flag the arrays narrow to the object and what it refers to: for a scenario its stages, their parts and subagents; for a stage its parts and subagent; for a part or a subagent the object alone.",
   "type": "object",
   "properties": {
     "project": {
@@ -10,28 +10,51 @@
       "type": "string",
       "minLength": 1
     },
-    "version": {
-      "description": "Number of the active flow version; absent if the project has no flow yet, which only the draft can show.",
-      "type": "integer",
-      "minimum": 1
+    "applied": {
+      "description": "The commit that applied the active flow; absent if the project has no flow yet, which only the draft can show.",
+      "$ref": "./applied.json"
+    },
+    "dir": {
+      "description": "Absolute path of the flow directory: the active flow and the draft over it.",
+      "type": "string",
+      "minLength": 1
     },
     "draft": {
       "title": "FlowDraftInfo",
-      "description": "The open draft of the flow; absent if there is none.",
+      "description": "The draft of the flow: present if the flow directory differs from the active flow.",
       "type": "object",
       "properties": {
-        "dir": {
-          "description": "Absolute path of the draft directory.",
+        "conflict_dir": {
+          "description": "Absolute path of the directory with the variants of another machine; present only while the flow is in conflict.",
           "type": "string",
           "minLength": 1
         },
-        "base_version": {
-          "description": "Number of the version the draft was made from; absent if the project had no flow.",
-          "type": "integer",
-          "minimum": 1
+        "conflicts": {
+          "description": "Objects whose variants of another machine are in conflict_dir, in the order of a diff; present only while the flow is in conflict.",
+          "type": "array",
+          "items": {
+            "title": "FlowObject",
+            "type": "object",
+            "properties": {
+              "object": {
+                "description": "Kind of the object: common for the common rules of the flow, scenario, stage, part or agent for a subagent of the project.",
+                "type": "string",
+                "enum": ["common", "scenario", "stage", "part", "agent"]
+              },
+              "id": {
+                "description": "Identifier of the object; absent for the common rules.",
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["object"]
+          }
         }
-      },
-      "required": ["dir"]
+      }
+    },
+    "sync": {
+      "description": "What the synchronization before the command did; present only when there is something to tell.",
+      "$ref": "./sync.json"
     },
     "scenarios": {
       "description": "Scenarios by identifier.",
@@ -182,7 +205,7 @@
             "minLength": 1
           },
           "source": {
-            "description": "Where the subagent comes from: project for a subagent of the flow, library for a copy of a subagent of the library taken into the version.",
+            "description": "Where the subagent comes from: project for a subagent of the flow, library for a subagent of the library.",
             "type": "string",
             "enum": ["project", "library"]
           },
@@ -208,5 +231,5 @@
       }
     }
   },
-  "required": ["project", "scenarios", "stages", "parts", "agents"]
+  "required": ["project", "dir", "scenarios", "stages", "parts", "agents"]
 }

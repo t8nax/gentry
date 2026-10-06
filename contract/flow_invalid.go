@@ -6,9 +6,12 @@ import "encoding/json"
 import "fmt"
 import "unicode/utf8"
 
-// Details of the error flow_invalid: the active version of the flow of a project
-// does not pass the checks of this Gentry, for example after an update.
+// Details of the error flow_invalid: the active flow of a project does not pass
+// the checks of this Gentry, for example after an update.
 type FlowInvalidDetails struct {
+	// Absolute path of the flow directory.
+	Dir string `json:"dir"`
+
 	// All problems of the flow in the order of files and lines: problems of the whole
 	// flow first, then the common rules, scenarios, stages, parts, project subagents,
 	// library subagents, and files that do not belong to the flow last.
@@ -16,9 +19,6 @@ type FlowInvalidDetails struct {
 
 	// Identifier of the project.
 	Project string `json:"project"`
-
-	// Number of the active flow version.
-	Version int `json:"version"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -27,28 +27,28 @@ func (j *FlowInvalidDetails) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
+	if _, ok := raw["dir"]; raw != nil && !ok {
+		return fmt.Errorf("field dir in FlowInvalidDetails: required")
+	}
 	if _, ok := raw["problems"]; raw != nil && !ok {
 		return fmt.Errorf("field problems in FlowInvalidDetails: required")
 	}
 	if _, ok := raw["project"]; raw != nil && !ok {
 		return fmt.Errorf("field project in FlowInvalidDetails: required")
 	}
-	if _, ok := raw["version"]; raw != nil && !ok {
-		return fmt.Errorf("field version in FlowInvalidDetails: required")
-	}
 	type Plain FlowInvalidDetails
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
+	}
+	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
 	}
 	if plain.Problems != nil && len(plain.Problems) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "problems", 1)
 	}
 	if utf8.RuneCountInString(string(plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
-	}
-	if 1 > plain.Version {
-		return fmt.Errorf("field %s: must be >= %v", "version", 1)
 	}
 	*j = FlowInvalidDetails(plain)
 	return nil

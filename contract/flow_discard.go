@@ -6,10 +6,10 @@ import "encoding/json"
 import "fmt"
 import "unicode/utf8"
 
-// Output of `gentry flow discard --json`: the draft is deleted; the active flow is
-// unchanged.
+// Output of `gentry flow discard --json`: the flow directory is back to the active
+// flow, and the variants of another machine of a conflict are removed.
 type FlowDiscardOutput struct {
-	// Absolute path of the deleted draft directory.
+	// Absolute path of the flow directory.
 	Dir string `json:"dir"`
 
 	// Identifier of the project.

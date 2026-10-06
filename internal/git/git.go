@@ -4,10 +4,12 @@ package git
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/t8nax/gentry/internal/paths"
 )
@@ -26,21 +28,57 @@ type CommandError struct {
 
 func (e *CommandError) Error() string { return e.Command + ": " + e.Output }
 
+// NetworkTimeout limits a git command that talks to a remote repository.
+var NetworkTimeout = 20 * time.Second
+
+// Opts are options of a git command run by Run.
+type Opts struct {
+	Stdin string   // the standard input
+	Env   []string // variables added to the environment, as NAME=value
+	// Network marks a command that talks to a remote repository: it is
+	// limited by NetworkTimeout and must not ask for a login, as nobody may
+	// be there to answer.
+	Network bool
+}
+
 // run runs git with args in dir and returns its standard output.
-func run(dir string, args ...string) (string, error) {
+func run(dir string, args ...string) (string, error) { return Run(dir, Opts{}, args...) }
+
+// Run runs git with args in dir with options o and returns its standard
+// output. A command that fails returns *CommandError.
+func Run(dir string, o Opts, args ...string) (string, error) {
 	program, err := exec.LookPath("git")
 	if err != nil {
 		return "", ErrNotFound
 	}
-	cmd := exec.Command(program, args...)
+	ctx := context.Background()
+	if o.Network {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, NetworkTimeout)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, program, args...)
 	cmd.Dir = dir
-	// Messages of git are parsed nowhere, but keep them in English for the
-	// output in git_failed to match across machines.
+	// Messages of git are parsed only to tell a rejected push, but keep them
+	// in English for the output in git_failed to match across machines.
 	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANGUAGE=C")
+	if o.Network {
+		cmd.Env = append(cmd.Env, noPrompts()...)
+	}
+	cmd.Env = append(cmd.Env, o.Env...)
+	// A helper git starts, such as ssh, may outlive git killed at the time
+	// limit and keep the pipes open: do not wait for it long.
+	cmd.WaitDelay = 2 * time.Second
+	if o.Stdin != "" {
+		cmd.Stdin = strings.NewReader(o.Stdin)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		var ee *exec.ExitError
+		if ctx.Err() != nil {
+			return "", &CommandError{Command: "git " + strings.Join(args, " "), Output: "timed out after " + NetworkTimeout.String()}
+		}
 		if !errors.As(err, &ee) {
 			return "", err
 		}
@@ -51,6 +89,20 @@ func run(dir string, args ...string) (string, error) {
 		return "", &CommandError{Command: "git " + strings.Join(args, " "), Output: out}
 	}
 	return stdout.String(), nil
+}
+
+// noPrompts returns the environment that keeps git and the programs it runs
+// from asking for a login: a remote that needs one is unavailable.
+func noPrompts() []string {
+	env := []string{"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"}
+	// ssh asks for a password or a passphrase unless in batch mode. A command
+	// of the operator's own is left as it is.
+	if os.Getenv("GIT_SSH_COMMAND") == "" && os.Getenv("GIT_SSH") == "" {
+		if out, err := run("", "config", "--get", "core.sshCommand"); err != nil || strings.TrimSpace(out) == "" {
+			env = append(env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+		}
+	}
+	return env
 }
 
 // Find reports ErrNotFound if git is not installed.

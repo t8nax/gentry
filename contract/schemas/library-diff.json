@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/library-diff.json",
+  "title": "LibraryDiffOutput",
+  "description": "Output of `gentry library diff --json`: the subagents of the library directory that differ from the active library.",
+  "type": "object",
+  "properties": {
+    "dir": {
+      "description": "Absolute path of the library directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "applied": {
+      "description": "The commit that applied the active library; absent if the library has never been applied.",
+      "$ref": "./applied.json"
+    },
+    "changes": {
+      "description": "Changed subagents by identifier. Not empty: without changes there is no draft.",
+      "type": "array",
+      "items": {
+        "title": "LibraryChange",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Identifier of the subagent, the name of its files.",
+            "type": "string",
+            "minLength": 1
+          },
+          "change": {
+            "description": "What happened to the subagent.",
+            "type": "string",
+            "enum": ["added", "modified", "removed"]
+          }
+        },
+        "required": ["id", "change"]
+      }
+    },
+    "sync": {
+      "description": "What the synchronization of the command did; present only when there is something to tell.",
+      "$ref": "./sync.json"
+    }
+  },
+  "required": ["dir", "changes"]
+}

@@ -17,7 +17,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The version reads the same flow without the draft and the library.
+	// The snapshot reads the same flow without the directories.
 	again, err := ReadSnapshot(snap)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestDiff(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(p.Library, "reviewer.md"), []byte("Новая инструкция.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(p.Draft, "stages", "plan-bug.yaml"), []byte("title: План бага\nexit: x\nexecutor: orchestrator\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(p.Dir, "stages", "plan-bug.yaml"), []byte("title: План бага\nexit: x\nexecutor: orchestrator\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cur := readShop(t, p).Snapshot

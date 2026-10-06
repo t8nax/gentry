@@ -6,14 +6,22 @@ import "encoding/json"
 import "fmt"
 import "unicode/utf8"
 
-// Output of `gentry flow apply --json`: the draft became the new version of the
-// flow and is deleted.
+// Output of `gentry flow apply --json`: the draft became the active flow with a
+// commit of the process repository.
 type FlowApplyOutput struct {
+	// The commit that applied the flow.
+	Applied Applied `json:"applied"`
+
 	// Identifier of the project.
 	Project string `json:"project"`
 
-	// Number of the new flow version, now the active one.
-	Version int `json:"version"`
+	// Whether the commit is sent to the remote repository; false without one or when
+	// it did not answer, and then it is sent by a later command.
+	Sent bool `json:"sent"`
+
+	// What the synchronization of the command did; present only when there is
+	// something to tell.
+	Sync *Sync `json:"sync,omitempty,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -22,11 +30,14 @@ func (j *FlowApplyOutput) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
+	if _, ok := raw["applied"]; raw != nil && !ok {
+		return fmt.Errorf("field applied in FlowApplyOutput: required")
+	}
 	if _, ok := raw["project"]; raw != nil && !ok {
 		return fmt.Errorf("field project in FlowApplyOutput: required")
 	}
-	if _, ok := raw["version"]; raw != nil && !ok {
-		return fmt.Errorf("field version in FlowApplyOutput: required")
+	if _, ok := raw["sent"]; raw != nil && !ok {
+		return fmt.Errorf("field sent in FlowApplyOutput: required")
 	}
 	type Plain FlowApplyOutput
 	var plain Plain
@@ -35,9 +46,6 @@ func (j *FlowApplyOutput) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
-	}
-	if 1 > plain.Version {
-		return fmt.Errorf("field %s: must be >= %v", "version", 1)
 	}
 	*j = FlowApplyOutput(plain)
 	return nil

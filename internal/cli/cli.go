@@ -113,7 +113,7 @@ func commands() []command {
 			},
 		},
 		{
-			name: "flow", section: msg.HelpSectionFlow, summary: msg.CmdFlowSummary, desc: msg.CmdFlowDesc,
+			name: "flow", section: msg.HelpSectionProcess, summary: msg.CmdFlowSummary, desc: msg.CmdFlowDesc,
 			actions: []command{
 				{
 					name: "flow show", summary: msg.CmdFlowShowSummary, desc: msg.CmdFlowShowDesc,
@@ -127,14 +127,6 @@ func commands() []command {
 						jsonFlag,
 					},
 					run: runFlowShow,
-				},
-				{
-					name: "flow edit", summary: msg.CmdFlowEditSummary, desc: msg.CmdFlowEditDesc,
-					flags: []flagSpec{
-						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagFlowEditProject)},
-						jsonFlag,
-					},
-					run: runFlowEdit,
 				},
 				{
 					name: "flow diff", summary: msg.CmdFlowDiffSummary, desc: msg.CmdFlowDiffDesc,
@@ -160,6 +152,27 @@ func commands() []command {
 					},
 					run: runFlowDiscard,
 				},
+			},
+		},
+		{
+			name: "library", section: msg.HelpSectionProcess, summary: msg.CmdLibrarySummary, desc: msg.CmdLibraryDesc,
+			actions: []command{
+				{name: "library diff", summary: msg.CmdLibraryDiffSummary, desc: msg.CmdLibraryDiffDesc, flags: []flagSpec{jsonFlag}, run: runLibraryDiff},
+				{name: "library apply", summary: msg.CmdLibraryApplySummary, desc: msg.CmdLibraryApplyDesc, flags: []flagSpec{jsonFlag}, run: runLibraryApply},
+				{name: "library discard", summary: msg.CmdLibraryDiscardSummary, desc: msg.CmdLibraryDiscardDesc, flags: []flagSpec{jsonFlag}, run: runLibraryDiscard},
+			},
+		},
+		{
+			name: "process", section: msg.HelpSectionProcess, summary: msg.CmdProcessSummary, desc: msg.CmdProcessDesc,
+			actions: []command{
+				{
+					name: "process remote", summary: msg.CmdProcessRemoteSummary, desc: msg.CmdProcessRemoteDesc,
+					args:  []argSpec{{name: msg.ArgRemote, desc: descText(msg.ArgRemoteDesc)}},
+					flags: []flagSpec{jsonFlag},
+					run:   runProcessRemote,
+				},
+				{name: "process sync", summary: msg.CmdProcessSyncSummary, desc: msg.CmdProcessSyncDesc, flags: []flagSpec{jsonFlag}, run: runProcessSync},
+				{name: "process status", summary: msg.CmdProcessStatusSummary, desc: msg.CmdProcessStatusDesc, flags: []flagSpec{jsonFlag}, run: runProcessStatus},
 			},
 		},
 		{

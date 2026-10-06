@@ -35,7 +35,7 @@ func TestOpenCreatesStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v != SchemaVersion() || v != 3 {
+	if v != SchemaVersion() || v != 4 {
 		t.Errorf("schema version %d, want %d", v, SchemaVersion())
 	}
 	if _, err := os.Stat(path); err != nil {

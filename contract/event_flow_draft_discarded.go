@@ -2,7 +2,6 @@
 
 package contract
 
-// Data of the flow.draft_discarded event: the flow draft of the project in the
-// event envelope was deleted; the active flow is unchanged. The data is an empty
-// object.
+// Data of the flow.draft_discarded event: the flow directory of the project in the
+// event envelope is back to the active flow. The data is an empty object.
 type FlowDraftDiscardedData map[string]interface{}

@@ -11,7 +11,7 @@
       "minLength": 1
     },
     "dir": {
-      "description": "Absolute path of the draft directory.",
+      "description": "Absolute path of the flow directory.",
       "type": "string",
       "minLength": 1
     },

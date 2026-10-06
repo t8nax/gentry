@@ -24,16 +24,7 @@ func (l *loader) check() error {
 			l.report(contract.ProblemOrphanInstruction, stagesDir+"/"+id+textExt, 0, msg.ProblemOrphanInstruction, objStage(id))
 		}
 	}
-	for _, id := range sorted(l.agentFields) {
-		if !l.agentTexts[id] {
-			l.report(contract.ProblemMissingInstruction, agentsDir+"/"+id+fieldsExt, 0, msg.ProblemMissingInstruction, objAgent(id))
-		}
-	}
-	for _, id := range sorted(l.agentTexts) {
-		if !l.agentFields[id] {
-			l.report(contract.ProblemOrphanInstruction, agentsDir+"/"+id+textExt, 0, msg.ProblemOrphanAgentInstruction, objAgent(id))
-		}
-	}
+	l.checkAgents()
 	for _, id := range sorted(l.fields) {
 		st := l.stages[id]
 		for i, p := range st.include {
@@ -46,7 +37,11 @@ func (l *loader) check() error {
 			if err != nil {
 				return err
 			}
-			if !found {
+			switch {
+			case found:
+			case l.draftLibrary[e]:
+				l.report(contract.ProblemUnknownExecutor, st.file, st.executorLine, msg.ProblemExecutorInDraftLibrary, objStage(id), e)
+			default:
 				l.report(contract.ProblemUnknownExecutor, st.file, st.executorLine, msg.ProblemUnknownExecutor, objStage(id), e)
 			}
 		}
@@ -64,6 +59,21 @@ func (l *loader) check() error {
 		}
 	}
 	return nil
+}
+
+// checkAgents checks that each subagent has both its fields and its
+// instruction.
+func (l *loader) checkAgents() {
+	for _, id := range sorted(l.agentFields) {
+		if !l.agentTexts[id] {
+			l.report(contract.ProblemMissingInstruction, agentsDir+"/"+id+fieldsExt, 0, msg.ProblemMissingInstruction, objAgent(id))
+		}
+	}
+	for _, id := range sorted(l.agentTexts) {
+		if !l.agentFields[id] {
+			l.report(contract.ProblemOrphanInstruction, agentsDir+"/"+id+textExt, 0, msg.ProblemOrphanAgentInstruction, objAgent(id))
+		}
+	}
 }
 
 // checkGraph checks the graph of scenario s by the rules of section 7.1: the

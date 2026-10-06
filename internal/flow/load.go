@@ -1,14 +1,15 @@
 // Package flow reads the flow of a project and checks it by sections 7.1-7.2
 // and 10.2 of the technical solution: the files of the flow and their fields,
 // the pairs of stage and subagent files, references to stages, parts and
-// subagents, and the graph of each scenario. The active flow is a version
-// snapshot in the state store; its files exist only as the draft, the one
-// form of the flow the operator and the agent edit.
+// subagents, and the graph of each scenario. The flow lives in the process
+// repository (package process): the active flow is committed, the draft is
+// what differs in the flow directory. So does the library of subagents.
 package flow
 
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/process"
 )
 
 // Files and directories of a flow (section 7.2).
@@ -33,22 +35,6 @@ const (
 	fieldsExt    = ".yaml"
 	textExt      = ".md"
 )
-
-// Places of the flow in the process directory of the operator.
-const (
-	draftDirName   = "flow-draft" // the draft, in the directory of the project
-	libraryDirName = "agents"     // the library of subagents, for all projects
-)
-
-// DraftDir returns the directory of the flow draft of project in the process
-// directory.
-func DraftDir(process, project string) string {
-	return filepath.Join(process, project, draftDirName)
-}
-
-// LibraryDir returns the directory of the library of subagents in the process
-// directory.
-func LibraryDir(process string) string { return filepath.Join(process, libraryDirName) }
 
 // Finish is the target of a transition that ends the scenario.
 const Finish = "finish"
@@ -259,25 +245,42 @@ type Result struct {
 	Snapshot Snapshot
 }
 
-// ReadDraft reads and checks the flow draft in directory dir; the library of
+// ReadDir reads and checks the flow in directory dir; the library of
 // subagents is in directory library. It returns an error satisfying
-// errors.As(err, *fs.PathError) if a file cannot be read.
-func ReadDraft(dir, library string) (*Result, error) {
-	t, err := readTree(dir)
+// errors.As(err, *fs.PathError) if a file cannot be read or dir does not
+// exist.
+func ReadDir(dir, library string) (*Result, error) {
+	if _, err := os.Stat(dir); err != nil {
+		return nil, err
+	}
+	files, err := process.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	return readFlow(t, dirLibrary(library))
+	return readFlow(treeOf(files), dirLibrary(library), nil)
 }
 
-// ReadSnapshot checks the flow of a version snapshot. A snapshot was checked
-// when it was applied, but a later Gentry may check more.
+// Read checks the flow of files with the subagents of library.
+// draftLibrary is the library with its draft, to tell a subagent that exists
+// only there; it may be nil.
+func Read(files, library, draftLibrary process.Files) (*Result, error) {
+	ids := map[string]bool{}
+	for name := range draftLibrary {
+		if id, ok := strings.CutSuffix(name, fieldsExt); ok {
+			ids[id] = true
+		}
+	}
+	return readFlow(treeOf(files), mapLibrary(library), ids)
+}
+
+// ReadSnapshot checks the flow of a snapshot.
 func ReadSnapshot(s Snapshot) (*Result, error) {
-	return readFlow(treeOf(s.Files), mapLibrary(s.Library))
+	return readFlow(treeOf(s.Files), mapLibrary(s.Library), nil)
 }
 
-func readFlow(t *tree, lib library) (*Result, error) {
-	l := &loader{
+// newLoader returns a loader of the files of t with the subagents of lib.
+func newLoader(t *tree, lib library) *loader {
+	return &loader{
 		src:         t,
 		lib:         lib,
 		fields:      map[string]bool{},
@@ -291,6 +294,11 @@ func readFlow(t *tree, lib library) (*Result, error) {
 		libFiles:    map[string]string{},
 		contents:    map[string]string{},
 	}
+}
+
+func readFlow(t *tree, lib library, draftLibrary map[string]bool) (*Result, error) {
+	l := newLoader(t, lib)
+	l.draftLibrary = draftLibrary
 	if err := l.load(); err != nil {
 		return nil, err
 	}
@@ -312,10 +320,12 @@ func readFlow(t *tree, lib library) (*Result, error) {
 
 // loader reads a flow and collects its problems.
 type loader struct {
-	src         *tree
-	lib         library
-	problems    []Problem
-	libProblems []Problem // of library subagents, in the order they are found
+	src          *tree
+	lib          library
+	draftLibrary map[string]bool // subagents of the library with its draft; nil if not known
+	inLibrary    bool            // the loader reads the library of subagents, not a flow
+	problems     []Problem
+	libProblems  []Problem // of library subagents, in the order they are found
 
 	common        bool            // flow.yaml exists
 	scenarioFiles []string        // identifiers of the scenario files with valid names
@@ -404,6 +414,13 @@ func (l *loader) load() error {
 	for _, id := range sorted(l.parts) {
 		l.readText(partsDir+"/"+id+textExt, objPart(id))
 	}
+	l.loadAgents()
+	return nil
+}
+
+// loadAgents reads the fields and instructions of the subagents in the agents
+// directory.
+func (l *loader) loadAgents() {
 	for _, id := range sorted(l.agentFields) {
 		o := object{name: objAgent(id), file: agentsDir + "/" + id + fieldsExt}
 		v, ok := l.readYAML(l.src.files[o.file], o)
@@ -418,7 +435,6 @@ func (l *loader) load() error {
 			l.agents[id].instruction = text
 		}
 	}
-	return nil
 }
 
 // entry is a file or directory of the flow; rel is its path inside the flow
@@ -469,13 +485,20 @@ func (l *loader) scan(sub string) {
 	}
 }
 
-// extra reports a file or directory that does not belong to the flow.
+// extra reports a file or directory that does not belong to the flow, or to
+// the library.
 func (l *loader) extra(e entry) {
-	k := msg.ProblemExtraFile
+	k, rel := msg.ProblemExtraFile, e.rel
 	if e.dir {
 		k = msg.ProblemExtraDir
 	}
-	l.report(contract.ProblemExtraFile, e.rel, 0, k, e.rel)
+	if l.inLibrary {
+		k, rel = msg.ProblemLibraryExtraFile, strings.TrimPrefix(rel, agentsDir+"/")
+		if e.dir {
+			k = msg.ProblemLibraryExtraDir
+		}
+	}
+	l.report(contract.ProblemExtraFile, e.rel, 0, k, rel)
 }
 
 // readText returns file rel of the flow as text and keeps it for the flow. If

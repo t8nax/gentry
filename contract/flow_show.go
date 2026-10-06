@@ -21,7 +21,7 @@ type FlowAgent struct {
 	Purpose string `json:"purpose"`
 
 	// Where the subagent comes from: project for a subagent of the flow, library for
-	// a copy of a subagent of the library taken into the version.
+	// a subagent of the library.
 	Source FlowShowOutputAgentsElemSource `json:"source"`
 }
 
@@ -61,35 +61,27 @@ func (j *FlowAgent) UnmarshalJSON(value []byte) error {
 	return nil
 }
 
-// The open draft of the flow; absent if there is none.
+// The draft of the flow: present if the flow directory differs from the active
+// flow.
 type FlowDraftInfo struct {
-	// Number of the version the draft was made from; absent if the project had no
-	// flow.
-	BaseVersion *int `json:"base_version,omitempty,omitzero"`
+	// Absolute path of the directory with the variants of another machine; present
+	// only while the flow is in conflict.
+	ConflictDir *string `json:"conflict_dir,omitempty,omitzero"`
 
-	// Absolute path of the draft directory.
-	Dir string `json:"dir"`
+	// Objects whose variants of another machine are in conflict_dir, in the order of
+	// a diff; present only while the flow is in conflict.
+	Conflicts []FlowObject `json:"conflicts,omitempty,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *FlowDraftInfo) UnmarshalJSON(value []byte) error {
-	var raw map[string]interface{}
-	if err := json.Unmarshal(value, &raw); err != nil {
-		return err
-	}
-	if _, ok := raw["dir"]; raw != nil && !ok {
-		return fmt.Errorf("field dir in FlowDraftInfo: required")
-	}
 	type Plain FlowDraftInfo
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
-	if plain.BaseVersion != nil && 1 > *plain.BaseVersion {
-		return fmt.Errorf("field %s: must be >= %v", "base_version", 1)
-	}
-	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
+	if plain.ConflictDir != nil && utf8.RuneCountInString(string(*plain.ConflictDir)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "conflict_dir", 1)
 	}
 	*j = FlowDraftInfo(plain)
 	return nil
@@ -135,6 +127,36 @@ func (j *FlowNode) UnmarshalJSON(value []byte) error {
 		return fmt.Errorf("field %s length: must be >= %d", "stage", 1)
 	}
 	*j = FlowNode(plain)
+	return nil
+}
+
+type FlowObject struct {
+	// Identifier of the object; absent for the common rules.
+	Id *string `json:"id,omitempty,omitzero"`
+
+	// Kind of the object: common for the common rules of the flow, scenario, stage,
+	// part or agent for a subagent of the project.
+	Object FlowShowOutputDraftConflictsElemObject `json:"object"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowObject) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["object"]; raw != nil && !ok {
+		return fmt.Errorf("field object in FlowObject: required")
+	}
+	type Plain FlowObject
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.Id != nil && utf8.RuneCountInString(string(*plain.Id)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "id", 1)
+	}
+	*j = FlowObject(plain)
 	return nil
 }
 
@@ -221,16 +243,24 @@ func (j *FlowScenario) UnmarshalJSON(value []byte) error {
 }
 
 // Output of `gentry flow show --json`: the active flow of the project with its
-// texts, or with --draft the draft. With an object flag the arrays narrow to the
-// object and what it refers to: for a scenario its stages, their parts and
-// subagents; for a stage its parts and subagent; for a part or a subagent the
-// object alone.
+// texts, or with --draft the draft: the flow directory with its changes. With an
+// object flag the arrays narrow to the object and what it refers to: for a
+// scenario its stages, their parts and subagents; for a stage its parts and
+// subagent; for a part or a subagent the object alone.
 type FlowShowOutput struct {
 	// Subagents by identifier: those of the project and those of the library the
 	// stages name. A project subagent replaces a library one of the same identifier.
 	Agents []FlowAgent `json:"agents"`
 
-	// The open draft of the flow; absent if there is none.
+	// The commit that applied the active flow; absent if the project has no flow yet,
+	// which only the draft can show.
+	Applied *Applied `json:"applied,omitempty,omitzero"`
+
+	// Absolute path of the flow directory: the active flow and the draft over it.
+	Dir string `json:"dir"`
+
+	// The draft of the flow: present if the flow directory differs from the active
+	// flow.
 	Draft *FlowDraftInfo `json:"draft,omitempty,omitzero"`
 
 	// Parts by identifier.
@@ -245,9 +275,9 @@ type FlowShowOutput struct {
 	// Stages by identifier.
 	Stages []FlowStage `json:"stages"`
 
-	// Number of the active flow version; absent if the project has no flow yet, which
-	// only the draft can show.
-	Version *int `json:"version,omitempty,omitzero"`
+	// What the synchronization before the command did; present only when there is
+	// something to tell.
+	Sync *Sync `json:"sync,omitempty,omitzero"`
 }
 
 type FlowShowOutputAgentsElemCapabilitiesElem string
@@ -316,6 +346,42 @@ func (j *FlowShowOutputAgentsElemSource) UnmarshalJSON(value []byte) error {
 	return nil
 }
 
+type FlowShowOutputDraftConflictsElemObject string
+
+const FlowShowOutputDraftConflictsElemObjectAgent FlowShowOutputDraftConflictsElemObject = "agent"
+const FlowShowOutputDraftConflictsElemObjectCommon FlowShowOutputDraftConflictsElemObject = "common"
+const FlowShowOutputDraftConflictsElemObjectPart FlowShowOutputDraftConflictsElemObject = "part"
+const FlowShowOutputDraftConflictsElemObjectScenario FlowShowOutputDraftConflictsElemObject = "scenario"
+const FlowShowOutputDraftConflictsElemObjectStage FlowShowOutputDraftConflictsElemObject = "stage"
+
+var enumValues_FlowShowOutputDraftConflictsElemObject = []interface{}{
+	"common",
+	"scenario",
+	"stage",
+	"part",
+	"agent",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowShowOutputDraftConflictsElemObject) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_FlowShowOutputDraftConflictsElemObject {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_FlowShowOutputDraftConflictsElemObject, v)
+	}
+	*j = FlowShowOutputDraftConflictsElemObject(v)
+	return nil
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *FlowShowOutput) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
@@ -324,6 +390,9 @@ func (j *FlowShowOutput) UnmarshalJSON(value []byte) error {
 	}
 	if _, ok := raw["agents"]; raw != nil && !ok {
 		return fmt.Errorf("field agents in FlowShowOutput: required")
+	}
+	if _, ok := raw["dir"]; raw != nil && !ok {
+		return fmt.Errorf("field dir in FlowShowOutput: required")
 	}
 	if _, ok := raw["parts"]; raw != nil && !ok {
 		return fmt.Errorf("field parts in FlowShowOutput: required")
@@ -342,11 +411,11 @@ func (j *FlowShowOutput) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
+	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
+	}
 	if utf8.RuneCountInString(string(plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
-	}
-	if plain.Version != nil && 1 > *plain.Version {
-		return fmt.Errorf("field %s: must be >= %v", "version", 1)
 	}
 	*j = FlowShowOutput(plain)
 	return nil

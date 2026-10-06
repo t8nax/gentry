@@ -6,6 +6,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/t8nax/gentry/internal/process"
 )
 
 // Snapshot is the content of a flow version: the files of the draft it was
@@ -150,7 +152,7 @@ func sameFiles(a, b map[string]string) bool {
 	}
 	for name, text := range a {
 		other, ok := b[name]
-		if !ok || string(normalize([]byte(other))) != string(normalize([]byte(text))) {
+		if !ok || string(process.Normalize([]byte(other))) != string(process.Normalize([]byte(text))) {
 			return false
 		}
 	}

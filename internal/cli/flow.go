@@ -4,14 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/flow"
-	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/paths"
+	"github.com/t8nax/gentry/internal/process"
 	"github.com/t8nax/gentry/internal/project"
 	"github.com/t8nax/gentry/internal/state"
 )
@@ -28,67 +27,83 @@ var flowObjects = []struct {
 	{"part", "part", msg.FlowKindPart},
 }
 
-// flowStore opens the state store for a flow command and finds the places of
-// the flow of the project the command works with: the one named by flag, or
-// the one of the current directory. A command that only reads does not
-// create the store. The caller closes the store.
-func flowStore(write bool, flag string) (*state.Store, flow.Places, *failure) {
-	fail := func(f failure) (*state.Store, flow.Places, *failure) { return nil, flow.Places{}, &f }
+// flowProject finds the project a flow command works with: the one named by
+// flag, or the one of the current directory. It only reads the state store
+// and does not create it.
+func flowProject(flag string) (string, *failure) {
+	fail := func(f failure) (string, *failure) { return "", &f }
 	path, err := state.Path()
 	if err != nil {
 		return fail(homeUnknown())
 	}
-	var st *state.Store
-	if write {
-		st, err = state.Open(path)
-	} else {
-		st, err = state.OpenRead(path)
-	}
 	var projects []state.Project
 	var worktrees []state.Worktree
+	st, err := state.OpenRead(path)
 	switch {
 	case errors.Is(err, state.ErrNotExist):
 		// No store, no projects: the project is not found.
 	case err != nil:
 		return fail(stateFailure(err))
 	default:
-		if projects, err = st.Projects(); err == nil {
+		projects, err = st.Projects()
+		if err == nil {
 			worktrees, err = st.Worktrees()
 		}
+		st.Close()
 		if err != nil {
-			st.Close()
 			return fail(stateFailure(err))
 		}
 	}
-	closeOnFail := func(f failure) (*state.Store, flow.Places, *failure) {
-		if st != nil {
-			st.Close()
-		}
-		return fail(f)
-	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return closeOnFail(internal(err))
+		return fail(internal(err))
 	}
 	dir, err := paths.Canonical(wd)
 	if err != nil {
-		return closeOnFail(internal(err))
+		return fail(internal(err))
 	}
 	p, err := project.Resolve(projects, worktrees, dir, flag)
 	if err != nil {
 		if rf, ok := resolveFailure(err); ok {
-			return closeOnFail(rf)
+			return fail(rf)
 		}
-		return closeOnFail(internal(err))
+		return fail(internal(err))
 	}
-	process, err := home.Process()
-	if err != nil {
-		return closeOnFail(homeUnknown())
+	return p.ID, nil
+}
+
+// openFlow finds the project of a flow command and opens the process
+// repository with its flow directory. The caller closes the repository.
+func openFlow(flag string) (*process.Repo, flow.Places, *failure) {
+	id, bad := flowProject(flag)
+	if bad != nil {
+		return nil, flow.Places{}, bad
 	}
-	if process, err = paths.Canonical(process); err != nil {
-		return closeOnFail(internal(err))
+	r, bad := openProcess()
+	if bad != nil {
+		return nil, flow.Places{}, bad
 	}
-	return st, flow.PlacesOf(process, p.ID), nil
+	if err := r.EnsureFlowDir(id); err != nil {
+		r.Close()
+		f := processFailure(err)
+		return nil, flow.Places{}, &f
+	}
+	return r, flow.PlacesOf(r, id), nil
+}
+
+// syncFlow synchronizes the process inside a flow or library command that
+// does not commit: it takes the changes of the remote repository and sends
+// those of this machine.
+func syncFlow(env Env, r *process.Repo) (*process.Sync, *failure) {
+	s, bad := pull(r)
+	if bad == nil {
+		bad = push(r, s)
+	}
+	if bad != nil {
+		return nil, bad
+	}
+	syncDone(env, r, s, false)
+	return s, nil
 }
 
 // runFlowShow prints the active flow of a project or its draft, as a whole
@@ -125,55 +140,70 @@ func runFlowShow(args []string, env Env) int {
 		return fail(env, flagValueMissing("--project"))
 	}
 
-	st, places, bad := flowStore(false, proj.Value)
+	r, places, bad := openFlow(proj.Value)
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	defer st.Close()
-	v, hasFlow, err := flow.Active(st, places.Project)
-	if err != nil {
-		return fail(env, flowFailure(err, places))
+	defer r.Close()
+	s, bad := syncFlow(env, r)
+	if bad != nil {
+		return fail(env, *bad)
 	}
-	d, open, err := st.FlowDraft(places.Project)
+	k := process.FlowOf(places.Project)
+	hasDraft, err := r.HasDraft(k)
 	if err != nil {
 		return fail(env, flowFailure(err, places))
 	}
 
 	var fl *flow.Flow
+	out := contract.FlowShowOutput{Project: places.Project, Dir: places.Dir, Sync: syncJSON(s)}
+	if a, ok, err := r.Applied(k); err != nil {
+		return fail(env, flowFailure(err, places))
+	} else if ok {
+		out.Applied = appliedJSON(&a)
+	}
 	if *draft {
-		if !open {
-			return fail(env, flowFailure(&flow.NoDraftError{Project: places.Project}, places))
-		}
-		res, err := flow.ReadOpenDraft(places)
+		res, ok, err := flow.Draft(r, places)
 		if err != nil {
 			return fail(env, flowFailure(err, places))
 		}
+		if !ok {
+			return fail(env, flowFailure(&flow.NoDraftError{Project: places.Project, Dir: places.Dir}, places))
+		}
 		if len(res.Problems) > 0 {
-			return fail(env, flowFailure(&flow.DraftInvalidError{Dir: places.Draft, Problems: res.Problems}, places))
+			return fail(env, flowFailure(&flow.DraftInvalidError{Dir: places.Dir, Problems: res.Problems}, places))
 		}
 		fl = res.Flow
 	} else {
-		if !hasFlow {
-			return fail(env, flowFailure(&flow.NoFlowError{Project: places.Project}, places))
-		}
-		res, err := flow.ReadSnapshot(v.Snapshot)
+		res, _, ok, err := flow.Active(r, places.Project)
 		if err != nil {
-			return fail(env, internal(err))
+			return fail(env, flowFailure(err, places))
+		}
+		if !ok {
+			return fail(env, flowFailure(&flow.NoFlowError{Project: places.Project, Dir: places.Dir}, places))
 		}
 		if len(res.Problems) > 0 {
-			return fail(env, flowInvalid(places.Project, v.Number, res.Problems))
+			return fail(env, flowInvalid(places, res.Problems))
 		}
 		fl = res.Flow
 	}
-
-	out := contract.FlowShowOutput{Project: places.Project}
-	if hasFlow {
-		out.Version = &v.Number
-	}
-	if open {
-		out.Draft = &contract.FlowDraftInfo{Dir: places.Draft}
-		if d.BaseVersion > 0 {
-			out.Draft.BaseVersion = &d.BaseVersion
+	if hasDraft {
+		out.Draft = &contract.FlowDraftInfo{}
+		objects, conflict, err := flow.ConflictObjects(r, k)
+		if err != nil {
+			return fail(env, flowFailure(err, places))
+		}
+		if conflict {
+			out.Draft.ConflictDir = &places.Conflict
+			out.Draft.Conflicts = []contract.FlowObject{}
+			for _, o := range objects {
+				co := contract.FlowObject{Object: contract.FlowShowOutputDraftConflictsElemObject(o.Object)}
+				if o.ID != "" {
+					id := o.ID
+					co.Id = &id
+				}
+				out.Draft.Conflicts = append(out.Draft.Conflicts, co)
+			}
 		}
 	}
 	var b strings.Builder
@@ -188,7 +218,7 @@ func runFlowShow(args []string, env Env) int {
 		return writeFlow(env, out, fl)
 	}
 	if object < 0 {
-		writeFlowText(&b, places, out, fl, *draft)
+		writeFlowText(&b, places, out.Applied, hasDraft, fl, *draft)
 	}
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK
@@ -265,13 +295,11 @@ func objectNotFound(projectID string, object int, id string, draft bool) failure
 
 // writeFlowText prints the summary of the flow, or of the draft, and its
 // scenarios, stages and subagents as tables.
-func writeFlowText(b *strings.Builder, places flow.Places, out contract.FlowShowOutput, fl *flow.Flow, draft bool) {
+func writeFlowText(b *strings.Builder, places flow.Places, applied *contract.Applied, hasDraft bool, fl *flow.Flow, draft bool) {
 	fmt.Fprintln(b, msg.Text(msg.FlowProject, places.Project))
-	if draft {
-		fmt.Fprintln(b, msg.Text(msg.FlowDraftDir, places.Draft))
-	}
-	fmt.Fprintln(b, msg.Text(msg.FlowVersion, versionText(out.Version)))
-	if !draft && out.Draft != nil {
+	writeFlowApplied(b, applied)
+	fmt.Fprintln(b, msg.Text(msg.FlowDir, places.Dir))
+	if !draft && hasDraft {
 		fmt.Fprintln(b, msg.Text(msg.FlowDraftOpened))
 	}
 	b.WriteString("\n")
@@ -298,7 +326,7 @@ func writeFlowText(b *strings.Builder, places flow.Places, out contract.FlowShow
 	switch {
 	case draft:
 		fmt.Fprintln(b, msg.Text(msg.HintFlowApply))
-	case out.Draft != nil:
+	case hasDraft:
 		fmt.Fprintln(b, msg.Text(msg.HintFlowShowDraft))
 	default:
 		fmt.Fprintln(b, msg.Text(msg.HintFlowStage))
@@ -374,12 +402,14 @@ func agentSource(a flow.Agent) string {
 // joined lists identifiers in one line, or marks that there are none.
 func joined(ids []string) string { return orNone(strings.Join(ids, ", ")) }
 
-// versionText is a flow version as the text names it.
-func versionText(v *int) string {
-	if v == nil {
-		return msg.Text(msg.ValueNone)
+// writeFlowApplied prints when the active flow was applied, or a dash if the
+// project has none.
+func writeFlowApplied(b *strings.Builder, applied *contract.Applied) {
+	at := msg.Text(msg.ValueNone)
+	if applied != nil {
+		at = localTime(applied.Time)
 	}
-	return strconv.Itoa(*v)
+	fmt.Fprintln(b, msg.Text(msg.FlowAppliedAt, at))
 }
 
 // nodeName returns the node as the scenario text names it: the end of the
@@ -398,7 +428,7 @@ func oneLine(s string) string {
 }
 
 // writeFlow prints fl as the output of flow show --json; out holds the
-// project, the version and the draft.
+// project, the commit applied, the directory and the draft.
 func writeFlow(env Env, out contract.FlowShowOutput, fl *flow.Flow) int {
 	out.Scenarios = []contract.FlowScenario{}
 	out.Stages = []contract.FlowStage{}
@@ -457,51 +487,6 @@ func flowSource(library bool) string {
 	return "project"
 }
 
-func runFlowEdit(args []string, env Env) int {
-	f := newFlags("flow edit")
-	proj := f.String("project")
-	asJSON := f.Bool("json")
-	if code, done := f.parse(args, env); done {
-		return code
-	}
-	if proj.Set && proj.Value == "" {
-		return fail(env, flagValueMissing("--project"))
-	}
-	st, places, bad := flowStore(true, proj.Value)
-	if bad != nil {
-		return fail(env, *bad)
-	}
-	defer st.Close()
-	res, err := flow.Edit(st, places)
-	if err != nil {
-		return fail(env, flowFailure(err, places))
-	}
-	if *asJSON {
-		out := contract.FlowEditOutput{Project: places.Project, Dir: res.Dir, Created: res.Created}
-		if res.Base > 0 {
-			out.BaseVersion = &res.Base
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	var b strings.Builder
-	switch {
-	case !res.Created:
-		fmt.Fprintln(&b, msg.Text(msg.FlowDraftAlreadyOpen))
-	case res.Base > 0:
-		fmt.Fprintln(&b, msg.Text(msg.FlowDraftCreated, res.Base))
-	default:
-		fmt.Fprintln(&b, msg.Text(msg.FlowDraftCreatedEmpty))
-	}
-	fmt.Fprintln(&b, msg.Text(msg.FlowProject, places.Project))
-	fmt.Fprintln(&b, msg.Text(msg.FlowDraftDir, res.Dir))
-	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintFlowShowDraft))
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
-}
-
 func runFlowDiff(args []string, env Env) int {
 	f := newFlags("flow diff")
 	proj := f.String("project")
@@ -512,20 +497,22 @@ func runFlowDiff(args []string, env Env) int {
 	if proj.Set && proj.Value == "" {
 		return fail(env, flagValueMissing("--project"))
 	}
-	st, places, bad := flowStore(false, proj.Value)
+	r, places, bad := openFlow(proj.Value)
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	defer st.Close()
-	res, err := flow.DiffDraft(st, places)
+	defer r.Close()
+	s, bad := syncFlow(env, r)
+	if bad != nil {
+		return fail(env, *bad)
+	}
+	res, err := flow.DiffDraft(r, places)
 	if err != nil {
 		return fail(env, flowFailure(err, places))
 	}
+	applied := appliedJSON(res.Applied)
 	if *asJSON {
-		out := contract.FlowDiffOutput{Project: places.Project, Changes: []contract.FlowChange{}}
-		if res.Version > 0 {
-			out.Version = &res.Version
-		}
+		out := contract.FlowDiffOutput{Project: places.Project, Applied: applied, Changes: []contract.FlowChange{}, Sync: syncJSON(s)}
 		for _, c := range res.Changes {
 			cc := contract.FlowChange{
 				Object: contract.FlowDiffOutputChangesElemObject(c.Object),
@@ -535,10 +522,6 @@ func runFlowDiff(args []string, env Env) int {
 				id := c.ID
 				cc.Id = &id
 			}
-			if c.Object == flow.ObjectAgent {
-				source := contract.FlowDiffOutputChangesElemSource(flowSource(c.Library))
-				cc.Source = &source
-			}
 			out.Changes = append(out.Changes, cc)
 		}
 		if err := writeJSON(env, out); err != nil {
@@ -546,20 +529,10 @@ func runFlowDiff(args []string, env Env) int {
 		}
 		return contract.ExitOK
 	}
-	var version *int
-	if res.Version > 0 {
-		version = &res.Version
-	}
 	var b strings.Builder
 	fmt.Fprintln(&b, msg.Text(msg.FlowProject, places.Project))
-	fmt.Fprintln(&b, msg.Text(msg.FlowVersion, versionText(version)))
+	writeFlowApplied(&b, applied)
 	b.WriteString("\n")
-	if len(res.Changes) == 0 {
-		fmt.Fprintln(&b, msg.Text(msg.FlowDraftSame))
-		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintFlowDiscard))
-		fmt.Fprint(env.Stdout, b.String())
-		return contract.ExitOK
-	}
 	var lines []string
 	for _, c := range res.Changes {
 		lines = append(lines, msg.Text(msg.FlowChange, changeObject(c), changeWord(c)))
@@ -610,24 +583,38 @@ func runFlowApply(args []string, env Env) int {
 	if proj.Set && proj.Value == "" {
 		return fail(env, flagValueMissing("--project"))
 	}
-	st, places, bad := flowStore(true, proj.Value)
+	r, places, bad := openFlow(proj.Value)
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	defer st.Close()
-	version, err := flow.Apply(st, places)
+	defer r.Close()
+	s, bad := pull(r)
+	if bad != nil {
+		return fail(env, *bad)
+	}
+	if code, refused := refuseOnConflict(env, r, s, process.FlowOf(places.Project)); refused {
+		return code
+	}
+	applied, err := flow.Apply(r, places)
 	if err != nil {
+		syncDone(env, r, s, false)
 		return fail(env, flowFailure(err, places))
 	}
+	if bad := push(r, s); bad != nil {
+		return fail(env, *bad)
+	}
+	record(event{typ: flow.EventApplied, project: places.Project, data: contract.FlowAppliedData{Commit: applied.Commit}})
+	syncDone(env, r, s, true)
 	if *asJSON {
-		if err := writeJSON(env, contract.FlowApplyOutput{Project: places.Project, Version: version}); err != nil {
+		out := contract.FlowApplyOutput{Project: places.Project, Applied: *appliedJSON(&applied), Sent: s.Remote && !s.Unavailable, Sync: syncJSON(s)}
+		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
 		}
 		return contract.ExitOK
 	}
 	fmt.Fprintln(env.Stdout, msg.Text(msg.FlowApplied))
 	fmt.Fprintln(env.Stdout, msg.Text(msg.FlowProject, places.Project))
-	fmt.Fprintln(env.Stdout, msg.Text(msg.FlowVersion, strconv.Itoa(version)))
+	fmt.Fprintln(env.Stdout, msg.Text(msg.FlowAppliedAt, localTime(applied.Time)))
 	return contract.ExitOK
 }
 
@@ -641,16 +628,17 @@ func runFlowDiscard(args []string, env Env) int {
 	if proj.Set && proj.Value == "" {
 		return fail(env, flagValueMissing("--project"))
 	}
-	st, places, bad := flowStore(true, proj.Value)
+	r, places, bad := openFlow(proj.Value)
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	defer st.Close()
-	if err := flow.Discard(st, places); err != nil {
+	defer r.Close()
+	if err := flow.Discard(r, places); err != nil {
 		return fail(env, flowFailure(err, places))
 	}
+	record(event{typ: flow.EventDraftDiscarded, project: places.Project})
 	if *asJSON {
-		if err := writeJSON(env, contract.FlowDiscardOutput{Project: places.Project, Dir: places.Draft}); err != nil {
+		if err := writeJSON(env, contract.FlowDiscardOutput{Project: places.Project, Dir: places.Dir}); err != nil {
 			return fail(env, internal(err))
 		}
 		return contract.ExitOK
@@ -660,20 +648,19 @@ func runFlowDiscard(args []string, env Env) int {
 	return contract.ExitOK
 }
 
-// flowInvalid is the failure of an active flow version with problems: a
-// later Gentry may check more than the one that applied it.
-func flowInvalid(projectID string, version int, problems []flow.Problem) failure {
+// flowInvalid is the failure of an active flow with problems: a later Gentry
+// may check more than the one that applied it.
+func flowInvalid(places flow.Places, problems []flow.Problem) failure {
 	var more strings.Builder
-	fmt.Fprintln(&more, msg.Text(msg.FlowVersion, strconv.Itoa(version)))
+	fmt.Fprintln(&more, msg.Text(msg.FlowDir, places.Dir))
 	more.WriteString("\n")
 	cps := writeProblems(&more, problems)
 	return failure{
 		exit:    contract.ExitError,
 		code:    contract.CodeFlowInvalid,
-		message: msg.Text(msg.ErrFlowInvalid, projectID),
+		message: msg.Text(msg.ErrFlowInvalid, places.Project),
 		more:    more.String(),
-		hint:    msg.Text(msg.HintFlowFix),
-		details: map[string]any{"project": projectID, "version": version, "problems": cps},
+		details: map[string]any{"project": places.Project, "dir": places.Dir, "problems": cps},
 	}
 }
 
@@ -703,13 +690,10 @@ func writeProblems(b *strings.Builder, problems []flow.Problem) []contract.FlowP
 // a failure.
 func flowFailure(err error, places flow.Places) failure {
 	var (
-		noFlow    *flow.NoFlowError
-		noDraft   *flow.NoDraftError
-		invalid   *flow.DraftInvalidError
-		unchanged *flow.UnchangedError
-		ioErr     *flow.DraftIOError
-		stErr     *state.UnavailableError
-		newer     *state.NewerError
+		noFlow  *flow.NoFlowError
+		noDraft *flow.NoDraftError
+		invalid *flow.DraftInvalidError
+		ioErr   *flow.DraftIOError
 	)
 	id := places.Project
 	switch {
@@ -718,20 +702,20 @@ func flowFailure(err error, places flow.Places) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeFlowNotFound,
 			message: msg.Text(msg.ErrFlowNotFound, id),
-			hint:    msg.Text(msg.HintFlowCreate),
-			details: map[string]any{"project": id},
+			more:    msg.Text(msg.FlowDir, noFlow.Dir) + "\n",
+			details: map[string]any{"project": id, "dir": noFlow.Dir},
 		}
 	case errors.As(err, &noDraft):
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeFlowDraftNotFound,
 			message: msg.Text(msg.ErrDraftNotFound, id),
-			hint:    msg.Text(msg.HintDraftEdit),
-			details: map[string]any{"project": id},
+			more:    msg.Text(msg.FlowDir, noDraft.Dir) + "\n",
+			details: map[string]any{"project": id, "dir": noDraft.Dir},
 		}
 	case errors.As(err, &invalid):
 		var more strings.Builder
-		fmt.Fprintln(&more, msg.Text(msg.FlowDraftDir, invalid.Dir))
+		fmt.Fprintln(&more, msg.Text(msg.FlowDir, invalid.Dir))
 		more.WriteString("\n")
 		cps := writeProblems(&more, invalid.Problems)
 		return failure{
@@ -741,17 +725,9 @@ func flowFailure(err error, places flow.Places) failure {
 			more:    more.String(),
 			details: map[string]any{"project": id, "dir": invalid.Dir, "problems": cps},
 		}
-	case errors.As(err, &unchanged):
-		return failure{
-			exit:    contract.ExitError,
-			code:    contract.CodeFlowDraftUnchanged,
-			message: msg.Text(msg.ErrDraftUnchanged, unchanged.Version),
-			hint:    msg.Text(msg.HintFlowDiscard),
-			details: map[string]any{"project": id, "version": unchanged.Version},
-		}
 	case errors.As(err, &ioErr):
-		k := map[string]msg.Key{flow.OpRead: msg.ErrDraftRead, flow.OpWrite: msg.ErrDraftWrite, flow.OpDelete: msg.ErrDraftDelete}[ioErr.Op]
-		if ioErr.Library {
+		k := map[string]msg.Key{flow.OpRead: msg.ErrDraftRead, flow.OpWrite: msg.ErrDraftWrite}[ioErr.Op]
+		if ioErr.Library && ioErr.Op == flow.OpRead {
 			k = msg.ErrLibraryRead
 		}
 		return failure{
@@ -760,8 +736,6 @@ func flowFailure(err error, places flow.Places) failure {
 			message: msg.Text(k, ioErr.Path),
 			details: map[string]any{"path": ioErr.Path},
 		}
-	case errors.As(err, &stErr), errors.As(err, &newer):
-		return stateFailure(err)
 	}
-	return internal(err)
+	return processFailure(err)
 }

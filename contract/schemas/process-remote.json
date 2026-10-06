@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/process-remote.json",
+  "title": "ProcessRemoteOutput",
+  "description": "Output of `gentry process remote --json`: the remote repository of the process is connected and synchronized with.",
+  "type": "object",
+  "properties": {
+    "remote": {
+      "description": "Address of the remote repository.",
+      "type": "string",
+      "minLength": 1
+    },
+    "result": {
+      "description": "sent: the remote repository was empty and got the process of this machine; received: this machine had no process and got the remote one; merged: both had one and they are brought together; unchanged: both had the same.",
+      "type": "string",
+      "enum": ["sent", "received", "merged", "unchanged"]
+    },
+    "drafts": {
+      "description": "Kinds whose variant of this machine became a draft over the remote one; empty if none.",
+      "type": "array",
+      "items": { "$ref": "./process-item.json" }
+    }
+  },
+  "required": ["remote", "result", "drafts"]
+}

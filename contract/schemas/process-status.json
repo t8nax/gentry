@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/process-status.json",
+  "title": "ProcessStatusOutput",
+  "description": "Output of `gentry process status --json`: the state of the process on this machine, as known without the network.",
+  "type": "object",
+  "properties": {
+    "remote": {
+      "description": "Address of the remote repository; absent if none is connected.",
+      "type": "string",
+      "minLength": 1
+    },
+    "synced": {
+      "description": "Time of the last successful synchronization in UTC, RFC 3339 with milliseconds; absent if there was none.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "drafts": {
+      "description": "Kinds whose directory differs from the active variant.",
+      "type": "array",
+      "items": { "$ref": "./process-item.json" }
+    },
+    "unsent": {
+      "description": "Kinds changed by commits the remote repository does not have yet; empty without a remote repository.",
+      "type": "array",
+      "items": { "$ref": "./process-item.json" }
+    },
+    "conflicts": {
+      "description": "Kinds in conflict: the variants of another machine are in their conflict directory.",
+      "type": "array",
+      "items": { "$ref": "./process-item.json" }
+    }
+  },
+  "required": ["drafts", "unsent", "conflicts"]
+}

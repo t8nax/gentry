@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-discard.json",
   "title": "FlowDiscardOutput",
-  "description": "Output of `gentry flow discard --json`: the draft is deleted; the active flow is unchanged.",
+  "description": "Output of `gentry flow discard --json`: the flow directory is back to the active flow, and the variants of another machine of a conflict are removed.",
   "type": "object",
   "properties": {
     "project": {
@@ -11,7 +11,7 @@
       "minLength": 1
     },
     "dir": {
-      "description": "Absolute path of the deleted draft directory.",
+      "description": "Absolute path of the flow directory.",
       "type": "string",
       "minLength": 1
     }

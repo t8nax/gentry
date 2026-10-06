@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/applied.json",
+  "title": "Applied",
+  "description": "The commit of the process repository that made the active variant of a kind of the process: the flow of a project or the library of subagents.",
+  "type": "object",
+  "properties": {
+    "commit": {
+      "description": "Hash of the commit.",
+      "type": "string",
+      "minLength": 1
+    },
+    "time": {
+      "description": "Time of the commit in UTC, RFC 3339 with milliseconds: when the variant was applied, on this machine or another one.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["commit", "time"]
+}

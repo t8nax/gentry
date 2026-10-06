@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/git"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/project"
 	"github.com/t8nax/gentry/internal/state"
@@ -55,9 +54,19 @@ func runProjectAdd(args []string, env Env) int {
 		return fail(env, stateFailure(err))
 	}
 	defer st.Close()
+	// The process repository first: a project is connected with a place for
+	// its flow.
+	r, bad := openProcess()
+	if bad != nil {
+		return fail(env, *bad)
+	}
+	defer r.Close()
 	res, err := project.Add(st, project.AddRequest{Dir: dir, ID: id, Knowledge: knowledge.Value, Prefix: prefix.Value})
 	if err != nil {
 		return fail(env, projectFailure(err))
+	}
+	if err := r.EnsureFlowDir(res.Project.ID); err != nil {
+		return fail(env, processFailure(err))
 	}
 
 	p := res.Project
@@ -170,33 +179,21 @@ func readProjects() ([]state.Project, *failure) {
 // projectFailure turns an error of connecting a project into a failure.
 func projectFailure(err error) failure {
 	var (
-		notRepo   *project.NotRepoError
-		ke        *project.KnowledgeError
-		newer     *project.NewerFormatError
-		mismatch  *project.MismatchError
-		noID      *project.IDMissingError
-		noPrefix  *project.PrefixUnderivableError
-		exists    *project.ExistsError
-		taken     *project.PrefixTakenError
-		wtTaken   *project.WorktreeTakenError
-		gitFailed *git.CommandError
-		pathErr   *fs.PathError
+		notRepo  *project.NotRepoError
+		ke       *project.KnowledgeError
+		newer    *project.NewerFormatError
+		mismatch *project.MismatchError
+		noID     *project.IDMissingError
+		noPrefix *project.PrefixUnderivableError
+		exists   *project.ExistsError
+		taken    *project.PrefixTakenError
+		wtTaken  *project.WorktreeTakenError
+		pathErr  *fs.PathError
 	)
+	if f, ok := gitFailure(err); ok {
+		return f
+	}
 	switch {
-	case errors.Is(err, git.ErrNotFound):
-		return failure{
-			exit:    contract.ExitError,
-			code:    contract.CodeGitNotFound,
-			message: msg.Text(msg.ErrToolNotFound, "git"),
-			hint:    msg.Text(msg.HintGitNotFound),
-		}
-	case errors.As(err, &gitFailed):
-		return failure{
-			exit:    contract.ExitError,
-			code:    contract.CodeGitFailed,
-			message: msg.Text(msg.ErrGitFailed, gitFailed.Command, gitFailed.Output),
-			details: map[string]any{"command": gitFailed.Command, "output": gitFailed.Output},
-		}
 	case errors.As(err, &notRepo):
 		return failure{
 			exit:    contract.ExitError,

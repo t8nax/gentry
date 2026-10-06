@@ -15,13 +15,8 @@ type FlowChange struct {
 	Id *string `json:"id,omitempty,omitzero"`
 
 	// Kind of the object: common for the common rules of the flow, scenario, stage,
-	// part or agent for a subagent.
+	// part or agent for a subagent of the project.
 	Object FlowDiffOutputChangesElemObject `json:"object"`
-
-	// Where a subagent comes from: project, or library for a subagent of the library
-	// the flow names, whose copy in the version changes on apply. Only for a
-	// subagent.
-	Source *FlowDiffOutputChangesElemSource `json:"source,omitempty,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -51,17 +46,21 @@ func (j *FlowChange) UnmarshalJSON(value []byte) error {
 // Output of `gentry flow diff --json`: the objects of the draft that differ from
 // the active flow.
 type FlowDiffOutput struct {
-	// Changed objects: the common rules first, then scenarios, stages, parts, project
-	// subagents and library subagents, each kind by identifier. Empty if the draft is
-	// the same as the active flow.
+	// The commit that applied the active flow the draft is compared with; absent if
+	// the project has no flow, and then every object of the draft is added.
+	Applied *Applied `json:"applied,omitempty,omitzero"`
+
+	// Changed objects: the common rules first, then scenarios, stages, parts and
+	// subagents of the project, each kind by identifier. Not empty: without changes
+	// there is no draft.
 	Changes []FlowChange `json:"changes"`
 
 	// Identifier of the project.
 	Project string `json:"project"`
 
-	// Number of the active flow version the draft is compared with; absent if the
-	// project has no flow, and then every object of the draft is added.
-	Version *int `json:"version,omitempty,omitzero"`
+	// What the synchronization before the command did; present only when there is
+	// something to tell.
+	Sync *Sync `json:"sync,omitempty,omitzero"`
 }
 
 type FlowDiffOutputChangesElemChange string
@@ -132,36 +131,6 @@ func (j *FlowDiffOutputChangesElemObject) UnmarshalJSON(value []byte) error {
 	return nil
 }
 
-type FlowDiffOutputChangesElemSource string
-
-const FlowDiffOutputChangesElemSourceLibrary FlowDiffOutputChangesElemSource = "library"
-const FlowDiffOutputChangesElemSourceProject FlowDiffOutputChangesElemSource = "project"
-
-var enumValues_FlowDiffOutputChangesElemSource = []interface{}{
-	"project",
-	"library",
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-func (j *FlowDiffOutputChangesElemSource) UnmarshalJSON(value []byte) error {
-	var v string
-	if err := json.Unmarshal(value, &v); err != nil {
-		return err
-	}
-	var ok bool
-	for _, expected := range enumValues_FlowDiffOutputChangesElemSource {
-		if reflect.DeepEqual(v, expected) {
-			ok = true
-			break
-		}
-	}
-	if !ok {
-		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_FlowDiffOutputChangesElemSource, v)
-	}
-	*j = FlowDiffOutputChangesElemSource(v)
-	return nil
-}
-
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *FlowDiffOutput) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
@@ -181,9 +150,6 @@ func (j *FlowDiffOutput) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
-	}
-	if plain.Version != nil && 1 > *plain.Version {
-		return fmt.Errorf("field %s: must be >= %v", "version", 1)
 	}
 	*j = FlowDiffOutput(plain)
 	return nil

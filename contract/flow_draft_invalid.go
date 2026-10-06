@@ -9,7 +9,7 @@ import "unicode/utf8"
 // Details of the error flow_draft_invalid: the flow draft of a project has
 // problems, so it is neither shown nor applied.
 type FlowDraftInvalidDetails struct {
-	// Absolute path of the draft directory.
+	// Absolute path of the flow directory.
 	Dir string `json:"dir"`
 
 	// All problems of the draft in the order of files and lines: problems of the

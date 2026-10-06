@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/events/flow.applied.json",
   "title": "FlowAppliedData",
-  "description": "Data of the flow.applied event: the flow draft of the project in the event envelope was applied as a new version and deleted.",
+  "description": "Data of the flow.applied event: the draft of the flow of the project in the event envelope became active on this machine.",
   "type": "object",
   "properties": {
-    "version": {
-      "description": "Number of the new flow version.",
-      "type": "integer",
-      "minimum": 1
+    "commit": {
+      "description": "Hash of the commit of the process repository that applied the flow.",
+      "type": "string",
+      "minLength": 1
     }
   },
-  "required": ["version"]
+  "required": ["commit"]
 }

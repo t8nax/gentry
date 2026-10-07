@@ -37,7 +37,11 @@ func runStageShow(args []string, env Env) int {
 	if bad != nil {
 		return w.fail(env, *bad)
 	}
-	sv, err := task.StageOf(v)
+	decisions, err := w.st.Decisions(v.ID)
+	if err != nil {
+		return w.fail(env, stateFailure(err))
+	}
+	sv, err := task.StageOf(v, decisions)
 	if err != nil {
 		return w.fail(env, wayFailure("stage show", err))
 	}
@@ -65,8 +69,8 @@ func runStageShow(args []string, env Env) int {
 				ct.If = &cond
 			}
 			if t.Return {
-				limit, returns := t.MaxRounds, t.Returns
-				ct.MaxReturns, ct.Returns = &limit, &returns
+				limit, returns, allowed := t.Limit, t.Returns, t.Allowed
+				ct.MaxReturns, ct.Returns, ct.AllowedReturns = &limit, &returns, &allowed
 			}
 			out.Transitions = append(out.Transitions, ct)
 		}
@@ -90,7 +94,7 @@ func runStageShow(args []string, env Env) int {
 		}
 		returns := msg.Text(msg.ValueNone)
 		if t.Return {
-			returns = msg.Text(msg.StageReturns, t.Returns, t.MaxRounds)
+			returns = msg.Text(msg.StageReturns, t.Returns, t.Limit)
 		}
 		rows = append(rows, []string{t.To, title, orNone(oneLine(t.If)), returns})
 	}

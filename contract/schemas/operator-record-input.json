@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/operator-record-input.json",
+  "title": "OperatorRecordInput",
+  "description": "Input of `gentry operator record --input`. An unknown field is an error. The source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "question": {
+      "description": "The question the operator answered; absent for words given without one. May have several lines.",
+      "type": "string",
+      "minLength": 1
+    },
+    "options": {
+      "description": "Options of the answer offered with the question: only with the question, at least two, at most one recommended.",
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "./question-option.json"
+      }
+    },
+    "answer": {
+      "description": "The words of the operator as given; may have several lines.",
+      "type": "string",
+      "minLength": 1
+    },
+    "allow_return": {
+      "description": "The node the operator allows one more return to from the current stage, beyond its limit.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "answer"
+  ],
+  "additionalProperties": false
+}

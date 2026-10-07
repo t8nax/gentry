@@ -194,6 +194,7 @@ func wayFailure(cmd string, err error) failure {
 		field      *task.FieldError
 		transition *task.TransitionError
 		limit      *task.ReturnLimitError
+		noReturn   *task.ReturnNotFoundError
 		empty      *task.StepsEmptyError
 		open       *task.StepsOpenError
 		noStep     *task.StepNotFoundError
@@ -232,8 +233,16 @@ func wayFailure(cmd string, err error) failure {
 			code:    contract.CodeReturnLimit,
 			message: msg.Text(msg.ErrReturnLimit, limit.To),
 			more:    msg.Text(msg.ReturnsLine, limit.Limit, limit.Limit) + "\n",
-			hint:    msg.Text(msg.HintOtherTransitions),
-			details: map[string]any{"node": limit.Node, "to": limit.To, "limit": limit.Limit},
+			hint:    msg.Text(msg.HintOtherTransitions) + "\n" + msg.Text(msg.HintAllowReturn, limit.To),
+			details: map[string]any{"node": limit.Node, "to": limit.To, "limit": limit.Limit, "allowed": limit.Allowed},
+		}
+	case errors.As(err, &noReturn):
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeReturnNotFound,
+			message: msg.Text(msg.ErrReturnNotFound, stageName(noReturn.Stage), noReturn.To),
+			hint:    msg.Text(msg.HintStageTransitions),
+			details: map[string]any{"node": noReturn.Node, "to": noReturn.To, "returns": noReturn.Returns},
 		}
 	case errors.As(err, &empty):
 		return failure{

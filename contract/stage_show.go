@@ -157,10 +157,14 @@ func (j *StageShowStage) UnmarshalJSON(value []byte) error {
 }
 
 type StageShowTransition struct {
+	// Returns of the limit the operator allowed beyond the flow; only for a return.
+	AllowedReturns *int `json:"allowed_returns,omitempty,omitzero"`
+
 	// Condition of the transition; absent for one without.
 	If *string `json:"if,omitempty,omitzero"`
 
-	// Limit of returns by the transition; only for a return.
+	// Limit of returns by the transition with the returns the operator allowed beyond
+	// the flow; only for a return.
 	MaxReturns *int `json:"max_returns,omitempty,omitzero"`
 
 	// Returns made by the transition, counted anew after a return by an outer loop;
@@ -190,6 +194,9 @@ func (j *StageShowTransition) UnmarshalJSON(value []byte) error {
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
+	}
+	if plain.AllowedReturns != nil && 0 > *plain.AllowedReturns {
+		return fmt.Errorf("field %s: must be >= %v", "allowed_returns", 0)
 	}
 	if plain.If != nil && utf8.RuneCountInString(string(*plain.If)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "if", 1)

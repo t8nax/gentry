@@ -29,12 +29,20 @@
       "items": {
         "$ref": "./task-artifact.json"
       }
+    },
+    "operator_decisions": {
+      "description": "Decisions of the operator by number; empty if there are none. --statement changes only the text output.",
+      "type": "array",
+      "items": {
+        "$ref": "./operator-decision.json"
+      }
     }
   },
   "required": [
     "task",
     "path",
     "notes",
-    "artifacts"
+    "artifacts",
+    "operator_decisions"
   ]
 }

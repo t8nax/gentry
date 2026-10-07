@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/operator_decision.recorded.json",
+  "title": "OperatorDecisionRecordedData",
+  "description": "Data of the operator_decision.recorded event: a decision of the operator was recorded for the task in the envelope.",
+  "type": "object",
+  "properties": {
+    "number": {
+      "description": "Number of the decision.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "question": {
+      "description": "The question the operator answered; absent for words given without one.",
+      "type": "string",
+      "minLength": 1
+    },
+    "options": {
+      "description": "Options of the answer offered with the question; absent if none were.",
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "../question-option.json"
+      }
+    },
+    "answer": {
+      "description": "The words of the operator as given.",
+      "type": "string",
+      "minLength": 1
+    },
+    "node": {
+      "description": "Node of the pass the decision was recorded at.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of that pass.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "allow_return": {
+      "description": "The node the decision allows one more return to from node; absent if it allows none.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "number",
+    "answer",
+    "node",
+    "round",
+    "source"
+  ]
+}

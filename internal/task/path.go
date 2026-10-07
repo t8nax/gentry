@@ -41,7 +41,8 @@ func (e *TransitionError) Error() string { return e.Node + ": no transition to "
 // ReturnLimitError means the returns by the transition are used up.
 type ReturnLimitError struct {
 	Node, To string
-	Limit    int
+	Limit    int // the limit of the flow with the returns the operator allowed
+	Allowed  int // returns of the limit the operator allowed
 }
 
 func (e *ReturnLimitError) Error() string {
@@ -119,8 +120,13 @@ func CloseStage(st *state.Store, req Close) (Closed, error) {
 		counts := countReturns(loops, passes)
 		returns := 0
 		if l, ok := loopOf(loops, node.ID, tr.To); ok {
-			if counts[loopKey(l)] >= l.Max {
-				return &ReturnLimitError{Node: node.ID, To: tr.To, Limit: l.Max}
+			ds, err := tx.Decisions(t.ID)
+			if err != nil {
+				return err
+			}
+			allowed := allowedReturns(ds)[loopKey(l)]
+			if counts[loopKey(l)] >= l.Max+allowed {
+				return &ReturnLimitError{Node: node.ID, To: tr.To, Limit: l.Max + allowed, Allowed: allowed}
 			}
 			returns = counts[loopKey(l)] + 1
 		}
@@ -391,11 +397,14 @@ type TransitionView struct {
 	Stage   flow.Stage // the stage of the target; zero for the end of the scenario
 	Return  bool       // the transition is a return, with a limit
 	Returns int        // returns made by it, counted anew after a return by an outer loop
+	Limit   int        // the limit of the flow with the returns the operator allowed
+	Allowed int        // returns of the limit the operator allowed
 }
 
 // StageOf returns the current stage of the task of v from the snapshot of
-// its flow.
-func StageOf(v View) (StageView, error) {
+// its flow; decisions are the decisions of the operator of the task, which
+// raise the limits of returns.
+func StageOf(v View, decisions []state.Decision) (StageView, error) {
 	if v.Finished {
 		return StageView{}, &FinishedError{Task: v.Key()}
 	}
@@ -414,13 +423,15 @@ func StageOf(v View) (StageView, error) {
 	}
 	loops := sc.Loops()
 	counts := countReturns(loops, v.Path)
+	allowed := allowedReturns(decisions)
 	for _, t := range node.Next {
 		tv := TransitionView{Transition: t}
 		if t.To != flow.Finish {
 			tv.Stage, _ = v.Flow.Stage(stageOfNode(sc, t.To))
 		}
 		if l, ok := loopOf(loops, node.ID, t.To); ok {
-			tv.Return, tv.Returns = true, counts[loopKey(l)]
+			tv.Return, tv.Returns, tv.Allowed = true, counts[loopKey(l)], allowed[loopKey(l)]
+			tv.Limit = l.Max + tv.Allowed
 		}
 		sv.Transitions = append(sv.Transitions, tv)
 	}

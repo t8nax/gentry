@@ -311,10 +311,14 @@ func runTaskShow(args []string, env Env) int {
 	if err != nil {
 		return fail(env, stateFailure(err))
 	}
+	decisions, err := st.Decisions(t.ID)
+	if err != nil {
+		return fail(env, stateFailure(err))
+	}
 
 	if *asJSON {
 		out := contract.TaskShowOutput{Task: taskJSON(v), Path: []contract.TaskPass{}, Notes: []contract.TaskNote{},
-			Artifacts: []contract.TaskArtifact{}}
+			Artifacts: []contract.TaskArtifact{}, OperatorDecisions: []contract.OperatorDecision{}}
 		for _, p := range v.Path {
 			out.Path = append(out.Path, passJSON(p))
 		}
@@ -324,6 +328,9 @@ func runTaskShow(args []string, env Env) int {
 		for _, a := range artifacts {
 			path, _ := task.ArtifactPath(t, a.Name)
 			out.Artifacts = append(out.Artifacts, artifactJSON(a, path))
+		}
+		for _, d := range decisions {
+			out.OperatorDecisions = append(out.OperatorDecisions, decisionJSON(d))
 		}
 		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
@@ -342,6 +349,10 @@ func runTaskShow(args []string, env Env) int {
 		writeText(&b, msg.Text(msg.StatementHeading, t.Key()), t.Statement)
 		b.WriteString("\n")
 		fmt.Fprintln(&b, msg.Text(msg.TaskSource, sourceWord(t.Source)))
+		if len(decisions) > 0 {
+			b.WriteString("\n")
+			writeDecisions(&b, v, decisions)
+		}
 		fmt.Fprint(env.Stdout, b.String())
 		return contract.ExitOK
 	}
@@ -370,7 +381,7 @@ func runTaskShow(args []string, env Env) int {
 	}
 	b.WriteString("\n")
 	hint := wayTask{task: t, here: here}.hint
-	fmt.Fprintln(&b, statementHint(t, here))
+	fmt.Fprintln(&b, statementHint(t, here, len(decisions) > 0))
 	if len(notes) > 0 {
 		fmt.Fprintln(&b, hint(msg.Text(msg.HintNotes)))
 	}
@@ -574,10 +585,14 @@ func taskJSON(v task.View) contract.Task {
 	return t
 }
 
-// statementHint is the hint to the statement of t; outside its worktree it
-// names the task, as task show takes it.
-func statementHint(t state.Task, here bool) string {
+// statementHint is the hint to the statement of t and its decisions of the
+// operator, if it has any; outside its worktree it names the task, as task
+// show takes it.
+func statementHint(t state.Task, here, decisions bool) string {
 	h := msg.Text(msg.HintStatement)
+	if decisions {
+		h = msg.Text(msg.HintStatementDecisions)
+	}
 	if !here {
 		h = strings.Replace(h, "gentry task show", "gentry task show "+t.Key(), 1)
 	}

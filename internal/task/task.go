@@ -371,3 +371,16 @@ func (v View) StageTitleOf(stage string) string {
 	st, _ := v.Flow.Stage(stage)
 	return st.Title
 }
+
+// NodeStageTitle returns the title of the stage of a node of the scenario of
+// v, or "" if the flow has no such node or stage.
+func (v View) NodeStageTitle(node string) string {
+	if v.Flow == nil {
+		return ""
+	}
+	sc, ok := v.Flow.Scenario(v.Scenario)
+	if !ok {
+		return ""
+	}
+	return v.StageTitleOf(stageOfNode(sc, node))
+}

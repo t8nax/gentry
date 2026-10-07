@@ -152,6 +152,7 @@ func TestStageFeature(t *testing.T) {
 		"Возвратов: 3 из 3",
 		"",
 		"Посмотреть другие переходы: gentry stage show",
+		"Записать разрешение оператора: gentry operator record --answer <ответ> --allow-return implementation",
 	), "stage", "exit", "--kind", "result", "--text", "Замечания", "--to", "implementation", "--reason", "Ещё замечания")
 	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Замечаний нет", "--to", "merge", "--reason", "Существенных замечаний нет")
 

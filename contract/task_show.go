@@ -14,6 +14,10 @@ type TaskShowOutput struct {
 	// Notes of the task by number.
 	Notes []TaskNote `json:"notes"`
 
+	// Decisions of the operator by number; empty if there are none. --statement
+	// changes only the text output.
+	OperatorDecisions []OperatorDecision `json:"operator_decisions"`
+
 	// The passes of the task in the order entered; the last one is current unless the
 	// scenario is passed, and holds the steps of the current stage.
 	Path []TaskPass `json:"path"`
@@ -33,6 +37,9 @@ func (j *TaskShowOutput) UnmarshalJSON(value []byte) error {
 	}
 	if _, ok := raw["notes"]; raw != nil && !ok {
 		return fmt.Errorf("field notes in TaskShowOutput: required")
+	}
+	if _, ok := raw["operator_decisions"]; raw != nil && !ok {
+		return fmt.Errorf("field operator_decisions in TaskShowOutput: required")
 	}
 	if _, ok := raw["path"]; raw != nil && !ok {
 		return fmt.Errorf("field path in TaskShowOutput: required")

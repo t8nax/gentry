@@ -316,6 +316,23 @@ func commands() []command {
 			},
 		},
 		{
+			name: "operator", section: msg.HelpSectionTasks, summary: msg.CmdOperatorSummary, desc: msg.CmdOperatorDesc,
+			actions: []command{
+				{
+					name: "operator record", summary: msg.CmdOperatorRecordSummary, desc: msg.CmdOperatorRecordDesc,
+					flags: []flagSpec{
+						{name: "question", value: msg.ArgQuestion, desc: descText(msg.FlagDecisionQuestion)},
+						{name: "answer", value: msg.ArgAnswer, desc: descText(msg.FlagDecisionAnswer)},
+						{name: "allow-return", value: msg.ArgNode, desc: descText(msg.FlagDecisionAllowReturn)},
+						taskFlag,
+						inputFlag("question, options, answer, allow_return", false),
+						jsonFlag,
+					},
+					run: runOperatorRecord,
+				},
+			},
+		},
+		{
 			name: "setup", section: msg.HelpSectionMaint, summary: msg.CmdSetupSummary, desc: msg.CmdSetupDesc,
 			args: []argSpec{{name: msg.ArgTool, desc: func() string {
 				return msg.Text(msg.ArgToolDesc, strings.Join(tools, ", "))

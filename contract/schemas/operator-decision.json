@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/operator-decision.json",
+  "title": "OperatorDecision",
+  "description": "A decision of the operator: the words of the operator given in conversation, with the question they answer if there was one. Decisions are only added; a later one cancels an earlier one by its words.",
+  "type": "object",
+  "properties": {
+    "number": {
+      "description": "Number of the decision within the task, from 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "question": {
+      "description": "The question the operator answered; absent for words given without one.",
+      "type": "string",
+      "minLength": 1
+    },
+    "options": {
+      "description": "Options of the answer offered with the question; absent if none were.",
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "./question-option.json"
+      }
+    },
+    "answer": {
+      "description": "The words of the operator as given; may have several lines.",
+      "type": "string",
+      "minLength": 1
+    },
+    "node": {
+      "description": "Node of the pass the decision was recorded at.",
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "description": "Stage of that node.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of that pass.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "allow_return": {
+      "description": "The node the decision allows one more return to from node, beyond the limit; absent if it allows none.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "description": "Who recorded the decision: operator, or agent from the words of the operator.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    },
+    "recorded": {
+      "description": "Time the decision was recorded in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "number",
+    "answer",
+    "node",
+    "stage",
+    "round",
+    "source",
+    "recorded"
+  ]
+}

@@ -156,3 +156,71 @@ func TestMigrationFromSchema5(t *testing.T) {
 	}
 	c.Close()
 }
+
+// TestMigrationFromSchema6 checks that a task under way of schema 6 keeps
+// its path, gets no decisions of the operator and can take them.
+func TestMigrationFromSchema6(t *testing.T) {
+	path := tempPath(t)
+	orig := migrations
+	migrations = orig[:6]
+	s := mustOpen(t, path)
+	var task Task
+	var pass Pass
+	if err := s.Write(func(tx *Tx) error {
+		if err := tx.AddProject(Project{ID: "shop", Prefix: "SHOP", Knowledge: "/k/shop"}); err != nil {
+			return err
+		}
+		if err := tx.AddSnapshot(FlowSnapshot{Project: "shop", Commit: "c1", Applied: time.Now(), Content: `{"files":{}}`}); err != nil {
+			return err
+		}
+		var err error
+		task, err = tx.AddTask(Task{Project: "shop", Number: 1, Title: "Возврат", Statement: "Текст", Source: SourceOperator,
+			State: TaskActive, Scenario: "feature", Node: "review", FlowCommit: "c1"})
+		if err != nil {
+			return err
+		}
+		pass, err = tx.AddPass(Pass{Task: task.ID, Node: "review", Stage: "review", Round: 2})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	// Opened for reading, the store of schema 6 has no decisions.
+	r, err := OpenRead(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ds, err := r.Decisions(task.ID); err != nil || ds != nil {
+		t.Errorf("decisions of schema 6: %+v, %v", ds, err)
+	}
+	r.Close()
+	migrations = orig
+
+	s = mustOpen(t, path)
+	if ds, err := s.Decisions(task.ID); err != nil || len(ds) != 0 {
+		t.Errorf("decisions after the move: %+v, %v", ds, err)
+	}
+	if ps, err := s.TaskPath(task); err != nil || len(ps) != 1 || ps[0].Round != 2 {
+		t.Errorf("path after the move: %+v, %v", ps, err)
+	}
+	if err := s.Write(func(tx *Tx) error {
+		_, err := tx.AddDecision(task.ID, Decision{Question: "Вернуть?", Options: []Option{{Label: "Да", Recommended: true}, {Label: "Нет"}},
+			Answer: "Да.", Pass: pass.ID, AllowReturn: "implementation", Source: SourceAgent})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ds, err := s.Decisions(task.ID)
+	if err != nil || len(ds) != 1 {
+		t.Fatalf("decisions %+v, %v", ds, err)
+	}
+	if d := ds[0]; d.Number != 1 || d.Node != "review" || d.Round != 2 || d.AllowReturn != "implementation" ||
+		len(d.Options) != 2 || !d.Options[0].Recommended || d.Options[1].Description != "" || d.Source != SourceAgent {
+		t.Errorf("decision %+v", d)
+	}
+	c, err := OpenRead(fmt.Sprintf("%s.schema-6.bak", path))
+	if err != nil {
+		t.Fatalf("copy before migration: %v", err)
+	}
+	c.Close()
+}

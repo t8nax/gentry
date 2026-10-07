@@ -162,3 +162,25 @@ func TestPick(t *testing.T) {
 		t.Errorf("error %v", err)
 	}
 }
+
+// TestAllowedReturns counts the returns the operator allowed by return: a
+// return by an outer loop starts the count of returns anew, not the
+// allowances.
+func TestAllowedReturns(t *testing.T) {
+	review, accept := [2]string{"review", "implementation"}, [2]string{"acceptance", "implementation"}
+	ds := []state.Decision{
+		{Node: "review", AllowReturn: "implementation"},
+		{Node: "review"},
+		{Node: "acceptance", AllowReturn: "implementation"},
+		{Node: "review", AllowReturn: "implementation"},
+	}
+	allowed := allowedReturns(ds)
+	counts := countReturns(acceptance.Loops(), way("branch", "criteria", "implementation", "review", "implementation", "review",
+		"implementation", "review", "acceptance", "implementation", "review"))
+	if allowed[review] != 2 || allowed[accept] != 1 || len(allowed) != 2 {
+		t.Errorf("allowed %v", allowed)
+	}
+	if counts[review] != 0 || counts[accept] != 1 {
+		t.Errorf("counts %v", counts)
+	}
+}

@@ -129,3 +129,47 @@ func TestAddStepsAtOnce(t *testing.T) {
 		t.Errorf("numbers %v, steps %v", numbers, titles)
 	}
 }
+
+// TestRecordDecisionsAtOnce checks that processes recording decisions of the
+// operator at once all do, with the numbers 1 to n without repeats.
+func TestRecordDecisionsAtOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("concurrent processes are skipped in short mode")
+	}
+	bin := buildGentry(t)
+	shop := takenShop(t, bin)
+	commands := make([][]string, writers)
+	for i := range commands {
+		commands[i] = []string{"operator", "record", "--answer", fmt.Sprintf("Решение %d", i), "--json"}
+	}
+	for _, r := range atOnce(t, bin, shop, commands) {
+		if r.code != 0 {
+			t.Errorf("exit code %d, output %s", r.code, r.stdout)
+		}
+	}
+	var shown struct {
+		Decisions []struct {
+			Number int    `json:"number"`
+			Answer string `json:"answer"`
+		} `json:"operator_decisions"`
+	}
+	out := gentry(t, bin, shop, "task", "show", "--json")
+	if err := json.Unmarshal([]byte(out), &shown); err != nil {
+		t.Fatalf("task show: %s", out)
+	}
+	var numbers, answers []int
+	for _, d := range shown.Decisions {
+		numbers = append(numbers, d.Number)
+		var n int
+		fmt.Sscanf(d.Answer, "Решение %d", &n)
+		answers = append(answers, n)
+	}
+	slices.Sort(answers)
+	var want []int
+	for i := range writers {
+		want = append(want, i)
+	}
+	if !slices.Equal(numbers, []int{1, 2, 3, 4, 5, 6, 7, 8}) || !slices.Equal(answers, want) {
+		t.Errorf("numbers %v, decisions %v", numbers, answers)
+	}
+}

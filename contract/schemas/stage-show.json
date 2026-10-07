@@ -107,12 +107,17 @@
             "minLength": 1
           },
           "max_returns": {
-            "description": "Limit of returns by the transition; only for a return.",
+            "description": "Limit of returns by the transition with the returns the operator allowed beyond the flow; only for a return.",
             "type": "integer",
             "minimum": 1
           },
           "returns": {
             "description": "Returns made by the transition, counted anew after a return by an outer loop; only for a return.",
+            "type": "integer",
+            "minimum": 0
+          },
+          "allowed_returns": {
+            "description": "Returns of the limit the operator allowed beyond the flow; only for a return.",
             "type": "integer",
             "minimum": 0
           }

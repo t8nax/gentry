@@ -51,7 +51,7 @@ const (
 	CodeLibraryConflict      = "library_conflict"        // the synchronization before library apply found the library changed on another machine: the draft is not applied; details: conflict_dir
 	CodeInputInvalid         = "input_invalid"           // --input cannot be read, is not a JSON object, has an unknown field or a field that is not a string; details: input, field if any
 	CodeMissingField         = "missing_field"           // a required field of the command is not given, by a flag or in --input; details: command, field
-	CodeFieldInvalid         = "field_invalid"           // a field has a value the command cannot accept; details: field, reason (open list: too_long, multiline, invalid_name, invalid_url, not_found, too_large)
+	CodeFieldInvalid         = "field_invalid"           // a field has a value the command cannot accept; details: field, reason (open list: too_long, multiline, invalid_name, invalid_url, not_found, too_large, empty, too_few, recommended_many), option for a field of an option
 	CodeWorktreeNotPooled    = "worktree_not_pooled"     // the directory is not a worktree of a pool; details: path
 	CodeWorktreeBusy         = "worktree_busy"           // the worktree holds a task already; details: path, task
 	CodeWorktreeDirty        = "worktree_dirty"          // the worktree has uncommitted changes; details: path, files
@@ -59,7 +59,8 @@ const (
 	CodeTaskUndetermined     = "task_undetermined"       // no task is named and the current directory holds none; details: dir
 	CodeScenarioFinished     = "scenario_finished"       // the scenario of the task is passed: no stage to show, close or add steps to; details: task
 	CodeTransitionNotFound   = "transition_not_found"    // the node has no transition to the node named; details: node, to, transitions
-	CodeReturnLimit          = "return_limit"            // the limit of returns by the transition is reached; details: node, to, limit
+	CodeReturnLimit          = "return_limit"            // the limit of returns by the transition is reached; details: node, to, limit (with the returns the operator allowed), allowed
+	CodeReturnNotFound       = "return_not_found"        // the current stage has no return to the node named: no transition to it, or one forward; details: node, to, returns (the nodes it has returns to)
 	CodeStepsEmpty           = "steps_empty"             // the stage has no steps to close it by an exit; details: node, stage
 	CodeStepsOpen            = "steps_open"              // the stage has steps neither done nor dropped; details: node, steps (numbers)
 	CodeStepNotFound         = "step_not_found"          // the current stage has no step of that number; details: step

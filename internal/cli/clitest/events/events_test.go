@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -151,7 +152,7 @@ func TestEventsNewerStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = s.Write(func(tx *state.Tx) error {
-		_, err := tx.Exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`)
+		_, err := tx.Exec(`UPDATE meta SET value = ? WHERE key = 'schema_version'`, strconv.Itoa(state.SchemaVersion()+1))
 		return err
 	})
 	s.Close()
@@ -160,7 +161,7 @@ func TestEventsNewerStore(t *testing.T) {
 	}
 
 	code, _, stderr := clitest.Run("events")
-	want := msg.Text(msg.ErrStateNewer, 7, state.SchemaVersion()) + "\n\n" + msg.Text(msg.HintStateNewer) + "\n"
+	want := msg.Text(msg.ErrStateNewer, state.SchemaVersion()+1, state.SchemaVersion()) + "\n\n" + msg.Text(msg.HintStateNewer) + "\n"
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("exit code %d, stderr %q, want %q", code, stderr, want)
 	}
@@ -168,7 +169,7 @@ func TestEventsNewerStore(t *testing.T) {
 	clitest.Validate(t, "schemas/error.json", stdout)
 	var out contract.ErrorOutput
 	json.Unmarshal([]byte(stdout), &out)
-	wantDetails := map[string]any{"path": path, "schema": float64(7), "supported": float64(state.SchemaVersion())}
+	wantDetails := map[string]any{"path": path, "schema": float64(state.SchemaVersion() + 1), "supported": float64(state.SchemaVersion())}
 	if out.Error.Code != contract.CodeStateNewer || !reflect.DeepEqual(map[string]any(out.Error.Details), wantDetails) {
 		t.Errorf("code %q, details %v", out.Error.Code, out.Error.Details)
 	}

@@ -20,6 +20,7 @@ const (
 	textField   fieldKind = iota // a string
 	numberField                  // an integer
 	listField                    // an array of strings
+	rawField                     // any JSON value, read by the command itself
 )
 
 // field is a field of a command: a flag or an argument, and a field of
@@ -27,6 +28,15 @@ const (
 type field struct {
 	name string
 	kind fieldKind
+	flag string // the flag of the field when its name differs, such as allow-return for allow_return
+}
+
+// flagName is the flag of the field, with dashes.
+func (f field) flagName() string {
+	if f.flag != "" {
+		return "--" + f.flag
+	}
+	return "--" + f.name
 }
 
 // textFields returns fields of strings named names.
@@ -125,6 +135,8 @@ func readFields(cmd, value string, stdin io.Reader, fields []field) (map[string]
 				list[j] = *s
 			}
 			values[k] = list
+		case rawField:
+			values[k] = raw[k]
 		default:
 			var s *string
 			if err := json.Unmarshal(raw[k], &s); err != nil || s == nil {
@@ -147,7 +159,7 @@ func commandFields(cmd string, input *stringFlag, flags map[string]*stringFlag, 
 		}
 		for _, fl := range fields {
 			if v, ok := flags[fl.name]; ok && v.Set {
-				f := conflictingFlags(cmd, []string{"--" + fl.name, "--input"})
+				f := conflictingFlags(cmd, []string{fl.flagName(), "--input"})
 				return nil, &f
 			}
 		}
@@ -170,7 +182,7 @@ func commandFields(cmd string, input *stringFlag, flags map[string]*stringFlag, 
 			continue
 		}
 		if v.Value == "" {
-			f := flagValueMissing("--" + fl.name)
+			f := flagValueMissing(fl.flagName())
 			return nil, &f
 		}
 		values[fl.name] = v.Value

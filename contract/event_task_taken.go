@@ -8,8 +8,11 @@ import "reflect"
 import "unicode/utf8"
 
 // Data of the task.taken event: the task in the event envelope was taken in a
-// worktree of the project in the envelope.
+// worktree of the project in the envelope, anew if its attempt is above 1.
 type TaskTakenData struct {
+	// Attempt of the task: 1, or the next one when a cancelled task is taken anew.
+	Attempt int `json:"attempt"`
+
 	// Hash of the commit that applied the flow of the task.
 	FlowCommit string `json:"flow_commit"`
 
@@ -65,6 +68,9 @@ func (j *TaskTakenData) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
+	if _, ok := raw["attempt"]; raw != nil && !ok {
+		return fmt.Errorf("field attempt in TaskTakenData: required")
+	}
 	if _, ok := raw["flow_commit"]; raw != nil && !ok {
 		return fmt.Errorf("field flow_commit in TaskTakenData: required")
 	}
@@ -87,6 +93,9 @@ func (j *TaskTakenData) UnmarshalJSON(value []byte) error {
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
+	}
+	if 1 > plain.Attempt {
+		return fmt.Errorf("field %s: must be >= %v", "attempt", 1)
 	}
 	if utf8.RuneCountInString(string(plain.FlowCommit)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "flow_commit", 1)

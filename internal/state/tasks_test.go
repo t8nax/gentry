@@ -92,3 +92,74 @@ func TestWorktreeHoldsOneTask(t *testing.T) {
 		t.Errorf("next task %+v, %v; want number 2", task, err)
 	}
 }
+
+// TestEndTask checks that a task closed or cancelled releases its worktree
+// and keeps who ended it, when and why.
+func TestEndTask(t *testing.T) {
+	s := shopStore(t)
+	task, err := take(t, s, "/work/shop-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ended Task
+	if err := s.Write(func(tx *Tx) error {
+		var err error
+		ended, err = tx.EndTask(task.ID, TaskCancelled, SourceAgent, "Отложено.")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if ended.State != TaskCancelled || ended.Worktree != "" || ended.Ended.IsZero() || ended.EndedSource != SourceAgent ||
+		ended.Reason != "Отложено." || !ended.IsEnded() || ended.Attempt != 1 {
+		t.Errorf("cancelled task %+v", ended)
+	}
+	// The worktree is free for the next task.
+	if _, err := take(t, s, "/work/shop-2"); err != nil {
+		t.Errorf("take in the released worktree: %v", err)
+	}
+}
+
+// TestAttempts checks that the attempts of a number are kept apart and in
+// order, and that an attempt is not recorded twice.
+func TestAttempts(t *testing.T) {
+	s := shopStore(t)
+	first, err := take(t, s, "/work/shop-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again := func() error {
+		return s.Write(func(tx *Tx) error {
+			_, err := tx.AddTask(Task{Project: "shop", Number: first.Number, Attempt: 2, Title: first.Title, Statement: first.Statement,
+				Source: first.Source, State: TaskActive, Scenario: "bug", Node: "branch", FlowCommit: "c1", Worktree: "/work/shop"})
+			return err
+		})
+	}
+	if err := s.Write(func(tx *Tx) error {
+		_, err := tx.EndTask(first.ID, TaskCancelled, SourceOperator, "")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := again(); err != nil {
+		t.Fatal(err)
+	}
+	if err := again(); err == nil {
+		t.Error("an attempt recorded twice")
+	}
+	var attempts []Task
+	if err := s.Write(func(tx *Tx) error {
+		var err error
+		attempts, err = tx.Attempts("shop", first.Number)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 2 || attempts[0].Attempt != 1 || attempts[0].State != TaskCancelled || attempts[0].Reason != "" ||
+		attempts[1].Attempt != 2 || attempts[1].Key() != "SHOP-1" || !attempts[1].Ended.IsZero() {
+		t.Errorf("attempts %+v", attempts)
+	}
+	ts, err := s.Tasks()
+	if err != nil || len(ts) != 2 || ts[1].Attempt != 2 {
+		t.Errorf("tasks %+v, %v", ts, err)
+	}
+}

@@ -15,7 +15,7 @@ func AddNote(st *state.Store, task int64, text, source string) (state.Task, stat
 	var n state.Note
 	err := st.Write(func(tx *state.Tx) error {
 		var err error
-		if t, err = tx.Task(task); err != nil {
+		if t, err = active(tx, task); err != nil {
 			return err
 		}
 		passes, err := tx.TaskPath(t.ID)

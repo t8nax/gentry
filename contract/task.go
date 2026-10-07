@@ -8,8 +8,46 @@ import "reflect"
 import "time"
 import "unicode/utf8"
 
+type EndedSource string
+
+const EndedSourceAgent EndedSource = "agent"
+const EndedSourceOperator EndedSource = "operator"
+
+var enumValues_EndedSource = []interface{}{
+	"operator",
+	"agent",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *EndedSource) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_EndedSource {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_EndedSource, v)
+	}
+	*j = EndedSource(v)
+	return nil
+}
+
 // A task of a project.
 type Task struct {
+	// Attempt of the task, from 1: a cancelled task taken anew is the next attempt
+	// with the same identifier.
+	Attempt int `json:"attempt"`
+
+	// When and by whom the task was closed or cancelled; present only for a closed or
+	// a cancelled task.
+	Ended *TaskEnded `json:"ended,omitempty,omitzero"`
+
 	// The scenario of the task is passed: the task stays in work until it is closed,
 	// and has no stage.
 	Finished bool `json:"finished"`
@@ -31,8 +69,9 @@ type Task struct {
 	// Scenario of the task in the flow of the task.
 	Scenario TaskScenario `json:"scenario"`
 
-	// Current stage of the task; absent once the scenario is passed. Its exit,
-	// instruction and transitions are given by `gentry stage show`.
+	// Current stage of the task; absent once the scenario is passed. A cancelled task
+	// stays at the stage it was cancelled at. Its exit, instruction and transitions
+	// are given by `gentry stage show`.
 	Stage *TaskStage `json:"stage,omitempty,omitzero"`
 
 	// State of the task: active — in work, waiting — waits for the operator, closed —
@@ -48,8 +87,46 @@ type Task struct {
 	// Title of the task: one line of up to 80 characters.
 	Title string `json:"title"`
 
-	// Absolute path of the worktree the task holds; absent once the task released it.
+	// Absolute path of the worktree the task holds; absent once the task released it:
+	// a closed or a cancelled task holds none.
 	Worktree *string `json:"worktree,omitempty,omitzero"`
+}
+
+// The closing or the cancelling of a task.
+type TaskEnded struct {
+	// Why the task was cancelled; absent if no reason was given and for a closed
+	// task.
+	Reason *string `json:"reason,omitempty,omitzero"`
+
+	// Who closed or cancelled the task: operator or agent.
+	Source EndedSource `json:"source"`
+
+	// Time the task was closed or cancelled in UTC, RFC 3339 with milliseconds.
+	Time time.Time `json:"time"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *TaskEnded) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["source"]; raw != nil && !ok {
+		return fmt.Errorf("field source in TaskEnded: required")
+	}
+	if _, ok := raw["time"]; raw != nil && !ok {
+		return fmt.Errorf("field time in TaskEnded: required")
+	}
+	type Plain TaskEnded
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.Reason != nil && utf8.RuneCountInString(string(*plain.Reason)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "reason", 1)
+	}
+	*j = TaskEnded(plain)
+	return nil
 }
 
 // Progress of a task: stages passed of all stages of its way to the end. Ahead of
@@ -291,6 +368,9 @@ func (j *Task) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
+	if _, ok := raw["attempt"]; raw != nil && !ok {
+		return fmt.Errorf("field attempt in Task: required")
+	}
 	if _, ok := raw["finished"]; raw != nil && !ok {
 		return fmt.Errorf("field finished in Task: required")
 	}
@@ -325,6 +405,9 @@ func (j *Task) UnmarshalJSON(value []byte) error {
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
+	}
+	if 1 > plain.Attempt {
+		return fmt.Errorf("field %s: must be >= %v", "attempt", 1)
 	}
 	if utf8.RuneCountInString(string(plain.Id)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "id", 1)

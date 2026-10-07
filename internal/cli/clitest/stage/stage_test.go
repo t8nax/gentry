@@ -165,9 +165,9 @@ func TestStageFeature(t *testing.T) {
 		"Этап: сценарий пройден",
 		"Прогресс: 5 из 5",
 		"",
-		"Посмотреть задачу: gentry task show",
+		"Закрыть задачу: gentry task close",
 	), "", "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
-	finished := clitest.Lines(msg.Text(msg.ErrScenarioFinished, "SHOP-1"), "", "Посмотреть задачу: gentry task show SHOP-1")
+	finished := clitest.Lines(msg.Text(msg.ErrScenarioFinished, "SHOP-1"), "", "Закрыть задачу: gentry task close")
 	clitest.WantRun(t, contract.ExitError, "", finished, "stage", "show")
 	clitest.WantRun(t, contract.ExitError, "", finished, "step", "add", "Ещё шаг")
 	clitest.WantRun(t, contract.ExitError, "", finished, "stage", "skip", "--reason", "Не нужен")

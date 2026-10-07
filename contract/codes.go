@@ -66,6 +66,11 @@ const (
 	CodeStepNotFound         = "step_not_found"          // the current stage has no step of that number; details: step
 	CodeStepClosed           = "step_closed"             // the step is done or dropped already; details: step, state
 	CodeArtifactNotFound     = "artifact_not_found"      // the exit names an artifact the task has not saved; details: artifact
+	CodeScenarioNotFinished  = "scenario_not_finished"   // the scenario of the task is not passed, so it cannot be closed; details: task, node
+	CodeTaskEnded            = "task_ended"              // the task is closed or cancelled and changes no more; details: task, state
+	CodeTaskInWork           = "task_in_work"            // the task named to take anew is in work; details: task, worktree
+	CodeTaskProjectMismatch  = "task_project_mismatch"   // the task named to take anew belongs to another project than the worktree; details: task, project, worktree, worktree_project
+	CodeAttemptNotFound      = "attempt_not_found"       // the task has no attempt of that number; details: task, attempt, attempts (their number)
 	CodeInternal             = "internal"                // a failure inside Gentry
 )
 

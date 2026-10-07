@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
@@ -53,13 +54,19 @@ type FileError struct{ Path, Reason string }
 func (e *FileError) Error() string { return e.Path + ": " + e.Reason }
 
 // ArtifactPath returns where the copy of the file of an artifact lies:
-// state/<project>/tasks/<task>/artifacts/<name> in the data root.
+// state/<project>/tasks/<task>/artifacts/<name> in the data root for the
+// first attempt of the task, …/<task>/attempts/<attempt>/artifacts/<name>
+// for a later one.
 func ArtifactPath(t state.Task, name string) (string, error) {
 	root, err := home.Root()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(root, "state", t.Project, "tasks", t.Key(), "artifacts", name), nil
+	dir := filepath.Join(root, "state", t.Project, "tasks", t.Key())
+	if t.Attempt > 1 {
+		dir = filepath.Join(dir, "attempts", strconv.Itoa(t.Attempt))
+	}
+	return filepath.Join(dir, "artifacts", name), nil
 }
 
 // SaveArtifact saves an artifact of a task: a copy of file, or the address
@@ -81,6 +88,9 @@ func SaveArtifact(st *state.Store, t state.Task, name, file, u, source string) (
 	var replaced bool
 	var old state.Artifact
 	err = st.Write(func(tx *state.Tx) error {
+		if _, err := active(tx, t.ID); err != nil {
+			return err
+		}
 		var err error
 		if old, _, err = tx.Artifact(t.ID, name); err != nil {
 			return err

@@ -51,7 +51,7 @@ type Return struct {
 func RecordDecision(st *state.Store, req Decision) (Recorded, error) {
 	var res Recorded
 	err := st.Write(func(tx *state.Tx) error {
-		t, err := tx.Task(req.Task)
+		t, err := active(tx, req.Task)
 		if err != nil {
 			return err
 		}

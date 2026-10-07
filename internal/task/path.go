@@ -96,7 +96,7 @@ type Closed struct {
 func CloseStage(st *state.Store, req Close) (Closed, error) {
 	var res Closed
 	err := st.Write(func(tx *state.Tx) error {
-		t, err := tx.Task(req.Task)
+		t, err := active(tx, req.Task)
 		if err != nil {
 			return err
 		}

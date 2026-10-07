@@ -166,7 +166,7 @@ func TestTaskJSON(t *testing.T) {
 		t.Fatalf("last event: %s", last)
 	}
 	clitest.Validate(t, "schemas/events/task.taken.json", string(e.Data))
-	want := `{"flow_commit":"` + tk.Flow.Commit + `","node":"branch","scenario":"feature","source":"operator","title":"Частичный возврат по карте","worktree":` + clitest.JSONString(fix) + `}`
+	want := `{"attempt":1,"flow_commit":"` + tk.Flow.Commit + `","node":"branch","scenario":"feature","source":"operator","title":"Частичный возврат по карте","worktree":` + clitest.JSONString(fix) + `}`
 	if string(e.Data) != want {
 		t.Errorf("event data %s, want %s", e.Data, want)
 	}

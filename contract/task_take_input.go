@@ -7,18 +7,23 @@ import "fmt"
 import "unicode/utf8"
 
 // Input of `gentry task take --input`: the fields of the task as one object, in a
-// file or on the standard input. An unknown field is an error. The source of the
-// statement is not part of the input: Gentry determines it by who calls the
-// command.
+// file or on the standard input. An unknown field is an error. A new task has a
+// title and a statement; a cancelled task taken anew is named by task and keeps
+// its own. The source of the statement is not part of the input: Gentry determines
+// it by who calls the command.
 type TaskTakeInput struct {
 	// Identifier of the scenario of the task.
 	Scenario string `json:"scenario"`
 
 	// Statement of the task, kept as passed.
-	Statement string `json:"statement"`
+	Statement *string `json:"statement,omitempty,omitzero"`
+
+	// Identifier of a cancelled task to take anew, such as SHOP-2: its next attempt
+	// keeps its title and statement.
+	Task *string `json:"task,omitempty,omitzero"`
 
 	// Title of the task: one line of up to 80 characters.
-	Title string `json:"title"`
+	Title *string `json:"title,omitempty,omitzero"`
 
 	// Worktree of the task; the current directory by default.
 	Worktree *string `json:"worktree,omitempty,omitzero"`
@@ -33,12 +38,6 @@ func (j *TaskTakeInput) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["scenario"]; raw != nil && !ok {
 		return fmt.Errorf("field scenario in TaskTakeInput: required")
 	}
-	if _, ok := raw["statement"]; raw != nil && !ok {
-		return fmt.Errorf("field statement in TaskTakeInput: required")
-	}
-	if _, ok := raw["title"]; raw != nil && !ok {
-		return fmt.Errorf("field title in TaskTakeInput: required")
-	}
 	type Plain TaskTakeInput
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
@@ -47,13 +46,16 @@ func (j *TaskTakeInput) UnmarshalJSON(value []byte) error {
 	if utf8.RuneCountInString(string(plain.Scenario)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "scenario", 1)
 	}
-	if utf8.RuneCountInString(string(plain.Statement)) < 1 {
+	if plain.Statement != nil && utf8.RuneCountInString(string(*plain.Statement)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "statement", 1)
 	}
-	if utf8.RuneCountInString(string(plain.Title)) < 1 {
+	if plain.Task != nil && utf8.RuneCountInString(string(*plain.Task)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "task", 1)
+	}
+	if plain.Title != nil && utf8.RuneCountInString(string(*plain.Title)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "title", 1)
 	}
-	if utf8.RuneCountInString(string(plain.Title)) > 80 {
+	if plain.Title != nil && utf8.RuneCountInString(string(*plain.Title)) > 80 {
 		return fmt.Errorf("field %s length: must be <= %d", "title", 80)
 	}
 	if plain.Worktree != nil && utf8.RuneCountInString(string(*plain.Worktree)) < 1 {

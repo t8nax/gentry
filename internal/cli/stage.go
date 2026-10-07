@@ -33,6 +33,11 @@ func runStageShow(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer w.close()
+	// A closed task has passed its scenario: it has no stage, and the
+	// refusal of a passed scenario would offer to close it.
+	if w.task.State == state.TaskClosed {
+		return fail(env, taskFailure(&task.EndedError{Task: w.task.Key(), State: w.task.State}))
+	}
 	v, bad := w.view()
 	if bad != nil {
 		return w.fail(env, *bad)
@@ -190,7 +195,7 @@ func runStageClose(cmd string, args []string, env Env) int {
 	fmt.Fprintln(&b, msg.Text(msg.ProgressLine, progressText(v.Progress)))
 	hint := msg.Text(msg.HintStageShow)
 	if v.Finished {
-		hint = msg.Text(msg.HintTaskShow)
+		hint = msg.Text(msg.HintTaskClose)
 	}
 	fmt.Fprintf(&b, "\n%s\n", w.hint(hint))
 	fmt.Fprint(env.Stdout, b.String())

@@ -93,16 +93,22 @@ func runNoteList(args []string, env Env) int {
 		return w.fail(env, *bad)
 	}
 	var b strings.Builder
+	writeNotes(&b, v, notes, "")
+	fmt.Fprint(env.Stdout, b.String())
+	return contract.ExitOK
+}
+
+// writeNotes prints the notes of the task of v, each under its number and
+// stage, every line after indent.
+func writeNotes(b *strings.Builder, v task.View, notes []state.Note, indent string) {
 	for i, n := range notes {
 		if i > 0 {
 			b.WriteString("\n")
 		}
 		stage := msg.Text(msg.StageRound, named(v.StageTitleOf(n.Stage), n.Stage), n.Round)
-		fmt.Fprintln(&b, msg.Text(msg.NoteHeading, n.Number, stage))
-		writeIndented(&b, n.Text, strings.Repeat(" ", len(fmt.Sprintf("%d. ", n.Number))))
+		fmt.Fprintln(b, indent+msg.Text(msg.NoteHeading, n.Number, stage))
+		writeIndented(b, n.Text, indent+strings.Repeat(" ", len(fmt.Sprintf("%d. ", n.Number))))
 	}
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
 }
 
 // writeIndented prints a text written by a person as it is, each line with

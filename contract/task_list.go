@@ -9,6 +9,9 @@ import "time"
 import "unicode/utf8"
 
 type TaskListItem struct {
+	// Attempt of the task, as in Task.
+	Attempt int `json:"attempt"`
+
 	// The scenario of the task is passed, as in Task.
 	Finished bool `json:"finished"`
 
@@ -46,6 +49,9 @@ func (j *TaskListItem) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
+	if _, ok := raw["attempt"]; raw != nil && !ok {
+		return fmt.Errorf("field attempt in TaskListItem: required")
+	}
 	if _, ok := raw["finished"]; raw != nil && !ok {
 		return fmt.Errorf("field finished in TaskListItem: required")
 	}
@@ -75,6 +81,9 @@ func (j *TaskListItem) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
+	if 1 > plain.Attempt {
+		return fmt.Errorf("field %s: must be >= %v", "attempt", 1)
+	}
 	if utf8.RuneCountInString(string(plain.Id)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "id", 1)
 	}
@@ -93,7 +102,8 @@ func (j *TaskListItem) UnmarshalJSON(value []byte) error {
 
 // Output of `gentry task list --json`.
 type TaskListOutput struct {
-	// Tasks that match the flags: by project, then by number.
+	// Tasks that match the flags, the last attempt of each: by project, then by
+	// number.
 	Tasks []TaskListItem `json:"tasks"`
 }
 

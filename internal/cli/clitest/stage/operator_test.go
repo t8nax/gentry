@@ -260,7 +260,7 @@ func TestOperatorAllowReturn(t *testing.T) {
 
 	// Once the scenario is passed, a return is not allowed; a decision is
 	// still recorded, at the last stage.
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrScenarioFinished, "SHOP-1"), "", "Посмотреть задачу: gentry task show SHOP-1"),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrScenarioFinished, "SHOP-1"), "", "Закрыть задачу: gentry task close"),
 		"operator", "record", "--answer", "Да", "--allow-return", "implementation")
 	clitest.WantRun(t, contract.ExitOK, "Решение оператора записано.\n", "", "operator", "record", "--answer", "Задачу закрыть.")
 	_, stdout, _ = clitest.Run("task", "show", "--statement")

@@ -71,6 +71,20 @@ type UndeterminedError struct{ Dir string }
 
 func (e *UndeterminedError) Error() string { return e.Dir + ": no task" }
 
+// InWorkError means the task named to take anew is in work.
+type InWorkError struct{ Task, Worktree string }
+
+func (e *InWorkError) Error() string { return e.Task + ": in work" }
+
+// ProjectMismatchError means the task named to take anew belongs to another
+// project than the worktree.
+type ProjectMismatchError struct {
+	Task, Project             string
+	Worktree, WorktreeProject string
+}
+
+func (e *ProjectMismatchError) Error() string { return e.Task + ": of project " + e.Project }
+
 // InvalidKeyError means a task is named by something that is not an
 // identifier of a task.
 type InvalidKeyError struct{ Value string }
@@ -130,6 +144,7 @@ type TakeRequest struct {
 	Title     string
 	Statement string
 	Source    string          // state.SourceOperator or state.SourceAgent
+	Again     *state.Task     // a cancelled task to take anew: its next attempt keeps its title and statement
 	Snapshot  flow.Snapshot   // the active flow
 	Flow      process.Applied // the commit that applied the flow
 	Library   process.Applied // the commit that applied the library; zero if none
@@ -137,7 +152,10 @@ type TakeRequest struct {
 
 // Take records the task in one transaction with its event: the worktree is
 // checked to be free, the flow is kept as a snapshot unless it is already,
-// and the task gets the next number of the series of the project.
+// and the task gets the next number of the series of the project. A task
+// taken anew keeps its number and gets the next attempt; its last attempt is
+// checked to be cancelled in the transaction, so that of two commands taking
+// it anew only one does.
 func Take(st *state.Store, req TakeRequest) (state.Task, error) {
 	content, err := req.Snapshot.Encode()
 	if err != nil {
@@ -154,15 +172,22 @@ func Take(st *state.Store, req TakeRequest) (state.Task, error) {
 		if err != nil {
 			return err
 		}
-		n, err := tx.TakeNumber(req.Project)
-		if err != nil {
-			return err
-		}
-		task, err = tx.AddTask(state.Task{
-			Project: req.Project, Number: n, Title: req.Title, Statement: req.Statement, Source: req.Source,
+		next := state.Task{
+			Project: req.Project, Title: req.Title, Statement: req.Statement, Source: req.Source,
 			State: state.TaskActive, Scenario: req.Scenario.ID, Node: req.Scenario.Start,
 			FlowCommit: applied.Commit, Worktree: req.Worktree,
-		})
+		}
+		if req.Again != nil {
+			last, err := lastAttempt(tx, *req.Again)
+			if err != nil {
+				return err
+			}
+			next.Number, next.Attempt = last.Number, last.Attempt+1
+			next.Title, next.Statement, next.Source = last.Title, last.Statement, last.Source
+		} else if next.Number, err = tx.TakeNumber(req.Project); err != nil {
+			return err
+		}
+		task, err = tx.AddTask(next)
 		if err != nil {
 			return err
 		}
@@ -181,7 +206,7 @@ func Take(st *state.Store, req TakeRequest) (state.Task, error) {
 			}
 		}
 		_, err = tx.AddEvent(EventTaken, req.Project, task.Key(), contract.TaskTakenData{
-			Title: task.Title, Scenario: task.Scenario, Node: task.Node, Worktree: task.Worktree,
+			Attempt: task.Attempt, Title: task.Title, Scenario: task.Scenario, Node: task.Node, Worktree: task.Worktree,
 			FlowCommit: task.FlowCommit, Source: contract.TaskTakenDataSource(task.Source),
 		})
 		return err
@@ -190,6 +215,33 @@ func Take(st *state.Store, req TakeRequest) (state.Task, error) {
 		return state.Task{}, err
 	}
 	return task, nil
+}
+
+// lastAttempt returns the last attempt of the task of t as the transaction
+// sees it, if it is cancelled: a task in work or closed is not taken anew.
+func lastAttempt(tx *state.Tx, t state.Task) (state.Task, error) {
+	attempts, err := tx.Attempts(t.Project, t.Number)
+	if err != nil {
+		return state.Task{}, err
+	}
+	if len(attempts) == 0 {
+		return state.Task{}, &NotFoundError{Task: t.Key()}
+	}
+	last := attempts[len(attempts)-1]
+	last.Prefix = t.Prefix
+	return last, CheckAgain(last)
+}
+
+// CheckAgain refuses to take anew the last attempt of a task unless it is
+// cancelled.
+func CheckAgain(last state.Task) error {
+	switch last.State {
+	case state.TaskCancelled:
+		return nil
+	case state.TaskClosed:
+		return &EndedError{Task: last.Key(), State: last.State}
+	}
+	return &InWorkError{Task: last.Key(), Worktree: last.Worktree}
 }
 
 // keepSnapshot stores the snapshot of the flow unless it is stored already,
@@ -220,7 +272,7 @@ func keepSnapshot(tx *state.Tx, req TakeRequest, content string) (process.Applie
 var keyPattern = regexp.MustCompile(`^([A-Za-z]{2,10})-([1-9][0-9]{0,8})$`)
 
 // Find returns the task named by key, such as SHOP-1 or shop-1, among tasks;
-// of several tasks with the number, possible from stage 8, the last taken.
+// of several attempts of the number, the last.
 func Find(tasks []state.Task, key string) (state.Task, error) {
 	m := keyPattern.FindStringSubmatch(key)
 	if m == nil {
@@ -239,6 +291,29 @@ func Find(tasks []state.Task, key string) (state.Task, error) {
 		return state.Task{}, &NotFoundError{Task: name}
 	}
 	return *found, nil
+}
+
+// Latest returns the last attempt of each task of tasks, in their order.
+func Latest(tasks []state.Task) []state.Task {
+	var latest []state.Task
+	for i, t := range tasks {
+		if i+1 < len(tasks) && tasks[i+1].Project == t.Project && tasks[i+1].Number == t.Number {
+			continue
+		}
+		latest = append(latest, t)
+	}
+	return latest
+}
+
+// Attempts returns the attempts of the task of t among tasks, in order.
+func Attempts(tasks []state.Task, t state.Task) []state.Task {
+	var attempts []state.Task
+	for _, a := range tasks {
+		if a.Project == t.Project && a.Number == t.Number {
+			attempts = append(attempts, a)
+		}
+	}
+	return attempts
 }
 
 // In returns the task that holds the worktree at path among tasks.

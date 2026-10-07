@@ -10,6 +10,11 @@
       "type": "string",
       "minLength": 1
     },
+    "attempt": {
+      "description": "Attempt of the task, from 1: a cancelled task taken anew is the next attempt with the same identifier.",
+      "type": "integer",
+      "minimum": 1
+    },
     "project": {
       "description": "Identifier of the project.",
       "type": "string",
@@ -35,7 +40,7 @@
       "$ref": "#/$defs/scenario"
     },
     "stage": {
-      "description": "Current stage of the task; absent once the scenario is passed. Its exit, instruction and transitions are given by `gentry stage show`.",
+      "description": "Current stage of the task; absent once the scenario is passed. A cancelled task stays at the stage it was cancelled at. Its exit, instruction and transitions are given by `gentry stage show`.",
       "$ref": "#/$defs/stage"
     },
     "finished": {
@@ -47,7 +52,7 @@
       "$ref": "#/$defs/progress"
     },
     "worktree": {
-      "description": "Absolute path of the worktree the task holds; absent once the task released it.",
+      "description": "Absolute path of the worktree the task holds; absent once the task released it: a closed or a cancelled task holds none.",
       "type": "string",
       "minLength": 1
     },
@@ -83,10 +88,15 @@
       "description": "Time the task was taken in UTC, RFC 3339 with milliseconds.",
       "type": "string",
       "format": "date-time"
+    },
+    "ended": {
+      "description": "When and by whom the task was closed or cancelled; present only for a closed or a cancelled task.",
+      "$ref": "#/$defs/ended"
     }
   },
   "required": [
     "id",
+    "attempt",
     "project",
     "title",
     "state",
@@ -175,6 +185,35 @@
         "passed",
         "total_min",
         "total_max"
+      ]
+    },
+    "ended": {
+      "title": "TaskEnded",
+      "description": "The closing or the cancelling of a task.",
+      "type": "object",
+      "properties": {
+        "time": {
+          "description": "Time the task was closed or cancelled in UTC, RFC 3339 with milliseconds.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "description": "Who closed or cancelled the task: operator or agent.",
+          "type": "string",
+          "enum": [
+            "operator",
+            "agent"
+          ]
+        },
+        "reason": {
+          "description": "Why the task was cancelled; absent if no reason was given and for a closed task.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "time",
+        "source"
       ]
     }
   }

@@ -41,12 +41,34 @@ type wayTask struct {
 
 // openWayTask opens the state store, for writing unless read is set, and
 // finds the task named by key, or the task of the current worktree if key is
-// not set. The caller closes the store; without a store there is no task.
+// not set. A command that writes refuses a closed or cancelled task. The
+// caller closes the store; without a store there is no task.
 func openWayTask(key *stringFlag, read bool) (wayTask, *failure) {
-	fail := func(f failure) (wayTask, *failure) { return wayTask{}, &f }
 	if key.Set && key.Value == "" {
-		return fail(flagValueMissing("--task"))
+		f := flagValueMissing("--task")
+		return wayTask{}, &f
 	}
+	return openTask(key.Value, key.Set, read, func(v string) failure {
+		return flagValueInvalid("--task", v, msg.Text(msg.ErrTaskKeyInvalid, v), msg.Text(msg.HintTaskKey))
+	})
+}
+
+// openArgTask is openWayTask for a command of the group task, which names
+// the task by its first argument.
+func openArgTask(cmd string, args []string, read bool) (wayTask, *failure) {
+	var key string
+	if len(args) > 0 {
+		key = args[0]
+	}
+	return openTask(key, len(args) > 0, read, func(v string) failure {
+		return invalidArgument(cmd, "task", v, msg.Text(msg.ErrTaskKeyInvalid, v), msg.Text(msg.HintTaskKey))
+	})
+}
+
+// openTask finds the task named by key if named is set, or the task of the
+// current worktree; badKey is the refusal of a key that names no task.
+func openTask(key string, named, read bool, badKey func(string) failure) (wayTask, *failure) {
+	fail := func(f failure) (wayTask, *failure) { return wayTask{}, &f }
 	// A store that does not exist has no tasks: it is not created to say so.
 	st, bad := openTasks()
 	if bad != nil {
@@ -75,17 +97,19 @@ func openWayTask(key *stringFlag, read bool) (wayTask, *failure) {
 		return closeOnFail(internal(err))
 	}
 	var t state.Task
-	if key.Set {
-		t, err = task.Find(tasks, key.Value)
+	if named {
+		t, err = task.Find(tasks, key)
 	} else {
 		t, err = task.Current(tasks, worktrees, wd)
 	}
-	var badKey *task.InvalidKeyError
+	var invalid *task.InvalidKeyError
 	switch {
-	case errors.As(err, &badKey):
-		return closeOnFail(flagValueInvalid("--task", badKey.Value, msg.Text(msg.ErrTaskKeyInvalid, badKey.Value), msg.Text(msg.HintTaskKey)))
+	case errors.As(err, &invalid):
+		return closeOnFail(badKey(invalid.Value))
 	case err != nil:
 		return closeOnFail(taskFailure(err))
+	case !read && t.IsEnded():
+		return closeOnFail(taskFailure(&task.EndedError{Task: t.Key(), State: t.State}))
 	}
 	here := false
 	if d, err := paths.Canonical(wd); err == nil && t.Worktree != "" {
@@ -102,23 +126,45 @@ func (w wayTask) close() {
 }
 
 // hint returns a hint for the task: outside its worktree each command in it
-// names the task, as task show does by its argument and other commands by
-// --task.
+// names the task, as the commands of the group task do by their argument and
+// other commands by --task. A command that names the task already is left
+// as it is.
 func (w wayTask) hint(h string) string {
 	if w.here || h == "" {
 		return h
 	}
+	key := w.task.Key()
 	lines := strings.Split(h, "\n")
 	for i, l := range lines {
 		switch {
-		case !strings.Contains(l, "gentry "), strings.HasSuffix(l, "--help"):
-		case strings.HasSuffix(l, "gentry task show"):
-			lines[i] = l + " " + w.task.Key()
+		case !strings.Contains(l, "gentry "), strings.HasSuffix(l, "--help"), strings.Contains(l, " "+key):
 		default:
-			lines[i] = l + " --task " + w.task.Key()
+			var ok bool
+			if lines[i], ok = withArg(l, key); !ok {
+				lines[i] = l + " --task " + key
+			}
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// argCommands are the commands that name the task by their argument.
+var argCommands = []string{"gentry task show", "gentry task close", "gentry task cancel", "gentry task attempts"}
+
+// withArg names the task in a line of a hint with a command that takes it
+// by its argument, right after the command; ok is false if the line has no
+// such command.
+func withArg(line, key string) (string, bool) {
+	for _, c := range argCommands {
+		i := strings.Index(line, c)
+		if i < 0 {
+			continue
+		}
+		if rest := line[i+len(c):]; rest == "" || rest[0] == ' ' {
+			return line[:i+len(c)] + " " + key + rest, true
+		}
+	}
+	return line, false
 }
 
 // fail prints a failure with its hint for the task.
@@ -189,6 +235,9 @@ func stepNumbers(steps []state.Step) []int {
 // wayFailure turns an error of a command of the way of a task into a
 // failure; cmd is the command, for the hint to its help.
 func wayFailure(cmd string, err error) failure {
+	if f, ok := endFailure(err); ok {
+		return f
+	}
 	var (
 		finished   *task.FinishedError
 		field      *task.FieldError
@@ -208,7 +257,7 @@ func wayFailure(cmd string, err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeScenarioFinished,
 			message: msg.Text(msg.ErrScenarioFinished, finished.Task),
-			hint:    msg.Text(msg.HintTaskShowKey, finished.Task),
+			hint:    msg.Text(msg.HintTaskClose),
 			details: map[string]any{"task": finished.Task},
 		}
 	case errors.As(err, &field) && field.Field == "to":

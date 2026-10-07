@@ -21,7 +21,7 @@ import (
 
 // takeFields are the fields of task take: each is a flag and a field of
 // --input of the same name, in the order of the command spec.
-var takeFields = []string{"scenario", "title", "statement", "worktree"}
+var takeFields = []string{"task", "scenario", "title", "statement", "worktree"}
 
 // taskStates are the states of a task as --state names them, with their
 // words for the operator.
@@ -116,6 +116,14 @@ func runTaskTake(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
+	var again *state.Task
+	if key := fields["task"]; key != "" {
+		t, bad := cancelledTask(st, key, w)
+		if bad != nil {
+			return fail(env, *bad)
+		}
+		again = &t
+	}
 	r, places, bad := openTaskFlow(w.Project)
 	if bad != nil {
 		return fail(env, *bad)
@@ -153,7 +161,7 @@ func runTaskTake(args []string, env Env) int {
 	}
 	t, err := task.Take(st, task.TakeRequest{
 		Project: w.Project, Worktree: w.Path, Scenario: sc,
-		Title: fields["title"], Statement: fields["statement"], Source: source,
+		Title: fields["title"], Statement: fields["statement"], Source: source, Again: again,
 		Snapshot: res.Snapshot, Flow: applied, Library: library,
 	})
 	if err != nil {
@@ -172,7 +180,12 @@ func runTaskTake(args []string, env Env) int {
 		return contract.ExitOK
 	}
 	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.TaskTaken, t.Key()))
+	if again == nil {
+		fmt.Fprintln(&b, msg.Text(msg.TaskTaken, t.Key()))
+	} else {
+		fmt.Fprintln(&b, msg.Text(msg.TaskTakenAnew, t.Key()))
+		fmt.Fprintln(&b, msg.Text(msg.AttemptLine, t.Attempt))
+	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskTitle, t.Title))
 	fmt.Fprintln(&b, msg.Text(msg.TaskScenario, orNone(v.ScenarioTitle)))
 	fmt.Fprintln(&b, msg.Text(msg.TaskStage, orNone(v.StageTitle)))
@@ -189,8 +202,22 @@ func runTaskTake(args []string, env Env) int {
 }
 
 // checkTakeFields refuses a task without a scenario, a title or a statement,
-// and a title that is not one line of up to 80 characters.
+// and a title that is not one line of up to 80 characters. A task taken anew
+// keeps its own title and statement: they are refused with it.
 func checkTakeFields(fields map[string]string) *failure {
+	if fields["task"] != "" {
+		for _, name := range []string{"title", "statement"} {
+			if fields[name] != "" {
+				f := conflictingFlags("task take", []string{"--task", "--" + name})
+				return &f
+			}
+		}
+		if strings.TrimSpace(fields["scenario"]) == "" {
+			f := missingField("task take", "scenario", msg.Text(msg.ErrScenarioMissing), msg.Text(msg.HintFlowScenarios))
+			return &f
+		}
+		return nil
+	}
 	missing := func(field string, message, hint msg.Key, args ...any) *failure {
 		f := failure{
 			exit:    contract.ExitUsage,
@@ -250,6 +277,32 @@ func takeWorktree(st *state.Store, dir string) (state.Worktree, *failure) {
 		return fail(taskFailure(err))
 	}
 	return w, nil
+}
+
+// cancelledTask finds the task named by key to take anew in the worktree w:
+// its last attempt must be cancelled, of the project of w. The transaction
+// checks the attempt again: another command may take it meanwhile.
+func cancelledTask(st *state.Store, key string, w state.Worktree) (state.Task, *failure) {
+	fail := func(f failure) (state.Task, *failure) { return state.Task{}, &f }
+	tasks, err := st.Tasks()
+	if err != nil {
+		return fail(stateFailure(err))
+	}
+	t, err := task.Find(tasks, key)
+	var invalid *task.InvalidKeyError
+	switch {
+	case errors.As(err, &invalid):
+		return fail(flagValueInvalid("--task", invalid.Value, msg.Text(msg.ErrTaskKeyInvalid, invalid.Value), msg.Text(msg.HintTaskKey)))
+	case err != nil:
+		return fail(taskFailure(err))
+	}
+	if err := task.CheckAgain(t); err != nil {
+		return fail(taskFailure(err))
+	}
+	if t.Project != w.Project {
+		return fail(taskFailure(&task.ProjectMismatchError{Task: t.Key(), Project: t.Project, Worktree: w.Path, WorktreeProject: w.Project}))
+	}
+	return t, nil
 }
 
 // openTaskFlow opens the process repository with the places of the flow of
@@ -317,22 +370,7 @@ func runTaskShow(args []string, env Env) int {
 	}
 
 	if *asJSON {
-		out := contract.TaskShowOutput{Task: taskJSON(v), Path: []contract.TaskPass{}, Notes: []contract.TaskNote{},
-			Artifacts: []contract.TaskArtifact{}, OperatorDecisions: []contract.OperatorDecision{}}
-		for _, p := range v.Path {
-			out.Path = append(out.Path, passJSON(p))
-		}
-		for _, n := range notes {
-			out.Notes = append(out.Notes, noteJSON(n))
-		}
-		for _, a := range artifacts {
-			path, _ := task.ArtifactPath(t, a.Name)
-			out.Artifacts = append(out.Artifacts, artifactJSON(a, path))
-		}
-		for _, d := range decisions {
-			out.OperatorDecisions = append(out.OperatorDecisions, decisionJSON(d))
-		}
-		if err := writeJSON(env, out); err != nil {
+		if err := writeJSON(env, taskShowJSON(v, notes, artifacts, decisions)); err != nil {
 			return fail(env, internal(err))
 		}
 		return contract.ExitOK
@@ -358,18 +396,7 @@ func runTaskShow(args []string, env Env) int {
 	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskHeading, t.Key(), t.Title))
 	b.WriteString("\n")
-	fmt.Fprintln(&b, msg.Text(msg.TaskProject, t.Project))
-	fmt.Fprintln(&b, msg.Text(msg.TaskState, stateWord(t.State)))
-	fmt.Fprintln(&b, msg.Text(msg.TaskScenario, named(v.ScenarioTitle, t.Scenario)))
-	fmt.Fprintln(&b, msg.Text(msg.TaskStage, stageRound(v.StageTitle, v.Stage, v.Round, v.Finished)))
-	if v.Flow != nil {
-		fmt.Fprintln(&b, msg.Text(msg.ProgressLine, progressText(v.Progress)))
-	}
-	fmt.Fprintln(&b, msg.Text(msg.TaskTakenAt, localTime(t.Taken)))
-	fmt.Fprintln(&b, msg.Text(msg.TaskFlowApplied, localTime(t.FlowApplied)))
-	if t.Worktree != "" {
-		fmt.Fprintln(&b, msg.Text(msg.TaskWorktree, t.Worktree))
-	}
+	writeTaskFields(&b, v)
 	if *full {
 		writePasses(&b, v)
 	} else {
@@ -385,8 +412,62 @@ func runTaskShow(args []string, env Env) int {
 	if len(notes) > 0 {
 		fmt.Fprintln(&b, hint(msg.Text(msg.HintNotes)))
 	}
+	if t.Attempt > 1 {
+		fmt.Fprintln(&b, hint(msg.Text(msg.HintAttempts)))
+	}
+	switch {
+	case t.State == state.TaskCancelled:
+		fmt.Fprintln(&b, msg.Text(msg.HintTaskAgain, t.Key()))
+	case !t.IsEnded() && v.Finished:
+		fmt.Fprintln(&b, hint(msg.Text(msg.HintTaskClose)))
+	}
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK
+}
+
+// writeTaskFields prints the fields of the task of v, one «name: value» a
+// line: its state, scenario, stage, progress, times and worktree.
+func writeTaskFields(b *strings.Builder, v task.View) {
+	t := v.Task
+	fmt.Fprintln(b, msg.Text(msg.TaskProject, t.Project))
+	fmt.Fprintln(b, msg.Text(msg.TaskState, stateWord(t.State)))
+	fmt.Fprintln(b, msg.Text(msg.TaskScenario, named(v.ScenarioTitle, t.Scenario)))
+	fmt.Fprintln(b, msg.Text(msg.TaskStage, stageRound(v.StageTitle, v.Stage, v.Round, v.Finished)))
+	if v.Flow != nil {
+		fmt.Fprintln(b, msg.Text(msg.ProgressLine, progressText(v.Progress)))
+	}
+	fmt.Fprintln(b, msg.Text(msg.TaskTakenAt, localTime(t.Taken)))
+	if !t.Ended.IsZero() {
+		fmt.Fprintln(b, endedLine(t))
+	}
+	fmt.Fprintln(b, msg.Text(msg.TaskFlowApplied, localTime(t.FlowApplied)))
+	if t.Reason != "" {
+		fmt.Fprintln(b, msg.Text(msg.CancelReasonLine, oneLine(t.Reason)))
+	}
+	if t.Worktree != "" {
+		fmt.Fprintln(b, msg.Text(msg.TaskWorktree, t.Worktree))
+	}
+}
+
+// taskShowJSON returns the task of v with its path, notes, artifacts and
+// decisions of the operator as task show --json gives them.
+func taskShowJSON(v task.View, notes []state.Note, artifacts []state.Artifact, decisions []state.Decision) contract.TaskShowOutput {
+	out := contract.TaskShowOutput{Task: taskJSON(v), Path: []contract.TaskPass{}, Notes: []contract.TaskNote{},
+		Artifacts: []contract.TaskArtifact{}, OperatorDecisions: []contract.OperatorDecision{}}
+	for _, p := range v.Path {
+		out.Path = append(out.Path, passJSON(p))
+	}
+	for _, n := range notes {
+		out.Notes = append(out.Notes, noteJSON(n))
+	}
+	for _, a := range artifacts {
+		path, _ := task.ArtifactPath(v.Task, a.Name)
+		out.Artifacts = append(out.Artifacts, artifactJSON(a, path))
+	}
+	for _, d := range decisions {
+		out.OperatorDecisions = append(out.OperatorDecisions, decisionJSON(d))
+	}
+	return out
 }
 
 // named is an object of a flow by its title and identifier, or by its
@@ -465,7 +546,7 @@ func runTaskList(args []string, env Env) int {
 		}
 	}
 	var picked []state.Task
-	for _, t := range tasks {
+	for _, t := range task.Latest(tasks) {
 		switch {
 		case scope != "" && t.Project != scope:
 		case only.Set && t.State != only.Value:
@@ -483,7 +564,7 @@ func runTaskList(args []string, env Env) int {
 		out := contract.TaskListOutput{Tasks: []contract.TaskListItem{}}
 		for _, v := range views {
 			item := contract.TaskListItem{
-				Id: v.Key(), Project: v.Project, Title: v.Title, State: contract.TaskListOutputTasksElemState(v.State),
+				Id: v.Key(), Attempt: v.Attempt, Project: v.Project, Title: v.Title, State: contract.TaskListOutputTasksElemState(v.State),
 				Scenario: contract.TaskScenario{Id: v.Scenario, Title: v.ScenarioTitle},
 				Stage:    stageJSON(v), Finished: v.Finished, Progress: progressJSON(v.Progress),
 				Taken: v.Taken,
@@ -569,7 +650,7 @@ func readTasks(st *state.Store) ([]state.Task, []state.Worktree, *failure) {
 // taskJSON returns the task of v as the contract has it.
 func taskJSON(v task.View) contract.Task {
 	t := contract.Task{
-		Id: v.Key(), Project: v.Project, Title: v.Title, State: contract.TaskState(v.State),
+		Id: v.Key(), Attempt: v.Attempt, Project: v.Project, Title: v.Title, State: contract.TaskState(v.State),
 		Scenario:  contract.TaskScenario{Id: v.Scenario, Title: v.ScenarioTitle},
 		Stage:     stageJSON(v),
 		Finished:  v.Finished,
@@ -577,6 +658,7 @@ func taskJSON(v task.View) contract.Task {
 		Flow:      contract.Applied{Commit: v.FlowCommit, Time: v.FlowApplied},
 		Statement: contract.TaskStatement{Text: v.Statement, Source: contract.TaskStatementSource(v.Source)},
 		Taken:     v.Taken,
+		Ended:     endedJSON(v.Task),
 	}
 	if v.Worktree != "" {
 		w := v.Worktree
@@ -594,7 +676,7 @@ func statementHint(t state.Task, here, decisions bool) string {
 		h = msg.Text(msg.HintStatementDecisions)
 	}
 	if !here {
-		h = strings.Replace(h, "gentry task show", "gentry task show "+t.Key(), 1)
+		h, _ = withArg(h, t.Key())
 	}
 	return h
 }
@@ -626,7 +708,7 @@ func writePath(b *strings.Builder, v task.View) {
 		if !p.Current() {
 			next = nodeName(p.Next)
 		}
-		rows = append(rows, []string{passStage(v, p), strconv.Itoa(p.Round), outcomeWord(p), next})
+		rows = append(rows, []string{passStage(v, p), strconv.Itoa(p.Round), outcomeWord(v, p), next})
 	}
 	writeTable(b, rows)
 	if n := len(v.Path); v.Path[n-1].Current() {
@@ -641,7 +723,7 @@ func writePasses(b *strings.Builder, v task.View) {
 	for _, p := range v.Path {
 		b.WriteString("\n")
 		fmt.Fprintln(b, msg.Text(msg.StageRound, named(v.StageTitleOf(p.Stage), p.Stage), p.Round))
-		fmt.Fprintln(b, msg.Text(msg.OutcomeLine, outcomeWord(p)))
+		fmt.Fprintln(b, msg.Text(msg.OutcomeLine, outcomeWord(v, p)))
 		if p.Current() {
 			b.WriteString("\n")
 			writeStepTable(b, p.Steps)
@@ -671,9 +753,12 @@ func passStage(v task.View, p state.Pass) string {
 	return p.Stage
 }
 
-// outcomeWord names how a pass was closed, or that it goes on.
-func outcomeWord(p state.Pass) string {
+// outcomeWord names how a pass of the task of v was closed, or that it goes
+// on; the pass a cancelled task stopped at has no outcome.
+func outcomeWord(v task.View, p state.Pass) string {
 	switch {
+	case p.Current() && v.State == state.TaskCancelled:
+		return msg.Text(msg.ValueNone)
 	case p.Current():
 		return msg.Text(msg.OutcomeCurrent)
 	case p.Outcome == state.OutcomeSkip:
@@ -713,6 +798,9 @@ func writeArtifacts(b *strings.Builder, t state.Task, artifacts []state.Artifact
 // taskFailure turns an error of a task command into a failure.
 func taskFailure(err error) failure {
 	if f, ok := resolveFailure(err); ok {
+		return f
+	}
+	if f, ok := endFailure(err); ok {
 		return f
 	}
 	var (

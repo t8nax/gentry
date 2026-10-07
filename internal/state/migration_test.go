@@ -224,3 +224,62 @@ func TestMigrationFromSchema6(t *testing.T) {
 	}
 	c.Close()
 }
+
+// TestMigrationFromSchema7 checks that a task of schema 7 becomes attempt 1
+// in work, can be ended and taken anew.
+func TestMigrationFromSchema7(t *testing.T) {
+	path := tempPath(t)
+	orig := migrations
+	migrations = orig[:7]
+	s := mustOpen(t, path)
+	var task Task
+	if err := s.Write(func(tx *Tx) error {
+		if err := tx.AddProject(Project{ID: "shop", Prefix: "SHOP", Knowledge: "/k/shop"}); err != nil {
+			return err
+		}
+		if err := tx.AddWorktree(Worktree{Path: "/work/shop", Project: "shop", Main: true}); err != nil {
+			return err
+		}
+		if err := tx.AddSnapshot(FlowSnapshot{Project: "shop", Commit: "c1", Applied: time.Now(), Content: `{"files":{}}`}); err != nil {
+			return err
+		}
+		var err error
+		task, err = tx.AddTask(Task{Project: "shop", Number: 1, Title: "Возврат", Statement: "Текст", Source: SourceOperator,
+			State: TaskActive, Scenario: "feature", Node: "review", FlowCommit: "c1", Worktree: "/work/shop"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	// Opened for reading, the store of schema 7 has attempt 1 of each task.
+	r, err := OpenRead(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ts, err := r.Tasks(); err != nil || len(ts) != 1 || ts[0].Attempt != 1 || !ts[0].Ended.IsZero() {
+		t.Errorf("tasks of schema 7: %+v, %v", ts, err)
+	}
+	r.Close()
+	migrations = orig
+
+	s = mustOpen(t, path)
+	ts, err := s.Tasks()
+	if err != nil || len(ts) != 1 || ts[0].Attempt != 1 || ts[0].IsEnded() || ts[0].Worktree != "/work/shop" {
+		t.Fatalf("tasks after the move: %+v, %v", ts, err)
+	}
+	if err := s.Write(func(tx *Tx) error {
+		if _, err := tx.EndTask(task.ID, TaskCancelled, SourceOperator, ""); err != nil {
+			return err
+		}
+		_, err := tx.AddTask(Task{Project: "shop", Number: 1, Attempt: 2, Title: "Возврат", Statement: "Текст", Source: SourceOperator,
+			State: TaskActive, Scenario: "feature", Node: "branch", FlowCommit: "c1", Worktree: "/work/shop"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := OpenRead(fmt.Sprintf("%s.schema-7.bak", path))
+	if err != nil {
+		t.Fatalf("copy before migration: %v", err)
+	}
+	c.Close()
+}

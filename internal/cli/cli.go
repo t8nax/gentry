@@ -183,6 +183,7 @@ func commands() []command {
 				{
 					name: "task take", summary: msg.CmdTaskTakeSummary, desc: msg.CmdTaskTakeDesc,
 					flags: []flagSpec{
+						{name: "task", value: msg.ArgTask, desc: descText(msg.FlagTaskTask)},
 						{name: "scenario", value: msg.ArgScenario, desc: descText(msg.FlagTaskScenario)},
 						{name: "title", value: msg.ArgTitle, desc: descText(msg.FlagTaskTitle)},
 						{name: "statement", value: msg.ArgText, desc: descText(msg.FlagTaskStatement)},
@@ -211,6 +212,31 @@ func commands() []command {
 						jsonFlag,
 					},
 					run: runTaskList,
+				},
+				{
+					name: "task close", summary: msg.CmdTaskCloseSummary, desc: msg.CmdTaskCloseDesc,
+					args:  []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
+					flags: []flagSpec{jsonFlag},
+					run:   runTaskClose,
+				},
+				{
+					name: "task cancel", summary: msg.CmdTaskCancelSummary, desc: msg.CmdTaskCancelDesc,
+					args: []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
+					flags: []flagSpec{
+						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagCancelReason)},
+						inputFlag("reason", false),
+						jsonFlag,
+					},
+					run: runTaskCancel,
+				},
+				{
+					name: "task attempts", summary: msg.CmdTaskAttemptsSummary, desc: msg.CmdTaskAttemptsDesc,
+					args: []argSpec{
+						{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true},
+						{name: msg.ArgAttempt, desc: descText(msg.ArgAttemptDesc), optional: true},
+					},
+					flags: []flagSpec{jsonFlag},
+					run:   runTaskAttempts,
 				},
 			},
 		},

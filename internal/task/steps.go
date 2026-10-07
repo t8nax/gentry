@@ -106,7 +106,7 @@ func CloseStep(st *state.Store, task int64, number int, done bool, text, source 
 func changeSteps(st *state.Store, task int64, change func(*state.Tx, state.Task, state.Pass) ([]int, error)) (Steps, error) {
 	var res Steps
 	err := st.Write(func(tx *state.Tx) error {
-		t, err := tx.Task(task)
+		t, err := active(tx, task)
 		if err != nil {
 			return err
 		}

@@ -6,7 +6,7 @@
   "type": "object",
   "properties": {
     "tasks": {
-      "description": "Tasks that match the flags: by project, then by number.",
+      "description": "Tasks that match the flags, the last attempt of each: by project, then by number.",
       "type": "array",
       "items": {
         "title": "TaskListItem",
@@ -16,6 +16,11 @@
             "description": "Identifier of the task, such as SHOP-1.",
             "type": "string",
             "minLength": 1
+          },
+          "attempt": {
+            "description": "Attempt of the task, as in Task.",
+            "type": "integer",
+            "minimum": 1
           },
           "project": {
             "description": "Identifier of the project.",
@@ -66,6 +71,7 @@
         },
         "required": [
           "id",
+          "attempt",
           "project",
           "title",
           "state",

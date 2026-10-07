@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/task.closed.json",
+  "title": "TaskClosedData",
+  "description": "Data of the task.closed event: the task in the event envelope passed its scenario, was closed and released its worktree.",
+  "type": "object",
+  "properties": {
+    "attempt": { "description": "Attempt of the task.", "type": "integer", "minimum": 1 },
+    "worktree": { "description": "Absolute path of the worktree the task released.", "type": "string", "minLength": 1 },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": ["operator", "agent"]
+    }
+  },
+  "required": ["attempt", "worktree", "source"]
+}

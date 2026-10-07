@@ -265,9 +265,13 @@ func openTaskFlow(projectID string) (*process.Repo, flow.Places, *failure) {
 func runTaskShow(args []string, env Env) int {
 	f := newFlags("task show")
 	full := f.Bool("path")
+	onlyStatement := f.Bool("statement")
 	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
+	}
+	if *full && *onlyStatement {
+		return fail(env, conflictingFlags("task show", []string{"--path", "--statement"}))
 	}
 	st, bad := openTasks()
 	if bad != nil {
@@ -326,7 +330,21 @@ func runTaskShow(args []string, env Env) int {
 		}
 		return contract.ExitOK
 	}
+	// task show without a number finds the task only from its worktree.
+	here := false
+	if wd, err := os.Getwd(); err == nil && t.Worktree != "" {
+		if d, err := paths.Canonical(wd); err == nil {
+			here = paths.Within(d, t.Worktree)
+		}
+	}
 	var b strings.Builder
+	if *onlyStatement {
+		writeText(&b, msg.Text(msg.StatementHeading, t.Key()), t.Statement)
+		b.WriteString("\n")
+		fmt.Fprintln(&b, msg.Text(msg.TaskSource, sourceWord(t.Source)))
+		fmt.Fprint(env.Stdout, b.String())
+		return contract.ExitOK
+	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskHeading, t.Key(), t.Title))
 	b.WriteString("\n")
 	fmt.Fprintln(&b, msg.Text(msg.TaskProject, t.Project))
@@ -338,24 +356,23 @@ func runTaskShow(args []string, env Env) int {
 	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskTakenAt, localTime(t.Taken)))
 	fmt.Fprintln(&b, msg.Text(msg.TaskFlowApplied, localTime(t.FlowApplied)))
-	fmt.Fprintln(&b, msg.Text(msg.TaskSource, sourceWord(t.Source)))
 	if t.Worktree != "" {
 		fmt.Fprintln(&b, msg.Text(msg.TaskWorktree, t.Worktree))
 	}
-	b.WriteString("\n")
-	writeText(&b, msg.Text(msg.TaskStatement), t.Statement)
 	if *full {
 		writePasses(&b, v)
 	} else {
 		writePath(&b, v)
 	}
-	if len(notes) > 0 {
-		b.WriteString("\n")
-		writeNotes(&b, notes)
-	}
 	if len(artifacts) > 0 {
 		b.WriteString("\n")
 		writeArtifacts(&b, t, artifacts)
+	}
+	b.WriteString("\n")
+	hint := wayTask{task: t, here: here}.hint
+	fmt.Fprintln(&b, statementHint(t, here))
+	if len(notes) > 0 {
+		fmt.Fprintln(&b, hint(msg.Text(msg.HintNotes)))
 	}
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK
@@ -555,6 +572,16 @@ func taskJSON(v task.View) contract.Task {
 		t.Worktree = &w
 	}
 	return t
+}
+
+// statementHint is the hint to the statement of t; outside its worktree it
+// names the task, as task show takes it.
+func statementHint(t state.Task, here bool) string {
+	h := msg.Text(msg.HintStatement)
+	if !here {
+		h = strings.Replace(h, "gentry task show", "gentry task show "+t.Key(), 1)
+	}
+	return h
 }
 
 // stageJSON returns the current stage of v as the contract has it; nil once

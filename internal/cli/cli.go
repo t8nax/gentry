@@ -197,6 +197,7 @@ func commands() []command {
 					args: []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
 					flags: []flagSpec{
 						{name: "path", desc: descText(msg.FlagTaskShowPath)},
+						{name: "statement", desc: descText(msg.FlagTaskShowStatement)},
 						jsonFlag,
 					},
 					run: runTaskShow,
@@ -289,6 +290,11 @@ func commands() []command {
 					args:  []argSpec{{name: msg.ArgText, desc: descText(msg.ArgNoteDesc)}},
 					flags: []flagSpec{taskFlag, inputFlag("text", true), jsonFlag},
 					run:   runNoteAdd,
+				},
+				{
+					name: "note list", summary: msg.CmdNoteListSummary, desc: msg.CmdNoteListDesc,
+					flags: []flagSpec{taskFlag, jsonFlag},
+					run:   runNoteList,
 				},
 			},
 		},

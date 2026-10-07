@@ -220,13 +220,28 @@ func TestStageFeature(t *testing.T) {
 			"Ревью       1     результат      implementation",
 			"Реализация  2     результат      review",
 		),
-		"Ревью       4     результат      merge\nСлияние     1     результат      конец\n\nЗаметки:\n",
-		"  1. На ревью проверить, что возврат по СБП не задет\n  2. Первая строка.\n     Вторая строка.\n",
+		"Ревью       4     результат      merge\nСлияние     1     результат      конец\n\nАРТЕФАКТ",
 		"АРТЕФАКТ  ВИД     СОХРАНЁН          МЕСТО\nplan      ссылка  ",
+		"\n\nПосмотреть постановку: gentry task show --statement\nПосмотреть заметки: gentry note list\n",
 	} {
 		if !strings.Contains(masked(stdout), masked(want)) {
 			t.Errorf("task show has no\n%s\noutput:\n%s", want, stdout)
 		}
+	}
+	if strings.Contains(stdout, "На ревью") || strings.Contains(stdout, "Постановка записана") {
+		t.Errorf("task show has the notes or the statement:\n%s", stdout)
+	}
+	wantRun(t, contract.ExitOK, lines(
+		"1. Реализация (implementation), круг 1:",
+		"   На ревью проверить, что возврат по СБП не задет",
+		"",
+		"2. Слияние (merge), круг 1:",
+		"   Первая строка.",
+		"   Вторая строка.",
+	), "", "note", "list")
+	out = wantJSON(t, contract.ExitOK, "schemas/note-list.json", "note", "list")
+	if !strings.Contains(out, `"task":"SHOP-1"`) || strings.Count(out, `"number":`) != 2 {
+		t.Errorf("note list --json: %s", out)
 	}
 	_, stdout, _ = run("task", "show", "--path")
 	for _, want := range []string{
@@ -570,5 +585,21 @@ func TestWayWithoutStore(t *testing.T) {
 	}
 	if p, _ := state.Path(); fileExists(p) {
 		t.Errorf("the commands must not create the state store %s", p)
+	}
+}
+
+// TestNoteListEmpty shows a task without notes, from another directory.
+func TestNoteListEmpty(t *testing.T) {
+	shop, fix := taskShop(t)
+	mustRun(t, takeArgs("--worktree", fix)...)
+	t.Chdir(shop)
+	wantRun(t, contract.ExitOK, "У задачи нет заметок.\n", "", "note", "list", "--task", "SHOP-1")
+	if out := wantJSON(t, contract.ExitOK, "schemas/note-list.json", "note", "list", "--task", "SHOP-1"); out != `{"notes":[],"task":"SHOP-1"}`+"\n" {
+		t.Errorf("note list --json: %s", out)
+	}
+	mustRun(t, "note", "add", "Заметка", "--task", "SHOP-1")
+	_, stdout, _ := run("task", "show", "SHOP-1")
+	if !strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show SHOP-1 --statement\nПосмотреть заметки: gentry note list --task SHOP-1\n") {
+		t.Errorf("task show from another directory:\n%s", stdout)
 	}
 }

@@ -85,16 +85,14 @@ func TestTaskTakeText(t *testing.T) {
 		"Прогресс: 0 из 5",
 		"Взята: <время>",
 		"Флоу задачи применён: <время>",
-		"Постановка записана: оператором",
 		"Рабочая копия: " + fix,
-		"",
-		"Постановка:",
-		"  " + statement,
 		"",
 		"ЭТАП   КРУГ  ИТОГ  ПЕРЕХОД",
 		"Ветка  1     идёт  —",
 		"",
 		"У этапа нет шагов.",
+		"",
+		"Посмотреть постановку: gentry task show --statement",
 	}, "\n") + "\n"
 	if code != contract.ExitOK || stderr != "" || masked(stdout) != want {
 		t.Errorf("task show: exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
@@ -116,10 +114,21 @@ func TestTaskTakeText(t *testing.T) {
 		t.Errorf("take from a file: exit code %d, output:\n%s", code, stdout)
 	}
 	t.Chdir(filepath.Dir(shop))
+	wantRun(t, contract.ExitOK, lines(
+		"Постановка задачи SHOP-2:",
+		"  Первая строка.",
+		"",
+		"  Третья строка.",
+		"",
+		"Постановка записана: оператором",
+	), "", "task", "show", "shop-2", "--statement")
 	_, stdout, _ = run("task", "show", "shop-2")
-	if !strings.Contains(stdout, "Постановка:\n  Первая строка.\n\n  Третья строка.\n\n") || !strings.Contains(stdout, "Этап: Ветка (branch), круг 1\n") {
+	if !strings.Contains(stdout, "Этап: Ветка (branch), круг 1\n") || strings.Contains(stdout, "Первая строка") ||
+		!strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show SHOP-2 --statement\n") {
 		t.Errorf("task show shop-2:\n%s", stdout)
 	}
+	wantRun(t, contract.ExitUsage, "", lines(msg.Text(msg.ErrConflictingFlags, "--path", "--statement"), "", msg.Text(msg.HintCommandHelp, "task show")),
+		"task", "show", "shop-2", "--statement", "--path")
 
 	// Outside a project the list has the project column.
 	header := []string{"ПРОЕКТ", "НОМЕР", "НАЗВАНИЕ", "СОСТОЯНИЕ", "СЦЕНАРИЙ", "ЭТАП", "РАБОЧАЯ КОПИЯ"}

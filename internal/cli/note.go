@@ -58,23 +58,62 @@ func noteJSON(n state.Note) contract.TaskNote {
 		Source: contract.TaskNoteSource(n.Source), Added: n.Added}
 }
 
-// writeNotes prints the notes of a task as a numbered list; the lines of a
-// note of several lines are indented under its text.
-func writeNotes(b *strings.Builder, notes []state.Note) {
-	fmt.Fprintln(b, msg.Text(msg.NotesHeading))
-	for _, n := range notes {
-		mark := fmt.Sprintf("%d. ", n.Number)
-		indent := strings.Repeat(" ", 2+len(mark))
-		for i, line := range strings.Split(strings.TrimRight(n.Text, "\n"), "\n") {
-			line = strings.TrimRight(line, " \t\r")
-			switch {
-			case i == 0:
-				fmt.Fprintf(b, "  %s%s\n", mark, line)
-			case line == "":
-				b.WriteString("\n")
-			default:
-				fmt.Fprintf(b, "%s%s\n", indent, line)
-			}
+func runNoteList(args []string, env Env) int {
+	f := newFlags("note list")
+	key := f.String("task")
+	asJSON := f.Bool("json")
+	if code, done := f.parse(args, env); done {
+		return code
+	}
+	w, bad := openWayTask(key, true)
+	if bad != nil {
+		return fail(env, *bad)
+	}
+	defer w.close()
+	notes, err := w.st.Notes(w.task.ID)
+	if err != nil {
+		return w.fail(env, stateFailure(err))
+	}
+	if *asJSON {
+		out := contract.NoteListOutput{Task: w.task.Key(), Notes: []contract.TaskNote{}}
+		for _, n := range notes {
+			out.Notes = append(out.Notes, noteJSON(n))
 		}
+		if err := writeJSON(env, out); err != nil {
+			return fail(env, internal(err))
+		}
+		return contract.ExitOK
+	}
+	if len(notes) == 0 {
+		fmt.Fprintln(env.Stdout, msg.Text(msg.NotesNone))
+		return contract.ExitOK
+	}
+	v, bad := w.view()
+	if bad != nil {
+		return w.fail(env, *bad)
+	}
+	var b strings.Builder
+	for i, n := range notes {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		stage := msg.Text(msg.StageRound, named(v.StageTitleOf(n.Stage), n.Stage), n.Round)
+		fmt.Fprintln(&b, msg.Text(msg.NoteHeading, n.Number, stage))
+		writeIndented(&b, n.Text, strings.Repeat(" ", len(fmt.Sprintf("%d. ", n.Number))))
+	}
+	fmt.Fprint(env.Stdout, b.String())
+	return contract.ExitOK
+}
+
+// writeIndented prints a text written by a person as it is, each line with
+// indent; empty lines stay empty.
+func writeIndented(b *strings.Builder, text, indent string) {
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		line = strings.TrimRight(line, " \t\r")
+		if line == "" {
+			b.WriteString("\n")
+			continue
+		}
+		fmt.Fprintf(b, "%s%s\n", indent, line)
 	}
 }

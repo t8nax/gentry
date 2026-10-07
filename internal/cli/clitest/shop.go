@@ -11,33 +11,88 @@ import (
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
-	"github.com/t8nax/gentry/internal/paths"
 )
 
-// ShopDir makes a shop repository with a secondary worktree in a temporary
-// directory, gives the test a data root of its own and returns the directory.
-func ShopDir(t *testing.T) string {
+// work is the directory of the shop of the running test. The tests of a
+// package run one after another, so they take turns in it.
+var work string
+
+// layers are the shop as each fixture leaves it, built by the first test that
+// needs it and copied into work for the next ones. The copy is at the same
+// place, so the absolute paths in git and in the state store stay true, and
+// a test runs no git to prepare the shop.
+var layers struct {
+	dir   string
+	saved map[string]layer
+}
+
+// layer is a saved shop and the data root and the current directory of the
+// test that built it.
+type layer struct{ snapshot, home, wd string }
+
+// Layer gives the test the shop of fixture name: a copy of the saved one,
+// or one made by build and saved for the next tests.
+func Layer(t *testing.T, name string, build func()) {
 	t.Helper()
-	root, err := paths.Canonical(t.TempDir())
-	if err != nil {
+	if l, ok := layers.saved[name]; ok {
+		cleanWork(t)
+		if err := os.CopyFS(work, os.DirFS(l.snapshot)); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(home.EnvVar, l.home)
+		t.Chdir(l.wd)
+		return
+	}
+	build()
+	if t.Failed() {
+		return
+	}
+	l := layer{snapshot: filepath.Join(layers.dir, name), home: os.Getenv(home.EnvVar), wd: MustWd(t)}
+	if err := os.CopyFS(l.snapshot, os.DirFS(work)); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(home.EnvVar, filepath.Join(root, "home"))
-	shop := gittest.Repo(t, filepath.Join(root, "shop"))
-	gittest.Worktree(t, shop, filepath.Join(root, "shop-fix"), "fix")
-	return root
+	if layers.saved == nil {
+		layers.saved = map[string]layer{}
+	}
+	layers.saved[name] = l
+}
+
+// cleanWork empties work for the test and removes the shop once the test
+// ends. The removal is registered before the test changes the current
+// directory, so it runs after the directory is restored.
+func cleanWork(t *testing.T) {
+	t.Helper()
+	if err := os.RemoveAll(work); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(work) })
+}
+
+// ShopDir makes a shop repository with a secondary worktree, gives the test a
+// data root of its own and returns the directory of them.
+func ShopDir(t *testing.T) string {
+	t.Helper()
+	Layer(t, "dir", func() {
+		cleanWork(t)
+		t.Setenv(home.EnvVar, filepath.Join(work, "home"))
+		shop := gittest.Repo(t, filepath.Join(work, "shop"))
+		gittest.Worktree(t, shop, filepath.Join(work, "shop-fix"), "fix")
+	})
+	return work
 }
 
 // ConnectedShop connects the shop of ShopDir from its main worktree and
-// returns the directory of ShopDir.
+// returns the directory of ShopDir. The test runs in the main worktree.
 func ConnectedShop(t *testing.T) string {
 	t.Helper()
-	root := ShopDir(t)
-	t.Chdir(filepath.Join(root, "shop"))
-	if code, _, stderr := Run("project", "add", "shop", "--knowledge", "../shop-knowledge"); code != contract.ExitOK {
-		t.Fatalf("project add: %s", stderr)
-	}
-	return root
+	Layer(t, "connected", func() {
+		ShopDir(t)
+		t.Chdir(filepath.Join(work, "shop"))
+		if code, _, stderr := Run("project", "add", "shop", "--knowledge", "../shop-knowledge"); code != contract.ExitOK {
+			t.Fatalf("project add: %s", stderr)
+		}
+	})
+	return work
 }
 
 // ShopPlaces returns the places of the flow of the shop in the process
@@ -57,23 +112,25 @@ func ShopPlaces() flow.Places {
 // runs in the main worktree of the shop.
 func EmptyShopFlow(t *testing.T) flow.Places {
 	t.Helper()
-	ConnectedShop(t)
-	p := ShopPlaces()
-	if err := os.CopyFS(p.Library, os.DirFS(filepath.Join(flowTestdata, "agents"))); err != nil {
-		t.Fatal(err)
-	}
-	MustRun(t, "library", "apply")
-	return p
+	Layer(t, "library", func() {
+		ConnectedShop(t)
+		if err := os.CopyFS(ShopPlaces().Library, os.DirFS(filepath.Join(flowTestdata, "agents"))); err != nil {
+			t.Fatal(err)
+		}
+		MustRun(t, "library", "apply")
+	})
+	return ShopPlaces()
 }
 
 // ShopFlow connects the shop and applies the flow of the flow testdata. It
 // returns the places of the flow.
 func ShopFlow(t *testing.T) flow.Places {
 	t.Helper()
-	p := EmptyShopFlow(t)
-	CopyShopFlow(t, p)
-	MustRun(t, "flow", "apply")
-	return p
+	Layer(t, "flow", func() {
+		CopyShopFlow(t, EmptyShopFlow(t))
+		MustRun(t, "flow", "apply")
+	})
+	return ShopPlaces()
 }
 
 // CopyShopFlow puts the flow of the flow testdata into the flow directory.
@@ -148,10 +205,11 @@ func TaskShop(t *testing.T) (shop, fix string) {
 	t.Helper()
 	t.Setenv(caller.SessionEnv, "")
 	t.Setenv(caller.ClaudeSessionEnv, "")
-	ShopFlow(t)
-	root := filepath.Dir(MustWd(t))
-	shop, fix = filepath.Join(root, "shop"), filepath.Join(root, "shop-fix")
-	MustRun(t, "worktree", "add", fix)
+	shop, fix = filepath.Join(work, "shop"), filepath.Join(work, "shop-fix")
+	Layer(t, "pool", func() {
+		ShopFlow(t)
+		MustRun(t, "worktree", "add", fix)
+	})
 	return shop, fix
 }
 

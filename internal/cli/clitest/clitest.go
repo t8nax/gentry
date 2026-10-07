@@ -24,6 +24,7 @@ import (
 	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
+	"github.com/t8nax/gentry/internal/paths"
 )
 
 // Main points the data root and the user's home at a temporary directory, so
@@ -43,6 +44,12 @@ func Main(m *testing.M) int {
 		panic(err)
 	}
 	os.Setenv(claude.ProgramEnv, filepath.Join(dir, "no-claude"))
+	canonical, err := paths.Canonical(dir)
+	if err != nil {
+		panic(err)
+	}
+	work = filepath.Join(canonical, "work")
+	layers.dir = filepath.Join(canonical, "layers")
 	return m.Run()
 }
 

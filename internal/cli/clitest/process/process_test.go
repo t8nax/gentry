@@ -28,17 +28,18 @@ type machines struct {
 // takes the process there. The test is on B.
 func twoMachines(t *testing.T) machines {
 	t.Helper()
-	clitest.ShopFlow(t)
-	m := machines{t: t, a: os.Getenv(home.EnvVar)}
-	root := filepath.Dir(m.a)
-	m.remote = filepath.Join(root, "remote.git")
-	gittest.Run(t, root, "init", "--quiet", "--bare", m.remote)
-	clitest.MustRun(t, "process", "remote", m.remote)
-	m.b = filepath.Join(root, "home-b")
-	m.onB()
-	clitest.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
-	clitest.MustRun(t, "process", "remote", m.remote)
-	return m
+	clitest.Layer(t, "machines", func() {
+		clitest.ShopFlow(t)
+		root := filepath.Dir(os.Getenv(home.EnvVar))
+		remote := filepath.Join(root, "remote.git")
+		gittest.Run(t, root, "init", "--quiet", "--bare", remote)
+		clitest.MustRun(t, "process", "remote", remote)
+		t.Setenv(home.EnvVar, filepath.Join(root, "home-b"))
+		clitest.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
+		clitest.MustRun(t, "process", "remote", remote)
+	})
+	root := filepath.Dir(os.Getenv(home.EnvVar))
+	return machines{t: t, a: filepath.Join(root, "home"), b: filepath.Join(root, "home-b"), remote: filepath.Join(root, "remote.git")}
 }
 
 func (m machines) onA() { m.t.Setenv(home.EnvVar, m.a) }

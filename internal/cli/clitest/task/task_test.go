@@ -1,7 +1,6 @@
-package cli
+package task_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,53 +10,16 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/caller"
+	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/state"
 )
 
-// statement is the statement of the example of the plan.
-const statement = "Клиент возвращает часть заказа. Деньги должны вернуться на карту, которой он платил."
-
-// runWith runs a command with stdin as its standard input.
-func runWith(stdin string, args ...string) (code int, stdout, stderr string) {
-	var out, errOut bytes.Buffer
-	code = Run(args, Env{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errOut})
-	return code, out.String(), errOut.String()
-}
-
-// taskShop applies the flow of the shop and adds shop-fix to its pool. The
-// test runs in the main worktree; the calls are the operator's. It returns
-// the main worktree and shop-fix.
-func taskShop(t *testing.T) (shop, fix string) {
-	t.Helper()
-	t.Setenv(caller.SessionEnv, "")
-	t.Setenv(caller.ClaudeSessionEnv, "")
-	shopFlow(t)
-	root := filepath.Dir(mustWd(t))
-	shop, fix = filepath.Join(root, "shop"), filepath.Join(root, "shop-fix")
-	mustRun(t, "worktree", "add", fix)
-	return shop, fix
-}
-
-func mustWd(t *testing.T) string {
-	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return wd
-}
-
-// takeArgs are the flags of a task of the feature scenario.
-func takeArgs(extra ...string) []string {
-	return append([]string{"task", "take", "--scenario", "feature", "--title", "Частичный возврат по карте", "--statement", statement}, extra...)
-}
-
 func TestTaskTakeText(t *testing.T) {
-	shop, fix := taskShop(t)
+	shop, fix := clitest.TaskShop(t)
 
-	code, stdout, stderr := run(takeArgs("--worktree", fix)...)
+	code, stdout, stderr := clitest.Run(clitest.TakeArgs("--worktree", fix)...)
 	want := strings.Join([]string{
 		msg.Text(msg.TaskTaken, "SHOP-1"),
 		msg.Text(msg.TaskTitle, "Частичный возврат по карте"),
@@ -74,7 +36,7 @@ func TestTaskTakeText(t *testing.T) {
 
 	// From the worktree the hint needs no number.
 	t.Chdir(fix)
-	code, stdout, stderr = run("task", "show")
+	code, stdout, stderr = clitest.Run("task", "show")
 	want = strings.Join([]string{
 		"Задача SHOP-1: Частичный возврат по карте",
 		"",
@@ -94,11 +56,11 @@ func TestTaskTakeText(t *testing.T) {
 		"",
 		"Посмотреть постановку: gentry task show --statement",
 	}, "\n") + "\n"
-	if code != contract.ExitOK || stderr != "" || masked(stdout) != want {
+	if code != contract.ExitOK || stderr != "" || clitest.Masked(stdout) != want {
 		t.Errorf("task show: exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}
 	// The repeat is refused: the worktree holds the task.
-	code, _, stderr = run(takeArgs()...)
+	code, _, stderr = clitest.Run(clitest.TakeArgs()...)
 	want = msg.Text(msg.ErrWorktreeBusy, "SHOP-1", fix) + "\n\n" + msg.Text(msg.HintTaskShowKey, "SHOP-1") + "\n"
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("repeat: exit code %d, stderr %q, want %q", code, stderr, want)
@@ -107,14 +69,14 @@ func TestTaskTakeText(t *testing.T) {
 	// A statement of several lines from a file, in the main worktree.
 	t.Chdir(shop)
 	input := filepath.Join(t.TempDir(), "task.json")
-	writeFiles(t, filepath.Dir(input), map[string]string{"task.json": `{"scenario":"bug","title":"Двойное списание","statement":"Первая строка.\n\nТретья строка."}`})
-	code, stdout, _ = run("task", "take", "--input", input)
+	clitest.WriteFiles(t, filepath.Dir(input), map[string]string{"task.json": `{"scenario":"bug","title":"Двойное списание","statement":"Первая строка.\n\nТретья строка."}`})
+	code, stdout, _ = clitest.Run("task", "take", "--input", input)
 	if code != contract.ExitOK || !strings.HasPrefix(stdout, msg.Text(msg.TaskTaken, "SHOP-2")+"\n") ||
 		!strings.HasSuffix(stdout, "\n\n"+msg.Text(msg.HintTaskShow)+"\n") {
 		t.Errorf("take from a file: exit code %d, output:\n%s", code, stdout)
 	}
 	t.Chdir(filepath.Dir(shop))
-	wantRun(t, contract.ExitOK, lines(
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
 		"Постановка задачи SHOP-2:",
 		"  Первая строка.",
 		"",
@@ -122,28 +84,28 @@ func TestTaskTakeText(t *testing.T) {
 		"",
 		"Постановка записана: оператором",
 	), "", "task", "show", "shop-2", "--statement")
-	_, stdout, _ = run("task", "show", "shop-2")
+	_, stdout, _ = clitest.Run("task", "show", "shop-2")
 	if !strings.Contains(stdout, "Этап: Ветка (branch), круг 1\n") || strings.Contains(stdout, "Первая строка") ||
 		!strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show SHOP-2 --statement\n") {
 		t.Errorf("task show shop-2:\n%s", stdout)
 	}
-	wantRun(t, contract.ExitUsage, "", lines(msg.Text(msg.ErrConflictingFlags, "--path", "--statement"), "", msg.Text(msg.HintCommandHelp, "task show")),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--path", "--statement"), "", msg.Text(msg.HintCommandHelp, "task show")),
 		"task", "show", "shop-2", "--statement", "--path")
 
 	// Outside a project the list has the project column.
 	header := []string{"ПРОЕКТ", "НОМЕР", "НАЗВАНИЕ", "СОСТОЯНИЕ", "СЦЕНАРИЙ", "ЭТАП", "РАБОЧАЯ КОПИЯ"}
-	if _, stdout, _ := run("task", "list"); stdout != table(header,
+	if _, stdout, _ := clitest.Run("task", "list"); stdout != clitest.Table(header,
 		[]string{"shop", "SHOP-1", "Частичный возврат по карте", "в работе", "Фича", "Ветка", fix},
 		[]string{"shop", "SHOP-2", "Двойное списание", "в работе", "Баг", "Ветка", shop}) {
 		t.Errorf("task list outside the project:\n%s", stdout)
 	}
 	t.Chdir(fix)
-	if _, stdout, _ := run("task", "list"); stdout != table(header[1:],
+	if _, stdout, _ := clitest.Run("task", "list"); stdout != clitest.Table(header[1:],
 		[]string{"SHOP-1", "Частичный возврат по карте", "в работе", "Фича", "Ветка", fix},
 		[]string{"SHOP-2", "Двойное списание", "в работе", "Баг", "Ветка", shop}) {
 		t.Errorf("task list in the project:\n%s", stdout)
 	}
-	if _, stdout, _ := run("worktree", "list"); stdout != table([]string{"ПРОЕКТ", "РАБОЧАЯ КОПИЯ", "ВЕТКА", "СОСТОЯНИЕ"},
+	if _, stdout, _ := clitest.Run("worktree", "list"); stdout != clitest.Table([]string{"ПРОЕКТ", "РАБОЧАЯ КОПИЯ", "ВЕТКА", "СОСТОЯНИЕ"},
 		[]string{"shop", shop, "main", "основная, задача SHOP-2"},
 		[]string{"shop", fix, "fix", "задача SHOP-1"}) {
 		t.Errorf("worktree list:\n%s", stdout)
@@ -151,13 +113,13 @@ func TestTaskTakeText(t *testing.T) {
 }
 
 func TestTaskJSON(t *testing.T) {
-	_, fix := taskShop(t)
+	_, fix := clitest.TaskShop(t)
 	t.Chdir(fix)
-	code, stdout, _ := run(takeArgs("--json")...)
+	code, stdout, _ := clitest.Run(clitest.TakeArgs("--json")...)
 	if code != contract.ExitOK {
 		t.Fatalf("exit code %d: %s", code, stdout)
 	}
-	validate(t, "schemas/task-take.json", stdout)
+	clitest.Validate(t, "schemas/task-take.json", stdout)
 	var out contract.TaskTakeOutput
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatal(err)
@@ -165,32 +127,32 @@ func TestTaskJSON(t *testing.T) {
 	tk := out.Task
 	if tk.Id != "SHOP-1" || tk.Project != "shop" || tk.State != "active" || tk.Scenario.Title != "Фича" ||
 		tk.Stage.Node != "branch" || tk.Stage.Id != "branch" || tk.Stage.Title != "Ветка" || tk.Worktree == nil ||
-		*tk.Worktree != fix || tk.Statement.Source != "operator" || tk.Statement.Text != statement || tk.Flow.Commit == "" {
+		*tk.Worktree != fix || tk.Statement.Source != "operator" || tk.Statement.Text != clitest.Statement || tk.Flow.Commit == "" {
 		t.Errorf("task %+v", tk)
 	}
 	if !regexp.MustCompile(`"taken":"[^"]+\.\d{3}Z"`).MatchString(stdout) {
 		t.Errorf("the time of taking is not in UTC with milliseconds: %s", stdout)
 	}
 
-	code, show, _ := run("task", "show", "--json")
-	validate(t, "schemas/task-show.json", show)
+	code, show, _ := clitest.Run("task", "show", "--json")
+	clitest.Validate(t, "schemas/task-show.json", show)
 	var shown contract.TaskShowOutput
 	json.Unmarshal([]byte(show), &shown)
-	if code != contract.ExitOK || !jsonEqual(shown.Task, out.Task) {
+	if code != contract.ExitOK || !clitest.JSONEqual(shown.Task, out.Task) {
 		t.Errorf("task show --json:\n%s\nwant the task of:\n%s", show, stdout)
 	}
-	_, list, _ := run("task", "list", "--json")
-	validate(t, "schemas/task-list.json", list)
+	_, list, _ := clitest.Run("task", "list", "--json")
+	clitest.Validate(t, "schemas/task-list.json", list)
 	if !strings.Contains(list, `"id":"SHOP-1"`) || strings.Contains(list, `"statement"`) {
 		t.Errorf("task list --json: %s", list)
 	}
-	_, wl, _ := run("worktree", "list", "--json")
-	validate(t, "schemas/worktree-list.json", wl)
-	if !strings.Contains(wl, `"path":`+jsonString(fix)+`,"project":"shop","task":"SHOP-1"`) {
+	_, wl, _ := clitest.Run("worktree", "list", "--json")
+	clitest.Validate(t, "schemas/worktree-list.json", wl)
+	if !strings.Contains(wl, `"path":`+clitest.JSONString(fix)+`,"project":"shop","task":"SHOP-1"`) {
 		t.Errorf("worktree list --json: %s", wl)
 	}
 
-	_, events, _ := run("events")
+	_, events, _ := clitest.Run("events")
 	lines := strings.Split(strings.TrimSpace(events), "\n")
 	last := lines[len(lines)-1]
 	var e struct {
@@ -203,8 +165,8 @@ func TestTaskJSON(t *testing.T) {
 	if e.Type != "task.taken" || e.Project != "shop" || e.Task != "SHOP-1" {
 		t.Fatalf("last event: %s", last)
 	}
-	validate(t, "schemas/events/task.taken.json", string(e.Data))
-	want := `{"flow_commit":"` + tk.Flow.Commit + `","node":"branch","scenario":"feature","source":"operator","title":"Частичный возврат по карте","worktree":` + jsonString(fix) + `}`
+	clitest.Validate(t, "schemas/events/task.taken.json", string(e.Data))
+	want := `{"flow_commit":"` + tk.Flow.Commit + `","node":"branch","scenario":"feature","source":"operator","title":"Частичный возврат по карте","worktree":` + clitest.JSONString(fix) + `}`
 	if string(e.Data) != want {
 		t.Errorf("event data %s, want %s", e.Data, want)
 	}
@@ -214,46 +176,46 @@ func TestTaskJSON(t *testing.T) {
 // is marked by the hooks; a command typed by the operator with ! in the same
 // session is not.
 func TestTaskTakeByAgent(t *testing.T) {
-	shop, fix := taskShop(t)
+	shop, fix := clitest.TaskShop(t)
 	t.Setenv(caller.ClaudeSessionEnv, "sess-1")
 	hookInput := `{"session_id":"sess-1","tool_use_id":"toolu_1","tool_name":"Bash","tool_input":{"command":"gentry task take"}}`
-	if code, stdout, stderr := runWith(hookInput, "hook", "pre-tool"); code != contract.ExitOK || stdout != "" || stderr != "" {
+	if code, stdout, stderr := clitest.RunWith(hookInput, "hook", "pre-tool"); code != contract.ExitOK || stdout != "" || stderr != "" {
 		t.Fatalf("hook pre-tool: exit code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
-	input := `{"scenario":"feature","title":"Частичный возврат по карте","statement":"` + statement + `","worktree":` + jsonString(fix) + `}`
-	code, stdout, stderr := runWith(input, "task", "take", "--input", "-")
+	input := `{"scenario":"feature","title":"Частичный возврат по карте","statement":"` + clitest.Statement + `","worktree":` + clitest.JSONString(fix) + `}`
+	code, stdout, stderr := clitest.RunWith(input, "task", "take", "--input", "-")
 	if code != contract.ExitOK || !strings.Contains(stdout, msg.Text(msg.TaskSource, "агентом со слов оператора")+"\n") {
 		t.Fatalf("by the agent: exit code %d, stderr %q, output:\n%s", code, stderr, stdout)
 	}
-	if code, _, _ := runWith(hookInput, "hook", "post-tool"); code != contract.ExitOK {
+	if code, _, _ := clitest.RunWith(hookInput, "hook", "post-tool"); code != contract.ExitOK {
 		t.Fatalf("hook post-tool: exit code %d", code)
 	}
 	t.Chdir(shop)
-	if _, stdout, _ := run(takeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, "оператором")+"\n") {
+	if _, stdout, _ := clitest.Run(clitest.TakeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, "оператором")+"\n") {
 		t.Errorf("after the call of the agent:\n%s", stdout)
 	}
-	_, stdout, _ = run("task", "show", "SHOP-1", "--json")
+	_, stdout, _ = clitest.Run("task", "show", "SHOP-1", "--json")
 	if !strings.Contains(stdout, `"source":"agent"`) {
 		t.Errorf("task show --json: %s", stdout)
 	}
 
 	// Stop removes a mark left by an interrupted call.
-	runWith(`{"session_id":"sess-1","tool_use_id":"toolu_2"}`, "hook", "pre-tool")
+	clitest.RunWith(`{"session_id":"sess-1","tool_use_id":"toolu_2"}`, "hook", "pre-tool")
 	if !caller.ByAgent() {
 		t.Fatal("the call is not marked")
 	}
-	runWith(`{"session_id":"sess-1"}`, "hook", "stop")
+	clitest.RunWith(`{"session_id":"sess-1"}`, "hook", "stop")
 	if caller.ByAgent() {
 		t.Error("stop left the mark")
 	}
-	runWith(`{"session_id":"sess-1","tool_use_id":"toolu_3"}`, "hook", "pre-tool")
-	runWith(`{"session_id":"sess-1","source":"resume"}`, "hook", "session-start")
+	clitest.RunWith(`{"session_id":"sess-1","tool_use_id":"toolu_3"}`, "hook", "pre-tool")
+	clitest.RunWith(`{"session_id":"sess-1","source":"resume"}`, "hook", "session-start")
 	if caller.ByAgent() {
 		t.Error("session-start left the mark")
 	}
 	// A hook with input it cannot read does nothing and does not fail.
 	for _, e := range []string{"pre-tool", "post-tool", "stop", "session-start"} {
-		if code, stdout, stderr := runWith("not json", "hook", e); code != contract.ExitOK || stdout != "" || stderr != "" {
+		if code, stdout, stderr := clitest.RunWith("not json", "hook", e); code != contract.ExitOK || stdout != "" || stderr != "" {
 			t.Errorf("hook %s with bad input: exit code %d, stdout %q, stderr %q", e, code, stdout, stderr)
 		}
 	}
@@ -266,7 +228,7 @@ func TestTaskTakeByAgent(t *testing.T) {
 }
 
 func TestTaskTakeRefusals(t *testing.T) {
-	shop, fix := taskShop(t)
+	shop, fix := clitest.TaskShop(t)
 	root := filepath.Dir(shop)
 	input := func(text string) string {
 		p := filepath.Join(t.TempDir(), "input.json")
@@ -308,16 +270,16 @@ func TestTaskTakeRefusals(t *testing.T) {
 			msg.Text(msg.ErrInputInvalid, "поле «title» должно быть строкой") + "\n\n" + help},
 		{"unknown scenario", []string{"task", "take", "--scenario", "epic", "--title", "Т", "--statement", "С"}, contract.ExitError, contract.CodeFlowObjectNotFound,
 			msg.Text(msg.ErrFlowObjectNotFound, "shop", "сценария", "epic") + "\n\n" + msg.Text(msg.HintFlowObjects)},
-		{"not pooled", takeArgs("--worktree", root), contract.ExitError, contract.CodeWorktreeNotPooled,
+		{"not pooled", clitest.TakeArgs("--worktree", root), contract.ExitError, contract.CodeWorktreeNotPooled,
 			msg.Text(msg.ErrWorktreeNotPooled, root) + "\n\n" + msg.Text(msg.HintWorktreeAdd)},
 	}
 	for _, tt := range tests {
-		code, stdout, stderr := run(tt.args...)
+		code, stdout, stderr := clitest.Run(tt.args...)
 		if code != tt.exit || stdout != "" || stderr != tt.stderr+"\n" {
 			t.Errorf("%s: exit code %d, stdout %q, stderr %q; want %d, %q", tt.name, code, stdout, stderr, tt.exit, tt.stderr)
 		}
-		code, stdout, _ = run(append(tt.args, "--json")...)
-		validate(t, "schemas/error.json", stdout)
+		code, stdout, _ = clitest.Run(append(tt.args, "--json")...)
+		clitest.Validate(t, "schemas/error.json", stdout)
 		var e contract.ErrorOutput
 		json.Unmarshal([]byte(stdout), &e)
 		if code != tt.exit || e.Error.Code != tt.code {
@@ -326,20 +288,20 @@ func TestTaskTakeRefusals(t *testing.T) {
 	}
 
 	// A worktree with uncommitted changes; ignored files do not count.
-	writeFiles(t, fix, map[string]string{".gitignore": "*.log\n"})
+	clitest.WriteFiles(t, fix, map[string]string{".gitignore": "*.log\n"})
 	gittest.Run(t, fix, "add", ".gitignore")
 	gittest.Run(t, fix, "commit", "--quiet", "-m", "ignore logs")
-	writeFiles(t, fix, map[string]string{"build.log": "x", "backend/payments/refund.go": "package payments\n"})
-	code, _, stderr := run(takeArgs("--worktree", fix)...)
+	clitest.WriteFiles(t, fix, map[string]string{"build.log": "x", "backend/payments/refund.go": "package payments\n"})
+	code, _, stderr := clitest.Run(clitest.TakeArgs("--worktree", fix)...)
 	want := msg.Text(msg.ErrWorktreeDirty, fix) + "\n\n" + msg.Text(msg.WorktreeChangedFiles) + "\n  backend/payments/refund.go\n\n" + msg.Text(msg.HintWorktreeDirty) + "\n"
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("dirty: exit code %d, stderr %q, want %q", code, stderr, want)
 	}
-	if _, stdout, _ := run(takeArgs("--worktree", fix, "--json")...); !strings.Contains(stdout, `"files":["backend/payments/refund.go"]`) {
+	if _, stdout, _ := clitest.Run(clitest.TakeArgs("--worktree", fix, "--json")...); !strings.Contains(stdout, `"files":["backend/payments/refund.go"]`) {
 		t.Errorf("dirty in JSON: %s", stdout)
 	}
 	// No number is used up by refusals.
-	if _, stdout, _ := run(takeArgs()...); !strings.HasPrefix(stdout, msg.Text(msg.TaskTaken, "SHOP-1")) {
+	if _, stdout, _ := clitest.Run(clitest.TakeArgs()...); !strings.HasPrefix(stdout, msg.Text(msg.TaskTaken, "SHOP-1")) {
 		t.Errorf("after refusals:\n%s", stdout)
 	}
 }
@@ -347,8 +309,8 @@ func TestTaskTakeRefusals(t *testing.T) {
 func TestTaskTakeWithoutFlow(t *testing.T) {
 	t.Setenv(caller.SessionEnv, "")
 	t.Setenv(caller.ClaudeSessionEnv, "")
-	p := emptyShopFlow(t)
-	code, _, stderr := run(takeArgs()...)
+	p := clitest.EmptyShopFlow(t)
+	code, _, stderr := clitest.Run(clitest.TakeArgs()...)
 	want := msg.Text(msg.ErrFlowNotFound, "shop") + "\n" + msg.Text(msg.FlowDir, p.Dir) + "\n"
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("exit code %d, stderr %q, want %q", code, stderr, want)
@@ -356,7 +318,7 @@ func TestTaskTakeWithoutFlow(t *testing.T) {
 }
 
 func TestTaskShowRefusals(t *testing.T) {
-	shop, fix := taskShop(t)
+	shop, fix := clitest.TaskShop(t)
 	root := filepath.Dir(shop)
 	t.Chdir(root)
 	tests := []struct {
@@ -373,35 +335,35 @@ func TestTaskShowRefusals(t *testing.T) {
 			msg.Text(msg.ErrTaskKeyInvalid, "shop") + "\n\n" + msg.Text(msg.HintTaskKey)},
 	}
 	for _, tt := range tests {
-		code, _, stderr := run(tt.args...)
+		code, _, stderr := clitest.Run(tt.args...)
 		if code != tt.exit || stderr != tt.stderr+"\n" {
 			t.Errorf("%v: exit code %d, stderr %q, want %q", tt.args, code, stderr, tt.stderr)
 		}
-		_, stdout, _ := run(append(tt.args, "--json")...)
-		validate(t, "schemas/error.json", stdout)
+		_, stdout, _ := clitest.Run(append(tt.args, "--json")...)
+		clitest.Validate(t, "schemas/error.json", stdout)
 		if !strings.Contains(stdout, `"code":"`+tt.code+`"`) {
 			t.Errorf("%v in JSON: %s", tt.args, stdout)
 		}
 	}
 	// A worktree of the pool without a task.
 	t.Chdir(fix)
-	if code, _, stderr := run("task", "show"); code != contract.ExitError || !strings.HasPrefix(stderr, msg.Text(msg.ErrTaskUndetermined, fix)) {
+	if code, _, stderr := clitest.Run("task", "show"); code != contract.ExitError || !strings.HasPrefix(stderr, msg.Text(msg.ErrTaskUndetermined, fix)) {
 		t.Errorf("free worktree: exit code %d, stderr %q", code, stderr)
 	}
 }
 
 func TestTaskList(t *testing.T) {
-	_, fix := taskShop(t)
-	if _, stdout, _ := run("task", "list"); stdout != msg.Text(msg.TasksNoneOpen)+"\n" {
+	_, fix := clitest.TaskShop(t)
+	if _, stdout, _ := clitest.Run("task", "list"); stdout != msg.Text(msg.TasksNoneOpen)+"\n" {
 		t.Errorf("no tasks: %q", stdout)
 	}
-	if _, stdout, _ := run("task", "list", "--all"); stdout != msg.Text(msg.TasksNone)+"\n" {
+	if _, stdout, _ := clitest.Run("task", "list", "--all"); stdout != msg.Text(msg.TasksNone)+"\n" {
 		t.Errorf("no tasks, --all: %q", stdout)
 	}
-	if _, stdout, _ := run("task", "list", "--json"); stdout != `{"tasks":[]}`+"\n" {
+	if _, stdout, _ := clitest.Run("task", "list", "--json"); stdout != `{"tasks":[]}`+"\n" {
 		t.Errorf("no tasks in JSON: %q", stdout)
 	}
-	mustRun(t, takeArgs("--worktree", fix)...)
+	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	// A task of another state, until parts 11 and 12 can make one.
 	setTaskState(t, "waiting")
 	tests := []struct {
@@ -414,7 +376,7 @@ func TestTaskList(t *testing.T) {
 		{[]string{"task", "list", "--project", "shop"}, "SHOP-1"},
 	}
 	for _, tt := range tests {
-		_, stdout, _ := run(append(tt.args, "--json")...)
+		_, stdout, _ := clitest.Run(append(tt.args, "--json")...)
 		var out contract.TaskListOutput
 		json.Unmarshal([]byte(stdout), &out)
 		var ids []string
@@ -426,10 +388,10 @@ func TestTaskList(t *testing.T) {
 		}
 	}
 	setTaskState(t, "closed")
-	if _, stdout, _ := run("task", "list"); stdout != msg.Text(msg.TasksNoneOpen)+"\n" {
+	if _, stdout, _ := clitest.Run("task", "list"); stdout != msg.Text(msg.TasksNoneOpen)+"\n" {
 		t.Errorf("closed only: %q", stdout)
 	}
-	if _, stdout, _ := run("task", "list", "--all"); !strings.Contains(stdout, "SHOP-1") || !strings.Contains(stdout, "закрыта") {
+	if _, stdout, _ := clitest.Run("task", "list", "--all"); !strings.Contains(stdout, "SHOP-1") || !strings.Contains(stdout, "закрыта") {
 		t.Errorf("--all:\n%s", stdout)
 	}
 
@@ -443,16 +405,16 @@ func TestTaskList(t *testing.T) {
 		{[]string{"task", "list", "--state", "done"}, contract.CodeFlagValue, msg.Text(msg.ErrFlagValueInvalid, "--state", "done") + "\n\n" + help},
 	}
 	for _, tt := range refusals {
-		code, _, stderr := run(tt.args...)
+		code, _, stderr := clitest.Run(tt.args...)
 		if code != contract.ExitUsage || stderr != tt.stderr+"\n" {
 			t.Errorf("%v: exit code %d, stderr %q, want %q", tt.args, code, stderr, tt.stderr)
 		}
-		_, stdout, _ := run(append(tt.args, "--json")...)
+		_, stdout, _ := clitest.Run(append(tt.args, "--json")...)
 		if !strings.Contains(stdout, `"code":"`+tt.code+`"`) {
 			t.Errorf("%v in JSON: %s", tt.args, stdout)
 		}
 	}
-	if code, _, stderr := run("task", "list", "--project", "cart"); code != contract.ExitError || !strings.HasPrefix(stderr, msg.Text(msg.ErrProjectNotFound, "cart")) {
+	if code, _, stderr := clitest.Run("task", "list", "--project", "cart"); code != contract.ExitError || !strings.HasPrefix(stderr, msg.Text(msg.ErrProjectNotFound, "cart")) {
 		t.Errorf("unknown project: exit code %d, stderr %q", code, stderr)
 	}
 }
@@ -475,15 +437,15 @@ func setTaskState(t *testing.T, s string) {
 }
 
 func TestTaskWithoutStore(t *testing.T) {
-	emptyHome(t)
+	clitest.EmptyHome(t)
 	t.Chdir(t.TempDir())
-	if _, stdout, _ := run("task", "list"); stdout != msg.Text(msg.TasksNoneOpen)+"\n" {
+	if _, stdout, _ := clitest.Run("task", "list"); stdout != msg.Text(msg.TasksNoneOpen)+"\n" {
 		t.Errorf("task list: %q", stdout)
 	}
-	if code, _, _ := run("task", "show", "SHOP-1"); code != contract.ExitError {
+	if code, _, _ := clitest.Run("task", "show", "SHOP-1"); code != contract.ExitError {
 		t.Errorf("task show: exit code %d", code)
 	}
-	if p, _ := state.Path(); fileExists(p) {
+	if p, _ := state.Path(); clitest.FileExists(p) {
 		t.Errorf("reading tasks must not create the state store %s", p)
 	}
 }
@@ -492,37 +454,37 @@ func TestTaskWithoutStore(t *testing.T) {
 // a change of a library subagent the flow names pins later tasks to the
 // commit of the library.
 func TestTaskSnapshot(t *testing.T) {
-	shop, fix := taskShop(t)
+	shop, fix := clitest.TaskShop(t)
 	commitOf := func(args ...string) string {
 		t.Helper()
-		_, stdout, _ := run(append(args, "--json")...)
+		_, stdout, _ := clitest.Run(append(args, "--json")...)
 		var out contract.TaskTakeOutput
 		if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 			t.Fatalf("%v: %s", args, stdout)
 		}
 		return out.Task.Flow.Commit
 	}
-	first := commitOf(takeArgs("--worktree", fix)...)
+	first := commitOf(clitest.TakeArgs("--worktree", fix)...)
 	third := gittest.Worktree(t, shop, filepath.Join(filepath.Dir(shop), "shop-3"), "third")
-	mustRun(t, "worktree", "add", third)
-	if second := commitOf(takeArgs()...); second != first {
+	clitest.MustRun(t, "worktree", "add", third)
+	if second := commitOf(clitest.TakeArgs()...); second != first {
 		t.Errorf("one flow, two commits: %s, %s", first, second)
 	}
 
 	// The reviewer of the library, named by the review stage, changes.
-	lib := shopPlaces().Library
+	lib := clitest.ShopPlaces().Library
 	text, err := os.ReadFile(filepath.Join(lib, "reviewer.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFiles(t, lib, map[string]string{"reviewer.md": string(text) + "\nПроверить логи.\n"})
-	_, stdout, _ := run("library", "apply", "--json")
+	clitest.WriteFiles(t, lib, map[string]string{"reviewer.md": string(text) + "\nПроверить логи.\n"})
+	_, stdout, _ := clitest.Run("library", "apply", "--json")
 	var applied contract.LibraryApplyOutput
 	json.Unmarshal([]byte(stdout), &applied)
-	if got := commitOf(takeArgs("--worktree", third)...); got != applied.Applied.Commit || got == first {
+	if got := commitOf(clitest.TakeArgs("--worktree", third)...); got != applied.Applied.Commit || got == first {
 		t.Errorf("after the library change: %s, want %s", got, applied.Applied.Commit)
 	}
-	_, stdout, _ = run("task", "show", "SHOP-1", "--json")
+	_, stdout, _ = clitest.Run("task", "show", "SHOP-1", "--json")
 	if !strings.Contains(stdout, `"commit":"`+first+`"`) {
 		t.Errorf("the first task changed its flow: %s", stdout)
 	}

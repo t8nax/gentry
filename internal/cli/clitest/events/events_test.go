@@ -1,4 +1,4 @@
-package cli
+package events_test
 
 import (
 	"encoding/json"
@@ -9,18 +9,10 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/home"
+	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/state"
 )
-
-// emptyHome points the data root at a new empty directory and returns it.
-func emptyHome(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	t.Setenv(home.EnvVar, dir)
-	return dir
-}
 
 // writeEvents creates the state store in the data root with the given events,
 // each as type, project, task.
@@ -49,10 +41,10 @@ func writeEvents(t *testing.T, events ...[3]string) {
 }
 
 func TestEventsWithoutStore(t *testing.T) {
-	dir := emptyHome(t)
+	dir := clitest.EmptyHome(t)
 	// An empty journal is an empty stream.
 	for _, args := range [][]string{{"events"}, {"events", "--after", "5"}, {"events", "--after=5"}, {"events", "--json"}} {
-		code, stdout, stderr := run(args...)
+		code, stdout, stderr := clitest.Run(args...)
 		if code != contract.ExitOK || stdout != "" || stderr != "" {
 			t.Errorf("%v: exit code %d, stdout %q, stderr %q; want nothing", args, code, stdout, stderr)
 		}
@@ -63,15 +55,15 @@ func TestEventsWithoutStore(t *testing.T) {
 }
 
 func TestEvents(t *testing.T) {
-	emptyHome(t)
+	clitest.EmptyHome(t)
 	writeEvents(t, [3]string{"task.taken", "shop", "SHOP-7"}, [3]string{"settings.changed", "", ""})
 
-	code, stdout, stderr := run("events", "--json")
+	code, stdout, stderr := clitest.Run("events", "--json")
 	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("exit code %d, stderr %q", code, stderr)
 	}
 	// Without --json the output is the same: there is no text form.
-	if _, plain, _ := run("events"); plain != stdout {
+	if _, plain, _ := clitest.Run("events"); plain != stdout {
 		t.Errorf("without --json:\n%s\nwant:\n%s", plain, stdout)
 	}
 	lines := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")
@@ -79,7 +71,7 @@ func TestEvents(t *testing.T) {
 		t.Fatalf("want 2 JSON lines, got %q", stdout)
 	}
 	for _, line := range lines {
-		validate(t, "schemas/event.json", line)
+		clitest.Validate(t, "schemas/event.json", line)
 		var e contract.Event
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			t.Fatalf("%s: %v", line, err)
@@ -102,18 +94,18 @@ func TestEvents(t *testing.T) {
 		t.Errorf("data %v", second["data"])
 	}
 
-	_, stdout, _ = run("events", "--after", "1", "--json")
+	_, stdout, _ = clitest.Run("events", "--after", "1", "--json")
 	if strings.Count(stdout, "\n") != 1 || !strings.Contains(stdout, `"seq":2`) {
 		t.Errorf("events after 1: %q", stdout)
 	}
-	_, stdout, _ = run("events", "--after", "2")
+	_, stdout, _ = clitest.Run("events", "--after", "2")
 	if stdout != "" {
 		t.Errorf("events after 2: %q", stdout)
 	}
 }
 
 func TestEventsUsageErrors(t *testing.T) {
-	emptyHome(t)
+	clitest.EmptyHome(t)
 	tests := []struct {
 		args    []string
 		stderr  string
@@ -127,7 +119,7 @@ func TestEventsUsageErrors(t *testing.T) {
 		{[]string{"events", "extra"}, msg.Text(msg.ErrUnexpectedArgs, "events"), contract.CodeUnexpectedArgs, map[string]any{"command": "events"}},
 	}
 	for _, tt := range tests {
-		code, stdout, stderr := run(tt.args...)
+		code, stdout, stderr := clitest.Run(tt.args...)
 		if code != contract.ExitUsage {
 			t.Errorf("%v: exit code %d, want %d", tt.args, code, contract.ExitUsage)
 		}
@@ -136,11 +128,11 @@ func TestEventsUsageErrors(t *testing.T) {
 		}
 
 		args := append(tt.args, "--json")
-		code, stdout, stderr = run(args...)
+		code, stdout, stderr = clitest.Run(args...)
 		if code != contract.ExitUsage || stderr != "" {
 			t.Errorf("%v: exit code %d, stderr %q", args, code, stderr)
 		}
-		validate(t, "schemas/error.json", stdout)
+		clitest.Validate(t, "schemas/error.json", stdout)
 		var out contract.ErrorOutput
 		json.Unmarshal([]byte(stdout), &out)
 		if out.Error.Code != tt.code || !reflect.DeepEqual(map[string]any(out.Error.Details), tt.details) {
@@ -150,7 +142,7 @@ func TestEventsUsageErrors(t *testing.T) {
 }
 
 func TestEventsNewerStore(t *testing.T) {
-	emptyHome(t)
+	clitest.EmptyHome(t)
 	writeEvents(t)
 	path, _ := state.Path()
 	// Simulate a store of a newer Gentry by bumping its schema version.
@@ -167,13 +159,13 @@ func TestEventsNewerStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, _, stderr := run("events")
+	code, _, stderr := clitest.Run("events")
 	want := msg.Text(msg.ErrStateNewer, 7, state.SchemaVersion()) + "\n\n" + msg.Text(msg.HintStateNewer) + "\n"
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("exit code %d, stderr %q, want %q", code, stderr, want)
 	}
-	_, stdout, _ := run("events", "--json")
-	validate(t, "schemas/error.json", stdout)
+	_, stdout, _ := clitest.Run("events", "--json")
+	clitest.Validate(t, "schemas/error.json", stdout)
 	var out contract.ErrorOutput
 	json.Unmarshal([]byte(stdout), &out)
 	wantDetails := map[string]any{"path": path, "schema": float64(7), "supported": float64(state.SchemaVersion())}
@@ -183,7 +175,7 @@ func TestEventsNewerStore(t *testing.T) {
 }
 
 func TestEventsHidden(t *testing.T) {
-	_, help, _ := run("help")
+	_, help, _ := clitest.Run("help")
 	if strings.Contains(help, "events") {
 		t.Errorf("events must not be listed in the help:\n%s", help)
 	}

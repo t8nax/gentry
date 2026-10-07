@@ -73,8 +73,9 @@ func parseApplied(out string) (Applied, bool, error) {
 }
 
 // Apply commits files as the content of kind k with a commit of subject for
-// action, and removes the conflict directory of k. The working files stay as
-// they are: they now have no draft over them.
+// action, and removes the conflict directory of k and the files of changes it
+// makes stale. The working files stay as they are: they now have no draft
+// over them.
 func (r *Repo) Apply(k Kind, files Files, subject, action string) (Applied, error) {
 	head, err := r.head()
 	if err != nil {
@@ -121,6 +122,9 @@ func (r *Repo) Apply(k Kind, files Files, subject, action string) (Applied, erro
 	if err := os.RemoveAll(r.ConflictDir(k)); err != nil {
 		return Applied{}, err
 	}
+	if err := r.removeChanges(k); err != nil {
+		return Applied{}, err
+	}
 	out, err := r.git("log", "-1", "--format=%H %cI", c)
 	if err != nil {
 		return Applied{}, err
@@ -130,7 +134,8 @@ func (r *Repo) Apply(k Kind, files Files, subject, action string) (Applied, erro
 }
 
 // Discard brings the working files of kind k back to its active content and
-// removes its conflict directory. Hidden files are left alone.
+// removes its conflict directory and the files of changes it makes stale.
+// Hidden files are left alone.
 func (r *Repo) Discard(k Kind) error {
 	active, err := r.Active(k)
 	if err != nil {
@@ -156,7 +161,10 @@ func (r *Repo) Discard(k Kind) error {
 			return err
 		}
 	}
-	return os.RemoveAll(r.ConflictDir(k))
+	if err := os.RemoveAll(r.ConflictDir(k)); err != nil {
+		return err
+	}
+	return r.removeChanges(k)
 }
 
 // Conflict returns the variants of another machine of kind k in conflict;

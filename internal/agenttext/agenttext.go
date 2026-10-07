@@ -25,7 +25,11 @@ const program = "<gentry>"
 const (
 	WorkingOnTask = "working-on-task" // take a task and lead it to its closing
 	CancelingTask = "canceling-task"  // cancel a task and sort out its changes
+	EditingFlow   = "editing-flow"    // show, write, edit and apply the flow of a project
 )
+
+// flowGuide is the file of the guide to the format of the flow.
+const flowGuide = "flow-guide"
 
 // Skill returns the text of the skill name for the gentry at exe. The path
 // has forward slashes, which every shell on Windows accepts. References to
@@ -36,6 +40,17 @@ func Skill(name, exe string) string {
 		panic("agenttext: no skill " + name)
 	}
 	return strings.ReplaceAll(string(b), program, filepath.ToSlash(exe))
+}
+
+// FlowGuide returns the guide to the format of the flow, which the agent
+// reads before it writes a flow. It names neither the program nor skills, so
+// it is the same for every tool.
+func FlowGuide() string {
+	b, err := files.ReadFile(language + "/" + flowGuide + ".md")
+	if err != nil {
+		panic("agenttext: no guide to the flow")
+	}
+	return string(b)
 }
 
 // skillRef matches a neutral reference to a skill: each tool names skills its

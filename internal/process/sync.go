@@ -417,6 +417,12 @@ func (r *Repo) advance(old, c string, from, to tree, bases map[Kind]tree, s *Syn
 		if err != nil {
 			return err
 		}
+		// The changes of a draft are shown against the active content.
+		if len(changedPaths(fk, tk)) > 0 {
+			if err := r.removeChanges(k); err != nil {
+				return err
+			}
+		}
 		if len(disputed) == 0 && !inConflict {
 			continue
 		}
@@ -564,6 +570,11 @@ func (r *Repo) verify(check Checker, s *Sync) error {
 	if len(bypass) > 0 {
 		if head, err = r.checkBypass(check, head, checked, bypass, s); err != nil {
 			return err
+		}
+		for k := range bypass {
+			if err := r.removeChanges(k); err != nil {
+				return err
+			}
 		}
 	}
 	return r.setChecked(head)

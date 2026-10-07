@@ -243,6 +243,12 @@ type Result struct {
 	// Snapshot holds the files of the flow and the library subagents its
 	// stages name. With problems it is as complete as the problems allow.
 	Snapshot Snapshot
+	// Read is the flow as far as it can be read, with problems too: the
+	// changes of a draft are shown before it is fixed.
+	Read *Flow
+	// Unreadable are the scenarios whose files have problems of their own:
+	// their graphs in Read are not to be trusted.
+	Unreadable map[string]bool
 }
 
 // ReadDir reads and checks the flow in directory dir; the library of
@@ -309,12 +315,17 @@ func readFlow(t *tree, lib library, draftLibrary map[string]bool) (*Result, erro
 	for p, b := range t.files {
 		files[p] = string(b)
 	}
-	res := &Result{Snapshot: Snapshot{Files: files, Library: l.libFiles}}
+	res := &Result{Snapshot: Snapshot{Files: files, Library: l.libFiles}, Read: l.flow(), Unreadable: map[string]bool{}}
+	for _, sc := range l.scenarios {
+		if sc.malformed {
+			res.Unreadable[sc.id] = true
+		}
+	}
 	if problems := sortProblems(l.problems, l.libProblems); len(problems) > 0 {
 		res.Problems = problems
 		return res, nil
 	}
-	res.Flow = l.flow()
+	res.Flow = res.Read
 	return res, nil
 }
 
@@ -808,7 +819,7 @@ func (l *loader) subagent(id string) (bool, error) {
 	return true, nil
 }
 
-// flow returns the flow as read, once it has no problems.
+// flow returns the flow as read; with problems, as far as they allow.
 func (l *loader) flow() *Flow {
 	f := &Flow{Scenarios: []Scenario{}, Stages: []Stage{}, Parts: []Part{}, Agents: []Agent{}}
 	for _, s := range l.scenarios {

@@ -141,35 +141,147 @@ func Draft(r *process.Repo, p Places) (res *Result, ok bool, err error) {
 	return res, err == nil, err
 }
 
-// DiffResult is how the draft differs from the active flow.
+// NoDraftsError means neither the flow of the project nor the library of
+// subagents has a draft: gentry flow diff shows both.
+type NoDraftsError struct{ Project, Dir string }
+
+func (e *NoDraftsError) Error() string { return e.Project + ": no flow or library draft" }
+
+// DiffResult is how the drafts of the flow of a project and of the library
+// differ from the active ones.
 type DiffResult struct {
 	Applied *process.Applied // nil if the project has no flow
-	Changes []Change
+	Draft   bool             // the flow has a draft
+	Changes []Change         // the objects of the flow draft, file by file
+	// Old is the active flow and New the draft, as far as they can be read;
+	// New is Old without a draft. Neither is nil.
+	Old, New  *Flow
+	Scenarios []ScenarioDiff     // of the changed scenarios, by identifier
+	Problems  []Problem          // of the flow draft
+	Library   *LibraryDiffResult // nil without a draft of the library
 }
 
-// DiffDraft compares the draft of a project with its active flow. The draft
-// may have problems: what can be read is compared.
+// DiffDraft compares the drafts of the flow of a project and of the library
+// with the active ones. A draft may have problems: what can be read is
+// compared.
 func DiffDraft(r *process.Repo, p Places) (DiffResult, error) {
-	res, ok, err := Draft(r, p)
-	if err != nil {
-		return DiffResult{}, err
-	}
-	if !ok {
-		return DiffResult{}, &NoDraftError{Project: p.Project, Dir: p.Dir}
-	}
+	var out DiffResult
 	k := process.FlowOf(p.Project)
 	active, err := r.Active(k)
 	if err != nil {
 		return DiffResult{}, err
 	}
-	var out DiffResult
+	library, err := r.Active(process.Library)
+	if err != nil {
+		return DiffResult{}, err
+	}
+	old, err := Read(active, library, nil)
+	if err != nil {
+		return DiffResult{}, err
+	}
+	out.Old, out.New = old.Read, old.Read
 	if a, ok, err := r.Applied(k); err != nil {
 		return DiffResult{}, err
 	} else if ok {
 		out.Applied = &a
 	}
-	out.Changes = Diff(Snapshot{Files: active}, Snapshot{Files: res.Snapshot.Files})
+	res, draft, err := Draft(r, p)
+	if err != nil {
+		return DiffResult{}, err
+	}
+	if draft {
+		out.Draft, out.New, out.Problems = true, res.Read, res.Problems
+		out.Changes = Diff(Snapshot{Files: active}, Snapshot{Files: res.Snapshot.Files})
+		stages := map[string]string{}
+		for _, c := range out.Changes {
+			if c.Object == ObjectStage {
+				stages[c.ID] = c.Change
+			}
+		}
+		for _, c := range out.Changes {
+			if c.Object != ObjectScenario {
+				continue
+			}
+			var before, after *Scenario
+			if s, ok := out.Old.Scenario(c.ID); ok {
+				before = &s
+			}
+			if s, ok := out.New.Scenario(c.ID); ok {
+				after = &s
+			}
+			if before == nil && after == nil {
+				continue
+			}
+			d := DiffScenario(before, after, stages)
+			d.Unreadable = res.Unreadable[c.ID]
+			out.Scenarios = append(out.Scenarios, d)
+		}
+	}
+	lib, err := LibraryDiff(r)
+	var none *NoLibraryDraftError
+	switch {
+	case errors.As(err, &none):
+	case err != nil:
+		return DiffResult{}, err
+	default:
+		if err := libraryUsers(r, p.Project, out.New, &lib); err != nil {
+			return DiffResult{}, err
+		}
+		out.Library = &lib
+	}
+	if !draft && out.Library == nil {
+		return DiffResult{}, &NoDraftsError{Project: p.Project, Dir: p.Dir}
+	}
 	return out, nil
+}
+
+// libraryUsers notes the projects whose flows name each changed subagent of
+// the library: project by flow, its draft as it stands, the others by their
+// active flows.
+func libraryUsers(r *process.Repo, project string, flow *Flow, lib *LibraryDiffResult) error {
+	kinds, err := r.Kinds()
+	if err != nil {
+		return err
+	}
+	active, err := r.Active(process.Library)
+	if err != nil {
+		return err
+	}
+	flows := map[string]*Flow{}
+	for _, k := range kinds {
+		if k.IsLibrary() {
+			continue
+		}
+		if k.Project == project {
+			flows[k.Project] = flow
+			continue
+		}
+		files, err := r.Active(k)
+		if err != nil {
+			return err
+		}
+		if len(files) == 0 {
+			continue
+		}
+		res, err := Read(files, active, nil)
+		if err != nil {
+			return err
+		}
+		flows[k.Project] = res.Read
+	}
+	if _, ok := flows[project]; !ok {
+		flows[project] = flow
+	}
+	for i, c := range lib.Changes {
+		lib.Changes[i].Projects = []string{}
+		for id, f := range flows {
+			if len(f.Users(c.ID)) > 0 {
+				lib.Changes[i].Projects = append(lib.Changes[i].Projects, id)
+			}
+		}
+		slices.Sort(lib.Changes[i].Projects)
+	}
+	return nil
 }
 
 // Apply makes the draft of a project its active flow with a commit. A draft

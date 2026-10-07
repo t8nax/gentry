@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-diff.json",
   "title": "FlowDiffOutput",
-  "description": "Output of `gentry flow diff --json`: the objects of the draft that differ from the active flow.",
+  "description": "Output of `gentry flow diff --json`: the objects of the drafts of the flow of a project and of the library of subagents that differ from the active ones, and the file of changes with them in full.",
   "type": "object",
   "properties": {
     "project": {
@@ -15,7 +15,7 @@
       "$ref": "./applied.json"
     },
     "changes": {
-      "description": "Changed objects: the common rules first, then scenarios, stages, parts and subagents of the project, each kind by identifier. Not empty: without changes there is no draft.",
+      "description": "Changed objects of the flow: the common rules first, then scenarios, stages, parts and subagents of the project, each kind by identifier. Empty if only the library has a draft.",
       "type": "array",
       "items": {
         "title": "FlowChange",
@@ -40,10 +40,52 @@
         "required": ["object", "change"]
       }
     },
+    "library": {
+      "description": "The draft of the library of subagents; absent if the library has none.",
+      "type": "object",
+      "properties": {
+        "applied": {
+          "description": "The commit that applied the active library; absent if the library has never been applied.",
+          "$ref": "./applied.json"
+        },
+        "changes": {
+          "description": "Changed subagents of the library by identifier.",
+          "type": "array",
+          "items": {
+            "title": "FlowDiffLibraryChange",
+            "type": "object",
+            "properties": {
+              "id": {
+                "description": "Identifier of the subagent, the name of its files.",
+                "type": "string",
+                "minLength": 1
+              },
+              "change": {
+                "description": "What happened to the subagent.",
+                "type": "string",
+                "enum": ["added", "modified", "removed"]
+              },
+              "projects": {
+                "description": "Projects whose flows name the subagent as the executor of a stage and do not replace it with a subagent of their own, sorted: the project of the command by its draft, the others by their active flows. May be empty.",
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              }
+            },
+            "required": ["id", "change", "projects"]
+          }
+        }
+      },
+      "required": ["changes"]
+    },
+    "report": {
+      "description": "Absolute path of the file of changes: schemas of the scenarios and the changed objects in full, in markdown. Gentry writes it anew at each call.",
+      "type": "string",
+      "minLength": 1
+    },
     "sync": {
       "description": "What the synchronization before the command did; present only when there is something to tell.",
       "$ref": "./sync.json"
     }
   },
-  "required": ["project", "changes"]
+  "required": ["project", "changes", "report"]
 }

@@ -60,15 +60,18 @@ func ReadLibrary(files process.Files) []Problem {
 // LibraryChange is a subagent of the library that differs from the active
 // library.
 type LibraryChange struct {
-	ID     string
-	Change string // Added, Modified or Removed
+	ID       string
+	Change   string   // Added, Modified or Removed
+	Old, New *Agent   // as far as they can be read; nil if absent
+	Projects []string // whose flows name the subagent, by DiffDraft only
 }
 
 // LibraryDiffResult is how the draft of the library differs from the active
 // one.
 type LibraryDiffResult struct {
-	Applied *process.Applied // nil if the library has never been applied
-	Changes []LibraryChange
+	Applied  *process.Applied // nil if the library has never been applied
+	Changes  []LibraryChange
+	Problems []Problem // of the draft, with paths inside the library
 }
 
 // libraryDraft returns the working files of the library and whether they
@@ -106,9 +109,18 @@ func LibraryDiff(r *process.Repo) (LibraryDiffResult, error) {
 		}
 		return s
 	}
+	before, after := LibraryAgents(active), LibraryAgents(working)
 	for _, c := range Diff(in(active), in(working)) {
-		out.Changes = append(out.Changes, LibraryChange{ID: c.ID, Change: c.Change})
+		lc := LibraryChange{ID: c.ID, Change: c.Change}
+		if a, ok := before[c.ID]; ok {
+			lc.Old = &a
+		}
+		if a, ok := after[c.ID]; ok {
+			lc.New = &a
+		}
+		out.Changes = append(out.Changes, lc)
 	}
+	out.Problems = ReadLibrary(working)
 	return out, nil
 }
 

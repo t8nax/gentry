@@ -8,7 +8,7 @@ import (
 // TestNeutral checks that the texts name skills only by neutral references
 // to known skills: each tool names skills its own way.
 func TestNeutral(t *testing.T) {
-	known := map[string]bool{WorkingOnTask: true, CancelingTask: true}
+	known := map[string]bool{WorkingOnTask: true, CancelingTask: true, EditingFlow: true}
 	for name := range known {
 		text := Skill(name, "/opt/gentry")
 		if strings.Contains(text, "gentry:") {
@@ -29,5 +29,16 @@ func TestResolveSkills(t *testing.T) {
 	got := ResolveSkills("по скиллу `"+SkillRef(CancelingTask)+"`.", func(n string) string { return "x:" + n })
 	if want := "по скиллу `x:canceling-task`."; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestFlowGuideNeutral checks that the guide names neither a tool nor a place
+// to fill: gentry flow guide prints it as it is.
+func TestFlowGuideNeutral(t *testing.T) {
+	text := FlowGuide()
+	for _, s := range []string{"gentry:", "<gentry>", "<skill:"} {
+		if strings.Contains(text, s) {
+			t.Errorf("the guide contains %q", s)
+		}
 	}
 }

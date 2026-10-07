@@ -136,13 +136,39 @@ func TestFlowDraftText(t *testing.T) {
 	}
 	clitest.CopyShopFlow(t, p)
 
+	report := filepath.Join(filepath.Dir(p.Dir), "changes.md")
 	_, stdout, _ := clitest.Run("flow", "diff")
-	if !strings.HasPrefix(stdout, "Проект: shop\nФлоу применён: —\n\nИзменения:\n  Сценарий bug: добавлен\n") ||
-		!strings.HasSuffix(stdout, "  Фрагмент review-checklist: добавлен\n\nПрименить черновик: gentry flow apply\n") {
-		t.Errorf("diff from nothing:\n%s", stdout)
+	want := `Проект: shop
+Флоу применён: —
+Файл изменений: ` + report + `
+
+Сценарии:
+  + Баг: Ветка → План бага → Реализация → Ревью → Слияние
+    + возврат «Ревью → Реализация»: если ревью выявило существенные замечания, до 2 раз
+  + Фича: Ветка → План фичи → Реализация → Ревью → Слияние
+    + возврат «Ревью → Реализация»: если ревью выявило существенные замечания, до 3 раз
+
+Этапы:
+  + Ветка (branch)
+  + Реализация (implementation)
+  + Слияние (merge)
+  + План бага (plan-bug)
+  + План фичи (plan-feature)
+  + Ревью (review)
+
+Фрагменты:
+  + plan-format
+  + review-checklist
+
+Обозначения: + добавлено, ~ изменено, − удалено.
+
+Применить черновик: gentry flow apply
+`
+	if stdout != want {
+		t.Errorf("diff from nothing:\n%s\nwant:\n%s", stdout, want)
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--draft")
-	want := "Проект: shop\nФлоу применён: —\nПапка флоу: " + p.Dir + "\n\n" + clitest.ShopTables + "\nПрименить черновик: gentry flow apply\n"
+	want = "Проект: shop\nФлоу применён: —\nПапка флоу: " + p.Dir + "\n\n" + clitest.ShopTables + "\nПрименить черновик: gentry flow apply\n"
 	if stdout != want {
 		t.Errorf("show --draft:\n%s\nwant:\n%s", stdout, want)
 	}
@@ -163,7 +189,7 @@ func TestFlowDraftText(t *testing.T) {
 	// Line ends of another editor are no change.
 	clitest.WriteDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку задачи в main.\r\n"})
 	code, _, stderr := clitest.Run("flow", "diff")
-	if want := "У проекта shop нет черновика флоу.\nПапка флоу: " + p.Dir + "\n"; code != contract.ExitError || stderr != want {
+	if want := "Ни у флоу проекта shop, ни у библиотеки субагентов нет черновика.\nПапка флоу: " + p.Dir + "\n"; code != contract.ExitError || stderr != want {
 		t.Errorf("diff without changes: exit code %d, stderr:\n%s", code, stderr)
 	}
 
@@ -171,27 +197,44 @@ func TestFlowDraftText(t *testing.T) {
 	_, stdout, _ = clitest.Run("flow", "diff")
 	want = `Проект: shop
 Флоу применён: <время>
+Файл изменений: ` + report + `
 
-Изменения:
-  Сценарий feature: изменён
-  Этап review: изменён
-  Этап security: добавлен
-  Субагент auditor: добавлен
+Сценарии:
+  Фича: Ветка → План фичи → Реализация → ~ Ревью → + Безопасность → Слияние
+
+Этапы:
+  ~ Ревью (review)
+  + Безопасность (security)
+
+Субагенты проекта:
+  + auditor
+
+Обозначения: + добавлено, ~ изменено, − удалено.
 
 Применить черновик: gentry flow apply
 `
 	if clitest.Masked(stdout) != want {
 		t.Errorf("diff:\n%s\nwant:\n%s", stdout, want)
 	}
+	if _, err := os.Stat(report); err != nil {
+		t.Errorf("the file of changes: %v", err)
+	}
 	clitest.MustRun(t, "flow", "apply")
+	if _, err := os.Stat(report); !os.IsNotExist(err) {
+		t.Errorf("the file of changes after apply: %v", err)
+	}
 	_, stdout, _ = clitest.Run("flow", "show")
 	if !strings.Contains(stdout, "\nСУБАГЕНТ  ИСТОЧНИК    ЭТАПЫ\nauditor   проект      security\nreviewer  библиотека  review\n") {
 		t.Errorf("show after apply:\n%s", stdout)
 	}
 
 	clitest.WriteDraft(t, p, map[string]string{"stages/security.md": "", "parts/extra.md": "Лишнее.\n"})
+	clitest.MustRun(t, "flow", "diff")
 	if _, stdout, _ := clitest.Run("flow", "discard"); stdout != "Изменения флоу отменены.\nПроект: shop\n" {
 		t.Errorf("discard:\n%s", stdout)
+	}
+	if _, err := os.Stat(report); !os.IsNotExist(err) {
+		t.Errorf("the file of changes after discard: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(p.Dir, "parts", "extra.md")); !os.IsNotExist(err) {
 		t.Errorf("an added file after discard: %v", err)
@@ -224,8 +267,13 @@ func TestFlowJSON(t *testing.T) {
 	want := `{"applied":{"commit":"` + applied.Applied.Commit + `",`
 	tail := `"changes":[{"change":"modified","id":"feature","object":"scenario"},` +
 		`{"change":"modified","id":"review","object":"stage"},{"change":"added","id":"security","object":"stage"},` +
-		`{"change":"added","id":"auditor","object":"agent"}],"project":"shop"}` + "\n"
-	if !strings.HasPrefix(stdout, want) || !strings.HasSuffix(stdout, tail) {
+		`{"change":"added","id":"auditor","object":"agent"}],"project":"shop","report":`
+	var diff contract.FlowDiffOutput
+	if err := json.Unmarshal([]byte(stdout), &diff); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(stdout, want) || !strings.Contains(stdout, tail) || diff.Library != nil ||
+		diff.Report != filepath.Join(filepath.Dir(p.Dir), "changes.md") {
 		t.Errorf("diff: %s", stdout)
 	}
 
@@ -384,7 +432,7 @@ func TestFlowBypass(t *testing.T) {
 	if log := gittest.Run(t, process, "log", "-1", "--format=%s"); log != "Restore the flow of shop\n" {
 		t.Errorf("commit: %q", log)
 	}
-	if _, stdout, _ := clitest.Run("flow", "diff"); !strings.Contains(stdout, "\n  Этап review: изменён\n") {
+	if _, stdout, _ := clitest.Run("flow", "diff"); !strings.Contains(stdout, "\nЭтапы:\n  ~ Ревью (review)\n") {
 		t.Errorf("diff:\n%s", stdout)
 	}
 }
@@ -427,7 +475,7 @@ func TestFlowRefusals(t *testing.T) {
 	}{
 		{"no flow", []string{"flow", "show"}, contract.ExitError, "У проекта shop нет флоу." + dir},
 		{"no draft to show", []string{"flow", "show", "--draft"}, contract.ExitError, "У проекта shop нет черновика флоу." + dir},
-		{"no draft to compare", []string{"flow", "diff"}, contract.ExitError, "У проекта shop нет черновика флоу." + dir},
+		{"no draft to compare", []string{"flow", "diff"}, contract.ExitError, "Ни у флоу проекта shop, ни у библиотеки субагентов нет черновика." + dir},
 		{"no draft to apply", []string{"flow", "apply"}, contract.ExitError, "У проекта shop нет черновика флоу." + dir},
 		{"no draft to discard", []string{"flow", "discard"}, contract.ExitError, "У проекта shop нет черновика флоу." + dir},
 		{"edit", []string{"flow", "edit"}, contract.ExitUsage,
@@ -500,6 +548,7 @@ func TestFlowHelp(t *testing.T) {
 
 Действия:
   show      Показать флоу проекта
+  guide     Показать справочник по формату флоу
   diff      Показать изменения черновика
   apply     Применить черновик флоу
   discard   Отменить изменения флоу

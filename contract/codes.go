@@ -37,7 +37,7 @@ const (
 	CodeFlowNotFound         = "flow_not_found"          // the project has no active flow; details: project, dir
 	CodeFlowInvalid          = "flow_invalid"            // the active flow does not pass the checks of this Gentry; details: FlowInvalidDetails
 	CodeFlowObjectNotFound   = "flow_object_not_found"   // the flow or the draft has no object of that identifier; details: project, kind (scenario, stage, agent, part), id, draft
-	CodeFlowDraftNotFound    = "flow_draft_not_found"    // the flow directory has no changes; details: project, dir
+	CodeFlowDraftNotFound    = "flow_draft_not_found"    // the flow directory has no changes; for flow diff, neither the flow nor the library has; details: project, dir
 	CodeFlowDraftInvalid     = "flow_draft_invalid"      // the flow draft has problems; details: FlowDraftInvalidDetails
 	CodeConflictingFlags     = "conflicting_flags"       // flags that cannot be given together; details: command, flags
 	CodeLibraryDraftNotFound = "library_draft_not_found" // the library directory has no changes; details: dir

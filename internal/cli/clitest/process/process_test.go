@@ -120,6 +120,16 @@ func TestProcessSyncText(t *testing.T) {
 		t.Errorf("sync with nothing new: %q, %q", stdout, stderr)
 	}
 
+	// The file of changes of b stays until a synchronization brings a change.
+	m.onB()
+	clitest.WriteDraft(t, b, map[string]string{"stages/merge.md": "Влить ветку задачи.\n"})
+	clitest.MustRun(t, "flow", "diff")
+	report := filepath.Join(filepath.Dir(b.Dir), "changes.md")
+	if _, err := os.Stat(report); err != nil {
+		t.Errorf("the file of changes on b: %v", err)
+	}
+	m.onA()
+
 	// The library goes the same way.
 	a := clitest.ShopPlaces()
 	clitest.WriteFiles(t, a.Library, map[string]string{"reviewer.md": "Проверить изменения задачи и тексты.\n"})
@@ -135,6 +145,10 @@ func TestProcessSyncText(t *testing.T) {
 	if _, stdout, _ := clitest.Run("process", "sync"); stdout != "Процесс синхронизирован.\n\nПолучено:\n  библиотека субагентов\n" {
 		t.Errorf("sync on b:\n%s", stdout)
 	}
+	if _, err := os.Stat(report); !os.IsNotExist(err) {
+		t.Errorf("the file of changes on b after a change of the library: %v", err)
+	}
+	clitest.MustRun(t, "flow", "discard")
 	clitest.WriteFiles(t, b.Library, map[string]string{"reviewer.md": "Черновик.\n"})
 	if _, stdout, _ := clitest.Run("library", "discard"); stdout != "Изменения библиотеки отменены.\n" {
 		t.Errorf("library discard:\n%s", stdout)
@@ -166,7 +180,7 @@ func TestProcessConflictText(t *testing.T) {
 	if want := "Удалённый репозиторий: " + m.remote + "\nСинхронизирован: <время>\n\nЧерновики:\n  флоу shop\n\nКонфликты:\n  флоу shop\n"; clitest.Masked(stdout) != want {
 		t.Errorf("status:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := clitest.Run("flow", "diff"); !strings.Contains(stdout, "Изменения:\n  Этап review: изменён\n") {
+	if _, stdout, _ := clitest.Run("flow", "diff"); !strings.Contains(stdout, "\nЭтапы:\n  ~ Ревью (review)\n") {
 		t.Errorf("diff:\n%s", stdout)
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--json")

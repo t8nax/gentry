@@ -487,62 +487,6 @@ func flowSource(library bool) string {
 	return "project"
 }
 
-func runFlowDiff(args []string, env Env) int {
-	f := newFlags("flow diff")
-	proj := f.String("project")
-	asJSON := f.Bool("json")
-	if code, done := f.parse(args, env); done {
-		return code
-	}
-	if proj.Set && proj.Value == "" {
-		return fail(env, flagValueMissing("--project"))
-	}
-	r, places, bad := openFlow(proj.Value)
-	if bad != nil {
-		return fail(env, *bad)
-	}
-	defer r.Close()
-	s, bad := syncFlow(env, r)
-	if bad != nil {
-		return fail(env, *bad)
-	}
-	res, err := flow.DiffDraft(r, places)
-	if err != nil {
-		return fail(env, flowFailure(err, places))
-	}
-	applied := appliedJSON(res.Applied)
-	if *asJSON {
-		out := contract.FlowDiffOutput{Project: places.Project, Applied: applied, Changes: []contract.FlowChange{}, Sync: syncJSON(s)}
-		for _, c := range res.Changes {
-			cc := contract.FlowChange{
-				Object: contract.FlowDiffOutputChangesElemObject(c.Object),
-				Change: contract.FlowDiffOutputChangesElemChange(c.Change),
-			}
-			if c.ID != "" {
-				id := c.ID
-				cc.Id = &id
-			}
-			out.Changes = append(out.Changes, cc)
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.FlowProject, places.Project))
-	writeFlowApplied(&b, applied)
-	b.WriteString("\n")
-	var lines []string
-	for _, c := range res.Changes {
-		lines = append(lines, msg.Text(msg.FlowChange, changeObject(c), changeWord(c)))
-	}
-	writeList(&b, msg.Text(msg.FlowChanges), lines)
-	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintFlowApply))
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
-}
-
 // changeObject names the object of a change.
 func changeObject(c flow.Change) string {
 	switch c.Object {

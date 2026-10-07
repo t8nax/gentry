@@ -40,6 +40,7 @@ var skills = []struct {
 }{
 	{agenttext.WorkingOnTask, msg.SkillWorkingOnTask},
 	{agenttext.CancelingTask, msg.SkillCancelingTask},
+	{agenttext.EditingFlow, msg.SkillEditingFlow},
 }
 
 // Gentry returns the integration description for the gentry binary at exe.

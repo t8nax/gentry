@@ -20,7 +20,7 @@ const testExe = "/opt/Gentry Tools/gentry"
 
 func testPlugin(t *testing.T, exe, version string) Plugin {
 	t.Helper()
-	p, err := Build(integration.Gentry(exe, "Gentry ведёт задачи агента по флоу проекта."), version)
+	p, err := Build(integration.Gentry(exe), version)
 	if err != nil {
 		t.Fatal(err)
 	}

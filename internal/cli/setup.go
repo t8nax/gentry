@@ -46,7 +46,7 @@ func runSetup(args []string, env Env) int {
 	if err != nil {
 		return fail(env, internal(err))
 	}
-	p, err := claude.Build(integration.Gentry(exe, msg.Text(msg.HelpIntro)), buildinfo.Version())
+	p, err := claude.Build(integration.Gentry(exe), buildinfo.Version())
 	if err != nil {
 		return fail(env, internal(err))
 	}

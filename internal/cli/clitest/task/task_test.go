@@ -213,9 +213,11 @@ func TestTaskTakeByAgent(t *testing.T) {
 	if caller.ByAgent() {
 		t.Error("session-start left the mark")
 	}
-	// A hook with input it cannot read does nothing and does not fail.
-	for _, e := range []string{"pre-tool", "post-tool", "stop", "session-start"} {
-		if code, stdout, stderr := clitest.RunWith("not json", "hook", e); code != contract.ExitOK || stdout != "" || stderr != "" {
+	// A hook with input it cannot read does nothing and does not fail; the
+	// session start hook introduces the current directory.
+	_, intro, _ := clitest.RunWith("{}", "hook", "session-start")
+	for e, want := range map[string]string{"pre-tool": "", "post-tool": "", "stop": "", "session-start": intro} {
+		if code, stdout, stderr := clitest.RunWith("not json", "hook", e); code != contract.ExitOK || stdout != want || stderr != "" {
 			t.Errorf("hook %s with bad input: exit code %d, stdout %q, stderr %q", e, code, stdout, stderr)
 		}
 	}

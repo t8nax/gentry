@@ -1,5 +1,5 @@
 {
-  "description": "Gentry ведёт задачи агента по флоу проекта.",
+  "description": "Gentry ведёт задачи агента по флоу проекта и хранит их состояние.",
   "name": "gentry",
-  "version": "0.1.0+b7ed4a16"
+  "version": "0.1.0+a19e5696"
 }

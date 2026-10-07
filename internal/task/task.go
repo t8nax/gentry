@@ -91,6 +91,19 @@ type InvalidKeyError struct{ Value string }
 
 func (e *InvalidKeyError) Error() string { return e.Value + ": not a task identifier" }
 
+// Pooled returns the worktree of the pool that is the canonical directory
+// dir or contains it; a worktree may lie inside another, and the deepest
+// wins. Unlike Worktree it never runs git.
+func Pooled(worktrees []state.Worktree, dir string) (state.Worktree, bool) {
+	var found state.Worktree
+	for _, w := range worktrees {
+		if paths.Within(dir, w.Path) && len(w.Path) > len(found.Path) {
+			found = w
+		}
+	}
+	return found, found.Path != ""
+}
+
 // Worktree returns the worktree of the pool that dir lies in, the innermost
 // one if worktrees are nested. A repository nested in a worktree belongs to
 // it. The pool is matched by paths alone, so a command in a worktree runs no
@@ -100,14 +113,8 @@ func Worktree(worktrees []state.Worktree, dir string) (state.Worktree, error) {
 	if err != nil {
 		return state.Worktree{}, err
 	}
-	var found state.Worktree
-	for _, w := range worktrees {
-		if paths.Within(d, w.Path) && len(w.Path) > len(found.Path) {
-			found = w
-		}
-	}
-	if found.Path != "" {
-		return found, nil
+	if w, ok := Pooled(worktrees, d); ok {
+		return w, nil
 	}
 	root := d
 	if fi, err := os.Stat(d); err == nil && fi.IsDir() {

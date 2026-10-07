@@ -30,6 +30,7 @@ const MaxOutput = 10000
 type Input struct {
 	Session string `json:"session_id"`
 	Call    string `json:"tool_use_id"` // only of the tool events
+	Dir     string `json:"cwd"`         // the directory the session runs in
 }
 
 // ReadInput reads the input of a hook. An input that cannot be read is empty:
@@ -42,11 +43,10 @@ func ReadInput(r io.Reader) Input {
 	return in
 }
 
-// RunSessionStart writes the introduction for the agent at session start:
-// project, task, stage, knowledge index, agent commands. It also removes the
-// marks of calls left by an interrupted session that resumes. Outside a
-// project under Gentry it writes nothing; for now it always writes nothing.
-func RunSessionStart(w io.Writer, in Input) error {
+// RunSessionStart removes the marks of calls left by an interrupted session
+// that resumes. The introduction for the agent, which needs the state of
+// tasks, is written by the caller.
+func RunSessionStart(in Input) error {
 	if in.Session != "" {
 		caller.Clear(in.Session)
 	}

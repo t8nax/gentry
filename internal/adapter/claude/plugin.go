@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/t8nax/gentry/internal/hook"
@@ -114,6 +115,9 @@ func buildFiles(d integration.Description, version string) (map[string][]byte, e
 		d.Name + "/hooks/hooks.json":           map[string]any{"hooks": hooks},
 	}
 	files := map[string][]byte{}
+	for _, s := range d.Skills {
+		files[d.Name+"/skills/"+s.Name+"/SKILL.md"] = skillFile(s)
+	}
 	for path, v := range out {
 		b, err := json.MarshalIndent(v, "", "  ")
 		if err != nil {
@@ -122,6 +126,13 @@ func buildFiles(d integration.Description, version string) (map[string][]byte, e
 		files[path] = append(b, '\n')
 	}
 	return files, nil
+}
+
+// skillFile is the SKILL.md of a skill: a YAML front matter with its name and
+// description, then its text. A Go quoted string is a valid YAML double-quoted
+// scalar for the texts of Gentry: they have no control characters.
+func skillFile(s integration.Skill) []byte {
+	return []byte("---\nname: " + s.Name + "\ndescription: " + strconv.Quote(s.Description) + "\n---\n\n" + s.Text)
 }
 
 // shellCommand joins a command for the shell Claude Code runs hooks in. The

@@ -13,7 +13,7 @@ import (
 )
 
 // sessionStart is replaced in tests to simulate failures.
-var sessionStart = hook.RunSessionStart
+var sessionStart = startSession
 
 func runHook(args []string, env Env) int {
 	f := newFlags("hook")

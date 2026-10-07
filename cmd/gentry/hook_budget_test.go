@@ -62,7 +62,7 @@ func TestHookBudget(t *testing.T) {
 		{"outside a project", t.TempDir()},
 		{"worktree with a task", shop},
 	} {
-		cmd := exec.Command(bin, "hook", hook.SessionStart)
+		cmd := exec.Command(bin, "hook", hook.SessionStart, "--tool", claude.Tool)
 		cmd.Dir = place.dir
 		out, err := cmd.Output()
 		if err != nil {
@@ -77,7 +77,7 @@ func TestHookBudget(t *testing.T) {
 		}
 
 		const warmup, runs = 3, 30
-		d := measure(t, bin, place.dir, warmup, runs, "hook", hook.SessionStart)
+		d := measure(t, bin, place.dir, warmup, runs, "hook", hook.SessionStart, "--tool", claude.Tool)
 		t.Logf("gentry hook %s %s on %s, %d runs: median %s, p95 %s, output %d characters",
 			hook.SessionStart, place.name, platform, runs, ms(median(d)), ms(p95(d)), n)
 		summary += fmt.Sprintf("| %s | %d | %s | %s | %s | %d |\n", place.name, runs, ms(median(d)), ms(p95(d)), ms(hookBudget), n)
@@ -101,7 +101,7 @@ func TestReadBudget(t *testing.T) {
 	gentry(t, bin, shop, "step", "add", "Создать ветку")
 	stalePlugin(t)
 
-	cmd := exec.Command(bin, "hook", hook.SessionStart)
+	cmd := exec.Command(bin, "hook", hook.SessionStart, "--tool", claude.Tool)
 	cmd.Dir = shop
 	intro, err := cmd.Output()
 	if err != nil {

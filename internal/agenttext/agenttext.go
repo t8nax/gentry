@@ -6,6 +6,7 @@ package agenttext
 import (
 	"embed"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -27,11 +28,27 @@ const (
 )
 
 // Skill returns the text of the skill name for the gentry at exe. The path
-// has forward slashes, which every shell on Windows accepts.
+// has forward slashes, which every shell on Windows accepts. References to
+// skills stay neutral: see SkillRef.
 func Skill(name, exe string) string {
 	b, err := files.ReadFile(language + "/" + name + ".md")
 	if err != nil {
 		panic("agenttext: no skill " + name)
 	}
 	return strings.ReplaceAll(string(b), program, filepath.ToSlash(exe))
+}
+
+// skillRef matches a neutral reference to a skill: each tool names skills its
+// own way, such as gentry:working-on-task in Claude Code.
+var skillRef = regexp.MustCompile(`<skill:([a-z0-9-]+)>`)
+
+// SkillRef returns the neutral reference to the skill name.
+func SkillRef(name string) string { return "<skill:" + name + ">" }
+
+// ResolveSkills replaces the neutral references to skills in text with the
+// names ref gives them in a tool.
+func ResolveSkills(text string, ref func(name string) string) string {
+	return skillRef.ReplaceAllStringFunc(text, func(m string) string {
+		return ref(skillRef.FindStringSubmatch(m)[1])
+	})
 }

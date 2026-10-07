@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/t8nax/gentry/internal/agenttext"
 	"github.com/t8nax/gentry/internal/hook"
 	"github.com/t8nax/gentry/internal/integration"
 )
@@ -72,6 +74,8 @@ func Build(d integration.Description, gentryVersion string) (Plugin, error) {
 	return Plugin{Version: version, Files: files}, nil
 }
 
+// buildFiles builds the files of the plugin. A hook command gets --tool, so
+// that the hook names skills and checks the plugin the way of Claude Code.
 func buildFiles(d integration.Description, version string) (map[string][]byte, error) {
 	hooks := map[string][]any{}
 	for _, h := range d.Hooks {
@@ -83,7 +87,7 @@ func buildFiles(d integration.Description, version string) (map[string][]byte, e
 			entry := map[string]any{
 				"hooks": []any{map[string]any{
 					"type":    "command",
-					"command": shellCommand(h.Command),
+					"command": shellCommand(append(slices.Clone(h.Command), "--tool", Tool)),
 					"timeout": hookTimeout,
 				}},
 			}
@@ -128,11 +132,17 @@ func buildFiles(d integration.Description, version string) (map[string][]byte, e
 	return files, nil
 }
 
+// SkillRef is how Claude Code names the skill name of the plugin.
+func SkillRef(name string) string { return integration.Name + ":" + name }
+
 // skillFile is the SKILL.md of a skill: a YAML front matter with its name and
-// description, then its text. A Go quoted string is a valid YAML double-quoted
-// scalar for the texts of Gentry: they have no control characters.
+// description, then its text, with the references to skills named as Claude
+// Code names them. A Go quoted string is a valid YAML double-quoted scalar
+// for the texts of Gentry: they have no control characters.
 func skillFile(s integration.Skill) []byte {
-	return []byte("---\nname: " + s.Name + "\ndescription: " + strconv.Quote(s.Description) + "\n---\n\n" + s.Text)
+	description := agenttext.ResolveSkills(s.Description, SkillRef)
+	text := agenttext.ResolveSkills(s.Text, SkillRef)
+	return []byte("---\nname: " + s.Name + "\ndescription: " + strconv.Quote(description) + "\n---\n\n" + text)
 }
 
 // shellCommand joins a command for the shell Claude Code runs hooks in. The

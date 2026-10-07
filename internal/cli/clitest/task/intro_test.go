@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
@@ -15,12 +16,19 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
-// introIn runs the session start hook for a session in dir, as Claude Code
-// passes it, and returns the introduction.
+// introIn runs the session start hook for a session in dir, as the plugin of
+// Claude Code runs it, and returns the introduction.
 func introIn(t *testing.T, dir string) string {
 	t.Helper()
+	return introBy(t, dir, "--tool", claude.Tool)
+}
+
+// introBy runs the session start hook for a session in dir with the flags
+// and returns the introduction.
+func introBy(t *testing.T, dir string, flags ...string) string {
+	t.Helper()
 	in, _ := json.Marshal(map[string]string{"session_id": "s1", "cwd": dir})
-	code, stdout, stderr := clitest.RunWith(string(in), "hook", "session-start")
+	code, stdout, stderr := clitest.RunWith(string(in), append([]string{"hook", "session-start"}, flags...)...)
 	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("hook in %s: exit code %d, stderr %q", dir, code, stderr)
 	}
@@ -83,8 +91,13 @@ func TestIntroWithoutTask(t *testing.T) {
 		t.Errorf("introduction in a subdirectory:\n%s", got)
 	}
 	t.Chdir(fix)
-	if _, got, _ := clitest.RunWith("{}", "hook", "session-start"); got != want {
+	if _, got, _ := clitest.RunWith("{}", "hook", "session-start", "--tool", "claude"); got != want {
 		t.Errorf("introduction without cwd:\n%s", got)
+	}
+	// Without a tool the skill is named by its name alone.
+	want = strings.Replace(want, "gentry:working-on-task", "working-on-task", 1)
+	if got := introBy(t, fix); got != want {
+		t.Errorf("introduction without a tool:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -192,6 +205,12 @@ func TestIntroStalePlugin(t *testing.T) {
 	writeVersion(p.Version)
 	if got := introIn(t, fix); len(got) < len("Проект:") || got[:len("Проект:")] != "Проект:" {
 		t.Errorf("plugin of this gentry:\n%s", got)
+	}
+
+	// Another tool has no plugin of Claude Code to compare.
+	writeVersion("0.0.0+00000000")
+	if got := introBy(t, fix); got[:len("Проект:")] != "Проект:" {
+		t.Errorf("no tool:\n%s", got)
 	}
 
 	// Without the plugin of the hook there is nothing to compare.

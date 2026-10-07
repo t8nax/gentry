@@ -17,6 +17,7 @@ var sessionStart = startSession
 
 func runHook(args []string, env Env) int {
 	f := newFlags("hook")
+	tool := f.String("tool")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -29,6 +30,7 @@ func runHook(args []string, env Env) int {
 		return fail(env, invalidArgument("hook", "event", e, msg.Text(msg.ErrHookEventUnknown, e), msg.Text(msg.HintHookEvents, events)))
 	}
 	in := hook.ReadInput(hookStdin(env.Stdin))
+	in.Tool = tool.Value
 	switch f.args[0] {
 	case hook.SessionStart:
 		runSessionStart(env.Stdout, in)

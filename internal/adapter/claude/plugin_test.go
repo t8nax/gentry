@@ -72,7 +72,7 @@ func TestHookCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := hooks.Hooks["SessionStart"][0].Hooks[0].Command
-	want := `"/opt/Gentry Tools/gentry" hook session-start`
+	want := `"/opt/Gentry Tools/gentry" hook session-start --tool claude`
 	if got != want {
 		t.Errorf("command %q, want %q", got, want)
 	}

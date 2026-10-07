@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "\"/opt/Gentry Tools/gentry\" hook post-tool",
+            "command": "\"/opt/Gentry Tools/gentry\" hook post-tool --tool claude",
             "timeout": 10,
             "type": "command"
           }
@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "\"/opt/Gentry Tools/gentry\" hook post-tool",
+            "command": "\"/opt/Gentry Tools/gentry\" hook post-tool --tool claude",
             "timeout": 10,
             "type": "command"
           }
@@ -28,7 +28,7 @@
       {
         "hooks": [
           {
-            "command": "\"/opt/Gentry Tools/gentry\" hook pre-tool",
+            "command": "\"/opt/Gentry Tools/gentry\" hook pre-tool --tool claude",
             "timeout": 10,
             "type": "command"
           }
@@ -40,7 +40,7 @@
       {
         "hooks": [
           {
-            "command": "\"/opt/Gentry Tools/gentry\" hook session-start",
+            "command": "\"/opt/Gentry Tools/gentry\" hook session-start --tool claude",
             "timeout": 10,
             "type": "command"
           }
@@ -51,7 +51,7 @@
       {
         "hooks": [
           {
-            "command": "\"/opt/Gentry Tools/gentry\" hook stop",
+            "command": "\"/opt/Gentry Tools/gentry\" hook stop --tool claude",
             "timeout": 10,
             "type": "command"
           }

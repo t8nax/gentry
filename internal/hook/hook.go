@@ -31,6 +31,7 @@ type Input struct {
 	Session string `json:"session_id"`
 	Call    string `json:"tool_use_id"` // only of the tool events
 	Dir     string `json:"cwd"`         // the directory the session runs in
+	Tool    string `json:"-"`           // the tool that runs the hook, from its command line; empty if unknown
 }
 
 // ReadInput reads the input of a hook. An input that cannot be read is empty:

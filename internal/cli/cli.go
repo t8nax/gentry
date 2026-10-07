@@ -374,7 +374,7 @@ func commands() []command {
 		// help is a service command too: the help names --help, which every
 		// command takes, and help stays for those used to git help.
 		{name: "help", args: []argSpec{{}, {}}, run: runHelp},
-		{name: "hook", args: []argSpec{{}}, run: runHook},
+		{name: "hook", args: []argSpec{{}}, flags: []flagSpec{{name: "tool", value: msg.ArgTool}}, run: runHook},
 		{name: "events", flags: []flagSpec{{name: "json"}, {name: "after", value: msg.ArgNumber}}, run: runEvents},
 	}
 	for i := range cmds {

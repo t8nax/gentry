@@ -91,7 +91,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	}
 
 	var b strings.Builder
-	if pluginStale() {
+	if in.Tool == claude.Tool && pluginStale() {
 		fmt.Fprintln(&b, msg.Text(msg.IntroPluginStale))
 		fmt.Fprintln(&b, msg.Text(msg.HintIntroPluginStale))
 		b.WriteString("\n")
@@ -101,7 +101,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	if !taken {
 		fmt.Fprintln(&b, msg.Text(msg.IntroNoTask))
 		b.WriteString("\n")
-		fmt.Fprintln(&b, msg.Text(msg.HintIntroTake, agenttext.WorkingOnTask))
+		fmt.Fprintln(&b, msg.Text(msg.HintIntroTake, skillName(in.Tool, agenttext.WorkingOnTask)))
 		_, err := io.WriteString(w, b.String())
 		return err
 	}
@@ -130,9 +130,21 @@ func introduce(w io.Writer, in hook.Input) error {
 	writeTable(&b, rows)
 	b.WriteString("\n")
 	fmt.Fprintln(&b, msg.Text(msg.HintIntroHelp))
-	fmt.Fprintln(&b, msg.Text(msg.HintIntroContinue, agenttext.WorkingOnTask))
+	fmt.Fprintln(&b, msg.Text(msg.HintIntroContinue, skillName(in.Tool, agenttext.WorkingOnTask)))
 	_, err = io.WriteString(w, b.String())
 	return err
+}
+
+// skillRefs name skills the way of each tool.
+var skillRefs = map[string]func(string) string{claude.Tool: claude.SkillRef}
+
+// skillName is the name of the skill name in tool; a tool not known, or not
+// named, gets the name alone.
+func skillName(tool, name string) string {
+	if ref, ok := skillRefs[tool]; ok {
+		return ref(name)
+	}
+	return name
 }
 
 // introSteps is the line of the steps of the current stage of v: done of
@@ -158,9 +170,10 @@ func introSteps(v task.View) string {
 	return msg.Text(msg.IntroSteps, done, all)
 }
 
-// pluginStale reports whether the plugin whose hook runs gentry differs from
-// the one this gentry builds, as after an update of gentry without
-// `gentry setup`. Outside a hook of the plugin there is nothing to compare.
+// pluginStale reports whether the Claude Code plugin whose hook runs gentry
+// differs from the one this gentry builds, as after an update of gentry
+// without `gentry setup`. Outside a hook of the plugin there is nothing to
+// compare.
 func pluginStale() bool {
 	running, ok := claude.RunningVersion()
 	if !ok {

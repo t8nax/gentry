@@ -271,26 +271,36 @@ func keepSnapshot(tx *state.Tx, req TakeRequest, content string) (process.Applie
 // number, in any letter case.
 var keyPattern = regexp.MustCompile(`^([A-Za-z]{2,10})-([1-9][0-9]{0,8})$`)
 
-// Find returns the task named by key, such as SHOP-1 or shop-1, among tasks;
-// of several attempts of the number, the last.
-func Find(tasks []state.Task, key string) (state.Task, error) {
+// Find returns the last attempt of the task named by key, such as SHOP-1 or
+// shop-1. The store is read for that task alone; st is nil for a store not
+// created yet, which has no tasks.
+func Find(st *state.Store, key string) (state.Task, error) {
+	attempts, err := FindAttempts(st, key)
+	if err != nil {
+		return state.Task{}, err
+	}
+	return attempts[len(attempts)-1], nil
+}
+
+// FindAttempts returns the attempts of the task named by key, in order.
+func FindAttempts(st *state.Store, key string) ([]state.Task, error) {
 	m := keyPattern.FindStringSubmatch(key)
 	if m == nil {
-		return state.Task{}, &InvalidKeyError{Value: key}
+		return nil, &InvalidKeyError{Value: key}
 	}
 	prefix := strings.ToUpper(m[1])
 	n, _ := strconv.Atoi(m[2])
-	name := fmt.Sprintf("%s-%d", prefix, n)
-	var found *state.Task
-	for i := range tasks {
-		if tasks[i].Prefix == prefix && tasks[i].Number == n {
-			found = &tasks[i]
+	var attempts []state.Task
+	if st != nil {
+		var err error
+		if attempts, err = st.TaskAttempts(prefix, n); err != nil {
+			return nil, err
 		}
 	}
-	if found == nil {
-		return state.Task{}, &NotFoundError{Task: name}
+	if len(attempts) == 0 {
+		return nil, &NotFoundError{Task: fmt.Sprintf("%s-%d", prefix, n)}
 	}
-	return *found, nil
+	return attempts, nil
 }
 
 // Latest returns the last attempt of each task of tasks, in their order.
@@ -305,29 +315,18 @@ func Latest(tasks []state.Task) []state.Task {
 	return latest
 }
 
-// Attempts returns the attempts of the task of t among tasks, in order.
-func Attempts(tasks []state.Task, t state.Task) []state.Task {
-	var attempts []state.Task
-	for _, a := range tasks {
-		if a.Project == t.Project && a.Number == t.Number {
-			attempts = append(attempts, a)
-		}
+// In returns the task that holds the worktree of the pool at path; st is
+// nil for a store not created yet.
+func In(st *state.Store, path string) (state.Task, bool, error) {
+	if st == nil {
+		return state.Task{}, false, nil
 	}
-	return attempts
+	return st.TaskIn(path)
 }
 
-// In returns the task that holds the worktree at path among tasks.
-func In(tasks []state.Task, path string) (state.Task, bool) {
-	for _, t := range tasks {
-		if t.Worktree != "" && paths.Same(t.Worktree, path) {
-			return t, true
-		}
-	}
-	return state.Task{}, false
-}
-
-// Current returns the task of the worktree that dir is.
-func Current(tasks []state.Task, worktrees []state.Worktree, dir string) (state.Task, error) {
+// Current returns the task of the worktree that dir is; worktrees are the
+// pool.
+func Current(st *state.Store, worktrees []state.Worktree, dir string) (state.Task, error) {
 	if d, err := paths.Canonical(dir); err == nil {
 		dir = d
 	}
@@ -339,7 +338,10 @@ func Current(tasks []state.Task, worktrees []state.Worktree, dir string) (state.
 	if err != nil {
 		return state.Task{}, err
 	}
-	t, ok := In(tasks, w.Path)
+	t, ok, err := In(st, w.Path)
+	if err != nil {
+		return state.Task{}, err
+	}
 	if !ok {
 		return state.Task{}, &UndeterminedError{Dir: dir}
 	}

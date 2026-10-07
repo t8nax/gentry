@@ -163,3 +163,43 @@ func TestAttempts(t *testing.T) {
 		t.Errorf("tasks %+v, %v", ts, err)
 	}
 }
+
+// TestTaskLookup checks that a task is found by its number and by its
+// worktree among thousands, without reading them all.
+func TestTaskLookup(t *testing.T) {
+	s := shopStore(t)
+	if err := s.Write(func(tx *Tx) error {
+		for range 3000 {
+			n, err := tx.TakeNumber("shop")
+			if err != nil {
+				return err
+			}
+			if _, err := tx.AddTask(Task{Project: "shop", Number: n, Title: "Возврат", Statement: "Текст", Source: SourceOperator,
+				State: TaskClosed, Scenario: "feature", Node: "finish", FlowCommit: "c1"}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	held, err := take(t, s, "/work/shop-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ts, err := s.TaskAttempts("SHOP", 1500); err != nil || len(ts) != 1 || ts[0].Key() != "SHOP-1500" {
+		t.Errorf("SHOP-1500: %+v, %v", ts, err)
+	}
+	if ts, err := s.TaskAttempts("SHOP", 9999); err != nil || len(ts) != 0 {
+		t.Errorf("SHOP-9999: %+v, %v", ts, err)
+	}
+	if in, ok, err := s.TaskIn("/work/shop-2"); err != nil || !ok || in.ID != held.ID {
+		t.Errorf("task in /work/shop-2: %+v, %v, %v", in, ok, err)
+	}
+	if _, ok, err := s.TaskIn("/work/shop"); err != nil || ok {
+		t.Errorf("task in the free /work/shop: %v, %v", ok, err)
+	}
+	if got, ok, err := s.Task(held.ID); err != nil || !ok || got.Key() != "SHOP-3001" {
+		t.Errorf("task of row %d: %+v, %v, %v", held.ID, got, ok, err)
+	}
+}

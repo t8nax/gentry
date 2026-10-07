@@ -151,13 +151,43 @@ func (t *Tx) TaskIn(path string) (Task, bool, error) {
 // Tasks returns the tasks of all projects by project and number; the
 // attempts of one number in order.
 func (s *Store) Tasks() ([]Task, error) {
+	return s.readTasks("")
+}
+
+// TaskAttempts returns the attempts of the task of number in the project of
+// prefix, in order; none if there is no such task.
+func (s *Store) TaskAttempts(prefix string, number int) ([]Task, error) {
+	return s.readTasks(`WHERE p.prefix = ? AND t.number = ?`, prefix, number)
+}
+
+// TaskIn returns the task that holds the worktree at path, as the pool
+// names it.
+func (s *Store) TaskIn(path string) (Task, bool, error) {
+	ts, err := s.readTasks(`WHERE t.worktree = ?`, path)
+	if err != nil || len(ts) == 0 {
+		return Task{}, false, err
+	}
+	return ts[0], true, nil
+}
+
+// Task returns the task of row id.
+func (s *Store) Task(id int64) (Task, bool, error) {
+	ts, err := s.readTasks(`WHERE t.id = ?`, id)
+	if err != nil || len(ts) == 0 {
+		return Task{}, false, err
+	}
+	return ts[0], true, nil
+}
+
+// readTasks returns the tasks that match where, as tasks does.
+func (s *Store) readTasks(where string, args ...any) ([]Task, error) {
 	if s.schema < tasksSchema {
 		return nil, nil
 	}
 	var ts []Task
 	err := s.retry(func() error {
 		var err error
-		ts, err = tasks(s.db, s.schema, "")
+		ts, err = tasks(s.db, s.schema, where, args...)
 		return err
 	})
 	if err != nil {

@@ -266,11 +266,9 @@ func takeWorktree(st *state.Store, dir string) (state.Worktree, *failure) {
 	if err != nil {
 		return fail(taskFailure(err))
 	}
-	tasks, err := st.Tasks()
-	if err != nil {
+	if t, ok, err := task.In(st, w.Path); err != nil {
 		return fail(stateFailure(err))
-	}
-	if t, ok := task.In(tasks, w.Path); ok {
+	} else if ok {
 		return fail(taskFailure(&task.BusyError{Path: w.Path, Task: t.Key()}))
 	}
 	if err := task.CheckClean(w.Path); err != nil {
@@ -284,17 +282,13 @@ func takeWorktree(st *state.Store, dir string) (state.Worktree, *failure) {
 // checks the attempt again: another command may take it meanwhile.
 func cancelledTask(st *state.Store, key string, w state.Worktree) (state.Task, *failure) {
 	fail := func(f failure) (state.Task, *failure) { return state.Task{}, &f }
-	tasks, err := st.Tasks()
-	if err != nil {
-		return fail(stateFailure(err))
-	}
-	t, err := task.Find(tasks, key)
+	t, err := task.Find(st, key)
 	var invalid *task.InvalidKeyError
 	switch {
 	case errors.As(err, &invalid):
 		return fail(flagValueInvalid("--task", invalid.Value, msg.Text(msg.ErrTaskKeyInvalid, invalid.Value), msg.Text(msg.HintTaskKey)))
 	case err != nil:
-		return fail(taskFailure(err))
+		return fail(lookupFailure(err))
 	}
 	if err := task.CheckAgain(t); err != nil {
 		return fail(taskFailure(err))
@@ -333,23 +327,23 @@ func runTaskShow(args []string, env Env) int {
 	if st != nil {
 		defer st.Close()
 	}
-	tasks, worktrees, bad := readTasks(st)
-	if bad != nil {
-		return fail(env, *bad)
-	}
 	var t state.Task
 	var err error
 	if len(f.args) > 0 {
-		t, err = task.Find(tasks, f.args[0])
+		t, err = task.Find(st, f.args[0])
 	} else {
 		wd, werr := os.Getwd()
 		if werr != nil {
 			return fail(env, internal(werr))
 		}
-		t, err = task.Current(tasks, worktrees, wd)
+		worktrees, bad := readWorktrees(st)
+		if bad != nil {
+			return fail(env, *bad)
+		}
+		t, err = task.Current(st, worktrees, wd)
 	}
 	if err != nil {
-		return fail(env, taskFailure(err))
+		return fail(env, lookupFailure(err))
 	}
 	views, err := task.Views(st, []state.Task{t})
 	if err != nil {
@@ -629,6 +623,30 @@ func openTasks() (*state.Store, *failure) {
 		return nil, &f
 	}
 	return st, nil
+}
+
+// readWorktrees reads the pool of st; none for nil.
+func readWorktrees(st *state.Store) ([]state.Worktree, *failure) {
+	if st == nil {
+		return nil, nil
+	}
+	worktrees, err := st.Worktrees()
+	if err != nil {
+		f := stateFailure(err)
+		return nil, &f
+	}
+	return worktrees, nil
+}
+
+// lookupFailure turns an error of finding a task into a failure: a store
+// that cannot be read, or a refusal of taskFailure.
+func lookupFailure(err error) failure {
+	var se *state.UnavailableError
+	var ne *state.NewerError
+	if errors.As(err, &se) || errors.As(err, &ne) {
+		return stateFailure(err)
+	}
+	return taskFailure(err)
 }
 
 // readTasks reads the tasks and the worktrees of st; none for nil.

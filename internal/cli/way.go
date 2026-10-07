@@ -88,26 +88,26 @@ func openTask(key string, named, read bool, badKey func(string) failure) (wayTas
 		}
 		return fail(f)
 	}
-	tasks, worktrees, bad := readTasks(st)
-	if bad != nil {
-		return closeOnFail(*bad)
-	}
 	wd, err := os.Getwd()
 	if err != nil {
 		return closeOnFail(internal(err))
 	}
 	var t state.Task
 	if named {
-		t, err = task.Find(tasks, key)
+		t, err = task.Find(st, key)
 	} else {
-		t, err = task.Current(tasks, worktrees, wd)
+		var worktrees []state.Worktree
+		if worktrees, bad = readWorktrees(st); bad != nil {
+			return closeOnFail(*bad)
+		}
+		t, err = task.Current(st, worktrees, wd)
 	}
 	var invalid *task.InvalidKeyError
 	switch {
 	case errors.As(err, &invalid):
 		return closeOnFail(badKey(invalid.Value))
 	case err != nil:
-		return closeOnFail(taskFailure(err))
+		return closeOnFail(lookupFailure(err))
 	case !read && t.IsEnded():
 		return closeOnFail(taskFailure(&task.EndedError{Task: t.Key(), State: t.State}))
 	}
@@ -175,15 +175,11 @@ func (w wayTask) fail(env Env, f failure) int {
 
 // view returns the view of the task as the store has it now.
 func (w wayTask) view() (task.View, *failure) {
-	tasks, err := w.st.Tasks()
-	if err == nil {
-		for _, t := range tasks {
-			if t.ID == w.task.ID {
-				var views []task.View
-				if views, err = task.Views(w.st, []state.Task{t}); err == nil {
-					return views[0], nil
-				}
-			}
+	t, ok, err := w.st.Task(w.task.ID)
+	if err == nil && ok {
+		var views []task.View
+		if views, err = task.Views(w.st, []state.Task{t}); err == nil {
+			return views[0], nil
 		}
 	}
 	f := stateFailure(err)

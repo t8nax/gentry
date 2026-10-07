@@ -141,11 +141,10 @@ func runTaskAttempts(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer w.close()
-	tasks, err := w.st.Tasks()
+	attempts, err := w.st.TaskAttempts(w.task.Prefix, w.task.Number)
 	if err != nil {
 		return fail(env, stateFailure(err))
 	}
-	attempts := task.Attempts(tasks, w.task)
 	if number == "" {
 		return listAttempts(env, w, attempts, *asJSON)
 	}

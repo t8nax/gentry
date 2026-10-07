@@ -17,7 +17,11 @@ func Isolate(dir string) error {
 	cfg := filepath.Join(dir, "gitconfig")
 	content := "[user]\n\tname = Gentry Test\n\temail = test@example.com\n" +
 		"[init]\n\tdefaultBranch = main\n" +
-		"[commit]\n\tgpgsign = false\n"
+		"[commit]\n\tgpgsign = false\n" +
+		// The repositories of tests are small and short-lived: git need not
+		// start its maintenance after each commit.
+		"[maintenance]\n\tauto = false\n" +
+		"[gc]\n\tauto = 0\n"
 	if err := os.WriteFile(cfg, []byte(content), 0o644); err != nil {
 		return err
 	}

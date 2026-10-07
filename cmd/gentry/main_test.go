@@ -14,12 +14,16 @@ func TestMain(m *testing.M) {
 	os.Exit(isolated(m))
 }
 
+// testDir is the temporary directory of the package.
+var testDir string
+
 func isolated(m *testing.M) int {
 	dir, err := os.MkdirTemp("", "gentry-test-")
 	if err != nil {
 		panic(err)
 	}
 	defer os.RemoveAll(dir)
+	testDir = dir
 	os.Setenv(home.EnvVar, dir)
 	os.Setenv("HOME", dir)
 	os.Setenv("USERPROFILE", dir)

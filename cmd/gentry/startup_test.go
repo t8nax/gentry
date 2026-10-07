@@ -7,24 +7,35 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 )
 
-// buildGentry builds the gentry binary with release flags into a temporary
-// directory and returns its path.
+var build struct {
+	once sync.Once
+	bin  string
+	err  error
+	out  []byte
+}
+
+// buildGentry builds the gentry binary with release flags into the temporary
+// directory of the package, once for all its tests, and returns its path.
 func buildGentry(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "gentry")
-	if runtime.GOOS == "windows" {
-		bin += ".exe"
+	build.once.Do(func() {
+		build.bin = filepath.Join(testDir, "bin", "gentry")
+		if runtime.GOOS == "windows" {
+			build.bin += ".exe"
+		}
+		cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", build.bin, ".")
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+		build.out, build.err = cmd.CombinedOutput()
+	})
+	if build.err != nil {
+		t.Fatalf("go build: %v\n%s", build.err, build.out)
 	}
-	cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", bin, ".")
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
-	return bin
+	return build.bin
 }
 
 // measure runs the binary with args in dir (the current directory if empty)

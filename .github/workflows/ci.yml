@@ -60,11 +60,10 @@ jobs:
       - name: go test
         run: go test -short ./...
 
-      - name: startup time
-        run: go test -count=1 -v -run '^TestStartupTime$' ./cmd/gentry
-
-      - name: hook budget
-        run: go test -count=1 -v -run '^TestHookBudget$' ./cmd/gentry
+      # The tests short mode skips: startup time, hook budget and concurrent
+      # processes, all on one build of gentry.
+      - name: binary tests
+        run: go test -count=1 -v ./cmd/gentry
 
       - name: build
         run: go build -o bin/ ./cmd/gentry

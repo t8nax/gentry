@@ -77,12 +77,23 @@ type InvalidKeyError struct{ Value string }
 
 func (e *InvalidKeyError) Error() string { return e.Value + ": not a task identifier" }
 
-// Worktree returns the worktree of the pool that dir is: the root of the git
-// worktree of dir, or dir itself if it is no git worktree.
+// Worktree returns the worktree of the pool that dir lies in, the innermost
+// one if worktrees are nested. A repository nested in a worktree belongs to
+// it. The pool is matched by paths alone, so a command in a worktree runs no
+// git; git names the root of dir only for the refusal.
 func Worktree(worktrees []state.Worktree, dir string) (state.Worktree, error) {
 	d, err := paths.Canonical(dir)
 	if err != nil {
 		return state.Worktree{}, err
+	}
+	var found state.Worktree
+	for _, w := range worktrees {
+		if paths.Within(d, w.Path) && len(w.Path) > len(found.Path) {
+			found = w
+		}
+	}
+	if found.Path != "" {
+		return found, nil
 	}
 	root := d
 	if fi, err := os.Stat(d); err == nil && fi.IsDir() {
@@ -92,11 +103,6 @@ func Worktree(worktrees []state.Worktree, dir string) (state.Worktree, error) {
 			root = r
 		case !errors.Is(err, git.ErrNotRepo):
 			return state.Worktree{}, err
-		}
-	}
-	for _, w := range worktrees {
-		if paths.Same(w.Path, root) {
-			return w, nil
 		}
 	}
 	return state.Worktree{}, &NotPooledError{Path: root}

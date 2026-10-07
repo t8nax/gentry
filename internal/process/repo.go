@@ -83,13 +83,16 @@ func (e *BusyError) Error() string { return e.Path + ": busy" }
 type Repo struct {
 	Dir string // canonical
 
-	lock       *os.File
-	blobs      map[string]string // contents of blobs read, by hash
-	trees      map[string]tree   // files of commits read, by hash
-	headKnown  bool              // head holds HEAD: only Gentry moves it while the repository is open
-	headHash   string
-	ident      []string // environment of the identity of commits; empty if git has the operator's
-	identKnown bool
+	lock         *os.File
+	blobs        map[string]string // contents of blobs read, by hash
+	trees        map[string]tree   // files of commits read, by hash
+	headKnown    bool              // head holds HEAD: only Gentry moves it while the repository is open
+	headHash     string
+	ident        []string // environment of the identity of commits; empty if git has the operator's
+	identKnown   bool
+	checkedHash  string // the commit of checkedRef: only Gentry moves it while the repository is open
+	checkedKnown bool
+	config       map[string]string // the settings of git that Gentry reads, by key
 }
 
 // Open opens the process repository in directory dir, creating it if needed,
@@ -204,7 +207,7 @@ func (r *Repo) prepare() error {
 	case format > Format:
 		return &InvalidError{Path: r.Dir, Reason: ReasonNewerFormat}
 	}
-	if checked, err := r.rev(checkedRef); err != nil {
+	if checked, err := r.checked(); err != nil {
 		return err
 	} else if checked == "" {
 		return r.setChecked(head)
@@ -271,8 +274,56 @@ func (r *Repo) mergeBase(a, b string) (string, error) {
 	return strings.TrimSpace(out), err
 }
 
+// checked returns the commit of checkedRef, or "" if there is none.
+func (r *Repo) checked() (string, error) {
+	if r.checkedKnown {
+		return r.checkedHash, nil
+	}
+	c, err := r.rev(checkedRef)
+	if err == nil {
+		r.checkedHash, r.checkedKnown = c, true
+	}
+	return c, err
+}
+
 func (r *Repo) setChecked(c string) error {
-	_, err := r.git("update-ref", checkedRef, c)
+	r.checkedKnown = false
+	if _, err := r.git("update-ref", checkedRef, c); err != nil {
+		return err
+	}
+	r.checkedHash, r.checkedKnown = c, true
+	return nil
+}
+
+// configKeys are the settings of git that Gentry reads.
+const configKeys = `^(user\.name|user\.email|remote\.` + remoteName + `\.url)$`
+
+// configValue returns a setting of git named in configKeys, or "" if it is
+// not set. The settings are read by one call of git; setRemote reads them
+// anew.
+func (r *Repo) configValue(key string) (string, error) {
+	if r.config == nil {
+		out, err := r.git("config", "-z", "--get-regexp", configKeys)
+		var ce *git.CommandError
+		if err != nil && !errors.As(err, &ce) {
+			return "", err
+		}
+		// git exits with an error when nothing matches.
+		r.config = map[string]string{}
+		for _, rec := range strings.Split(out, "\x00") {
+			k, v, _ := strings.Cut(rec, "\n")
+			if k != "" {
+				r.config[strings.ToLower(k)] = v // the last value wins, as for git config --get
+			}
+		}
+	}
+	return r.config[key], nil
+}
+
+// setRemote changes the remote repository by git remote with args.
+func (r *Repo) setRemote(args ...string) error {
+	r.config = nil
+	_, err := r.git(append([]string{"remote"}, args...)...)
 	return err
 }
 
@@ -521,12 +572,12 @@ func (r *Repo) identity() ([]string, error) {
 	}
 	known := true
 	for _, key := range []string{"user.name", "user.email"} {
-		out, err := r.git("config", "--get", key)
-		var ce *git.CommandError
-		if errors.As(err, &ce) || strings.TrimSpace(out) == "" {
-			known = false
-		} else if err != nil {
+		v, err := r.configValue(key)
+		if err != nil {
 			return nil, err
+		}
+		if strings.TrimSpace(v) == "" {
+			known = false
 		}
 	}
 	r.identKnown = true
@@ -568,12 +619,8 @@ func mapKeys[V any](m map[string]V) func(func(string) bool) {
 // RemoteURL returns the address of the remote repository, or "" if none is
 // set.
 func (r *Repo) RemoteURL() (string, error) {
-	out, err := r.git("config", "--get", "remote."+remoteName+".url")
-	var ce *git.CommandError
-	if errors.As(err, &ce) {
-		return "", nil
-	}
-	return strings.TrimSpace(out), err
+	url, err := r.configValue("remote." + remoteName + ".url")
+	return strings.TrimSpace(url), err
 }
 
 // Synced returns the time of the last successful synchronization; ok is

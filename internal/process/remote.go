@@ -82,9 +82,9 @@ func (r *Repo) SetRemote(url string, check Checker) (result string, s *Sync, err
 		return "", nil, err
 	}
 	if previous == "" {
-		_, err = r.git("remote", "add", remoteName, url)
+		err = r.setRemote("add", remoteName, url)
 	} else {
-		_, err = r.git("remote", "set-url", remoteName, url)
+		err = r.setRemote("set-url", remoteName, url)
 	}
 	if err != nil {
 		return "", nil, err
@@ -92,9 +92,9 @@ func (r *Repo) SetRemote(url string, check Checker) (result string, s *Sync, err
 	// A push refused leaves the address as it was.
 	restore := func() {
 		if previous == "" {
-			r.git("remote", "remove", remoteName)
+			r.setRemote("remove", remoteName)
 		} else {
-			r.git("remote", "set-url", remoteName, previous)
+			r.setRemote("set-url", remoteName, previous)
 		}
 	}
 

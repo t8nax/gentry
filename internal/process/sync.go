@@ -531,7 +531,7 @@ func (r *Repo) verify(check Checker, s *Sync) error {
 	if err != nil {
 		return err
 	}
-	checked, err := r.rev(checkedRef)
+	checked, err := r.checked()
 	if err != nil || checked == head {
 		return err
 	}

@@ -177,6 +177,28 @@ func TestOpen(t *testing.T) {
 	}
 }
 
+// TestIdentity checks the author of the commits of Gentry: the operator's
+// identity of git, or Gentry itself if git has none.
+func TestIdentity(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "process")
+	open(t, dir).Close()
+	if author := gittest.Run(t, dir, "log", "-1", "--format=%an <%ae>|%cn <%ce>"); author != "Gentry Test <test@example.com>|Gentry Test <test@example.com>\n" {
+		t.Errorf("with an identity: %q", author)
+	}
+
+	anonymous := filepath.Join(t.TempDir(), "process")
+	if err := os.MkdirAll(anonymous, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, anonymous, "init", "--quiet")
+	gittest.Run(t, anonymous, "config", "user.name", "")
+	open(t, anonymous).Close()
+	if author := gittest.Run(t, anonymous, "log", "-1", "--format=%an <%ae>|%cn <%ce>"); author != "Gentry <gentry@localhost>|Gentry <gentry@localhost>\n" {
+		t.Errorf("without an identity: %q", author)
+	}
+}
+
 func TestLock(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "process")
 	open(t, dir)

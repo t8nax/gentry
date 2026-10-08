@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/library.applied.json",
+  "title": "LibraryAppliedData",
+  "description": "Data of the library.applied event: the draft of the library of subagents became active on this machine. The event has no project.",
+  "type": "object",
+  "properties": {
+    "commit": {
+      "description": "Hash of the commit of the process repository that applied the library.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["commit"]
+}

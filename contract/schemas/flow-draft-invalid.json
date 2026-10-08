@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-draft-invalid.json",
+  "title": "FlowDraftInvalidDetails",
+  "description": "Details of the error flow_draft_invalid: the flow draft of a project has problems, so it is neither shown nor applied.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "description": "Identifier of the project.",
+      "type": "string",
+      "minLength": 1
+    },
+    "dir": {
+      "description": "Absolute path of the flow directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "problems": {
+      "description": "All problems of the draft in the order of files and lines: problems of the whole flow first, then the common rules, scenarios, stages, parts, project subagents, library subagents, and files that do not belong to the flow last.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "./flow-problem.json" }
+    }
+  },
+  "required": ["project", "dir", "problems"]
+}

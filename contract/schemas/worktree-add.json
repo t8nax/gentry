@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/worktree-add.json",
+  "title": "WorktreeAddOutput",
+  "description": "Output of `gentry worktree add --json`.",
+  "type": "object",
+  "properties": {
+    "path": {
+      "description": "Absolute path of the worktree root added to the pool; the root, when a directory inside it was given.",
+      "type": "string",
+      "minLength": 1
+    },
+    "project": {
+      "description": "Identifier of the project whose pool has the worktree.",
+      "type": "string",
+      "minLength": 1
+    },
+    "main": {
+      "description": "Whether this is the main worktree of the project.",
+      "type": "boolean"
+    },
+    "action": {
+      "description": "What happened: added or unchanged. The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["path", "project", "main", "action"]
+}

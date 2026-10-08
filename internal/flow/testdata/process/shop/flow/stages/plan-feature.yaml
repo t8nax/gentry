@@ -1,0 +1,4 @@
+title: План фичи
+exit: план согласован с оператором
+executor: orchestrator
+include: [plan-format]

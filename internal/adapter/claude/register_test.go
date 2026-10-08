@@ -39,7 +39,7 @@ func fake(t *testing.T) (program string, log func() []string) {
 // plugin writes a plugin built for gentryVersion into dir and returns its version.
 func plugin(t *testing.T, dir, gentryVersion string) string {
 	t.Helper()
-	p, err := Build(integration.Gentry(testExe, "Gentry"), gentryVersion)
+	p, err := Build(integration.Gentry(testExe), gentryVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,4 @@
+title: Ревью
+exit: замечания ревью записаны и разобраны
+executor: reviewer
+include: [review-checklist]

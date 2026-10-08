@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/project.added.json",
+  "title": "ProjectAddedData",
+  "description": "Data of the project.added event: a project was connected on this machine. The project is in the event envelope.",
+  "type": "object",
+  "properties": {
+    "knowledge": {
+      "description": "Absolute path of the project knowledge repository.",
+      "type": "string",
+      "minLength": 1
+    },
+    "prefix": {
+      "description": "Prefix of task numbers.",
+      "type": "string",
+      "minLength": 1
+    },
+    "knowledge_created": {
+      "description": "Whether the project knowledge was created by this connection.",
+      "type": "boolean"
+    }
+  },
+  "required": ["knowledge", "prefix", "knowledge_created"]
+}

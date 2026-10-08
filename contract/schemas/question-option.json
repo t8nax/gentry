@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/question-option.json",
+  "title": "QuestionOption",
+  "description": "An option of an answer to a question of the agent to the operator.",
+  "type": "object",
+  "properties": {
+    "label": {
+      "description": "Name of the option: one line, up to 120 characters.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "description": "What the option means; may have several lines.",
+      "type": "string",
+      "minLength": 1
+    },
+    "recommended": {
+      "description": "The agent recommends the option; at most one option of a question is.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "label"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/project-list.json",
+  "title": "ProjectListOutput",
+  "description": "Output of `gentry project list --json`.",
+  "type": "object",
+  "properties": {
+    "projects": {
+      "description": "Projects connected on this machine, by identifier.",
+      "type": "array",
+      "items": {
+        "title": "ProjectListItem",
+        "type": "object",
+        "properties": {
+          "project": {
+            "description": "Project identifier.",
+            "type": "string",
+            "minLength": 1
+          },
+          "prefix": {
+            "description": "Prefix of task numbers.",
+            "type": "string",
+            "minLength": 1
+          },
+          "knowledge": {
+            "description": "Absolute path of the project knowledge repository.",
+            "type": "string",
+            "minLength": 1
+          },
+          "main_worktree": {
+            "description": "Absolute path of the main worktree of the project.",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["project", "prefix", "knowledge", "main_worktree"]
+      }
+    }
+  },
+  "required": ["projects"]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/stage-close.json",
+  "title": "StageCloseOutput",
+  "description": "Output of `gentry stage exit --json` and `gentry stage skip --json`.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "The task after the transition.",
+      "$ref": "./task.json"
+    },
+    "closed": {
+      "description": "The pass closed, as an element of the path.",
+      "$ref": "./task-pass.json"
+    }
+  },
+  "required": [
+    "task",
+    "closed"
+  ]
+}

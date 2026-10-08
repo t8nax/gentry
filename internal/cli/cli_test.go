@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,7 +14,10 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/buildinfo"
+	"github.com/t8nax/gentry/internal/hook"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/project"
+	"github.com/t8nax/gentry/internal/state"
 )
 
 func run(args ...string) (code int, stdout, stderr string) {
@@ -32,7 +36,7 @@ func TestHelp(t *testing.T) {
 			t.Errorf("%v: unexpected stderr: %q", args, stderr)
 		}
 		for _, c := range commands() {
-			if c.hidden {
+			if c.hidden() {
 				continue
 			}
 			if !strings.Contains(stdout, c.name) {
@@ -47,7 +51,7 @@ func TestVersion(t *testing.T) {
 	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("exit code %d, stderr %q", code, stderr)
 	}
-	if !strings.HasPrefix(stdout, "gentry ") || !strings.HasSuffix(stdout, "\n") {
+	if !strings.HasPrefix(stdout, msg.Text(msg.VersionGentry, buildinfo.Version())+"\n") {
 		t.Errorf("unexpected output: %q", stdout)
 	}
 }
@@ -66,7 +70,7 @@ func TestUsageErrors(t *testing.T) {
 		if stdout != "" {
 			t.Errorf("%v: unexpected stdout: %q", args, stdout)
 		}
-		if !strings.HasPrefix(stderr, "gentry: ") {
+		if stderr == "" || strings.HasPrefix(stderr, "gentry:") {
 			t.Errorf("%v: unexpected stderr: %q", args, stderr)
 		}
 	}
@@ -74,9 +78,8 @@ func TestUsageErrors(t *testing.T) {
 
 func TestVersionText(t *testing.T) {
 	_, stdout, _ := run("version")
-	lines := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")
-	if len(lines) != 2 || !strings.HasPrefix(lines[0], "gentry ") || lines[1] != msg.Text(msg.VersionContract, contract.Version) {
-		t.Errorf("unexpected output: %q", stdout)
+	if want := msg.Text(msg.VersionGentry, buildinfo.Version()) + "\n"; stdout != want {
+		t.Errorf("output %q, want %q", stdout, want)
 	}
 }
 
@@ -94,14 +97,14 @@ func TestVersionJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
 		t.Fatal(err)
 	}
-	want := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version}
+	want := contract.VersionOutput{Gentry: buildinfo.Version(), Contract: contract.Version, StateSchema: state.SchemaVersion(), KnowledgeFormat: project.KnowledgeFormat}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 	// No fields beyond the contract type.
 	var fields map[string]any
 	json.Unmarshal([]byte(stdout), &fields)
-	if len(fields) != 2 {
+	if len(fields) != 4 {
 		t.Errorf("unexpected fields: %v", fields)
 	}
 }
@@ -124,7 +127,7 @@ func TestFlags(t *testing.T) {
 		}
 	}
 	_, _, stderr := run("version", "--foo")
-	if want := "gentry: " + msg.Text(msg.ErrUnknownFlag, "version", "--foo") + "\n"; stderr != want {
+	if want := msg.Text(msg.ErrUnknownFlag, "version", "--foo") + "\n"; stderr != want {
 		t.Errorf("stderr %q, want %q", stderr, want)
 	}
 }
@@ -132,20 +135,31 @@ func TestFlags(t *testing.T) {
 // validate checks a JSON document against an embedded contract schema.
 func validate(t *testing.T, schema, doc string) {
 	t.Helper()
-	f, err := contract.Schemas.Open(schema)
+	// Every schema of the contract, as one may refer to another.
+	names, err := fs.Glob(contract.Schemas, "schemas/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	s, err := jsonschema.UnmarshalJSON(f)
+	events, err := fs.Glob(contract.Schemas, "schemas/events/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := jsonschema.NewCompiler()
-	if err := c.AddResource(schema, s); err != nil {
-		t.Fatal(err)
+	for _, name := range append(names, events...) {
+		f, err := contract.Schemas.Open(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := jsonschema.UnmarshalJSON(f)
+		f.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := c.AddResource("https://github.com/t8nax/gentry/contract/"+name, s); err != nil {
+			t.Fatal(err)
+		}
 	}
-	compiled, err := c.Compile(schema)
+	compiled, err := c.Compile("https://github.com/t8nax/gentry/contract/" + schema)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +207,7 @@ func TestErrorsJSON(t *testing.T) {
 
 func TestErrorText(t *testing.T) {
 	_, stdout, stderr := run("foo")
-	want := "gentry: " + msg.Text(msg.ErrUnknownCommand, "foo") + " " + msg.Text(msg.HintUnknownCommand) + "\n"
+	want := msg.Text(msg.ErrUnknownCommand, "foo") + "\n\n" + msg.Text(msg.HintUnknownCommand) + "\n"
 	if stdout != "" || stderr != want {
 		t.Errorf("stdout %q, stderr %q, want stderr %q", stdout, stderr, want)
 	}
@@ -214,13 +228,13 @@ func TestHook(t *testing.T) {
 		code   string
 		stderr string
 	}{
-		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + " " + msg.Text(msg.HintHookEvents, "session-start")},
-		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + " " + msg.Text(msg.HintHookEvents, "session-start")},
+		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + "\n\n" + msg.Text(msg.HintHookEvents, "session-start, pre-tool, post-tool, stop")},
+		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + "\n\n" + msg.Text(msg.HintHookEvents, "session-start, pre-tool, post-tool, stop")},
 		{[]string{"hook", "session-start", "extra"}, contract.CodeUnexpectedArgs, msg.Text(msg.ErrExtraArgs, "hook", "extra")},
 	}
 	for _, tt := range tests {
 		exit, _, stderr := run(tt.args...)
-		if exit != contract.ExitUsage || stderr != "gentry: "+tt.stderr+"\n" {
+		if exit != contract.ExitUsage || stderr != tt.stderr+"\n" {
 			t.Errorf("%v: exit code %d, stderr %q, want %q", tt.args, exit, stderr, tt.stderr)
 		}
 		// hook takes no --json flag, so check the JSON failure through the env.
@@ -245,12 +259,12 @@ func TestSessionStartNeverBreaksSession(t *testing.T) {
 	orig := sessionStart
 	t.Cleanup(func() { sessionStart = orig })
 
-	failures := map[string]func(io.Writer) error{
-		"panic": func(w io.Writer) error {
+	failures := map[string]func(io.Writer, hook.Input) error{
+		"panic": func(w io.Writer, _ hook.Input) error {
 			io.WriteString(w, "partial")
 			panic("boom")
 		},
-		"error": func(w io.Writer) error {
+		"error": func(w io.Writer, _ hook.Input) error {
 			io.WriteString(w, "partial")
 			return errors.New("boom")
 		},
@@ -263,7 +277,7 @@ func TestSessionStartNeverBreaksSession(t *testing.T) {
 		}
 	}
 
-	sessionStart = func(w io.Writer) error {
+	sessionStart = func(w io.Writer, _ hook.Input) error {
 		_, err := io.WriteString(w, "introduction")
 		return err
 	}

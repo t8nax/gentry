@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/worktree.added.json",
+  "title": "WorktreeAddedData",
+  "description": "Data of the worktree.added event: a worktree was added to the pool of the project in the event envelope.",
+  "type": "object",
+  "properties": {
+    "path": {
+      "description": "Absolute path of the worktree root.",
+      "type": "string",
+      "minLength": 1
+    },
+    "main": {
+      "description": "Whether this is the main worktree of the project.",
+      "type": "boolean"
+    }
+  },
+  "required": ["path", "main"]
+}

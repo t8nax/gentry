@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
@@ -31,15 +30,12 @@ func runSetup(args []string, env Env) int {
 	if code, done := f.parse(args, env); done {
 		return code
 	}
-	list := strings.Join(tools, ", ")
 	switch {
 	case len(f.args) == 0:
-		return fail(env, missingArgument("setup", "tool", msg.Text(msg.ErrSetupToolMissing), msg.Text(msg.HintSetupTools, list)))
+		return fail(env, missingArgument("setup", "tool", msg.Text(msg.ErrSetupToolMissing), msg.Text(msg.HintCommandHelp, "setup")))
 	case !slices.Contains(tools, f.args[0]):
 		t := f.args[0]
-		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), msg.Text(msg.HintSetupTools, list)))
-	case len(f.args) > 1:
-		return fail(env, extraArgs("setup", f.args[1:]))
+		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), msg.Text(msg.HintCommandHelp, "setup")))
 	}
 
 	dir, err := home.Integration(claude.Tool)
@@ -50,7 +46,7 @@ func runSetup(args []string, env Env) int {
 	if err != nil {
 		return fail(env, internal(err))
 	}
-	p, err := claude.Build(integration.Gentry(exe, msg.Text(msg.HelpIntro)), buildinfo.Version())
+	p, err := claude.Build(integration.Gentry(exe), buildinfo.Version())
 	if err != nil {
 		return fail(env, internal(err))
 	}
@@ -64,7 +60,7 @@ func runSetup(args []string, env Env) int {
 	r, err := claude.Register(program, dir, p.Version)
 	var ce *claude.CommandError
 	if errors.As(err, &ce) {
-		return fail(env, toolFailed(claude.Tool, "Claude Code", ce.Command, ce.Output))
+		return fail(env, toolFailed(claude.Tool, ce.Command, ce.Output))
 	}
 	if err != nil {
 		return fail(env, internal(err))

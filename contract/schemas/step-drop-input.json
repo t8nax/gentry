@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/step-drop-input.json",
+  "title": "StepDropInput",
+  "description": "Input of `gentry step drop --input`. An unknown field is an error. The source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "step": {
+      "description": "Number of the step of the current stage.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason": {
+      "description": "Why the step is dropped.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "step",
+    "reason"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/library-discard.json",
+  "title": "LibraryDiscardOutput",
+  "description": "Output of `gentry library discard --json`: the library directory is back to the active library, and the variants of another machine of a conflict are removed.",
+  "type": "object",
+  "properties": {
+    "dir": {
+      "description": "Absolute path of the library directory.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["dir"]
+}

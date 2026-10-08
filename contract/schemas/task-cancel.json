@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-cancel.json",
+  "title": "TaskCancelOutput",
+  "description": "Output of `gentry task cancel --json`: the task is cancelled and its worktree is free. The task can be taken anew by `gentry task take --task`.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "The task cancelled.",
+      "$ref": "./task.json"
+    },
+    "worktree": {
+      "description": "Absolute path of the worktree the task released.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["task", "worktree"]
+}

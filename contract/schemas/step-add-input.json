@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/step-add-input.json",
+  "title": "StepAddInput",
+  "description": "Input of `gentry step add --input`. An unknown field is an error. The source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "steps": {
+      "description": "Steps to add after the steps of the current stage: each one line of up to 120 characters.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
+    }
+  },
+  "required": [
+    "steps"
+  ],
+  "additionalProperties": false
+}

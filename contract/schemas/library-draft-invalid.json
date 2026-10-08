@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/library-draft-invalid.json",
+  "title": "LibraryDraftInvalidDetails",
+  "description": "Details of the error library_draft_invalid: the draft of the library of subagents has problems, or breaks the active flow of a project, so it is not applied.",
+  "type": "object",
+  "properties": {
+    "dir": {
+      "description": "Absolute path of the library directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "problems": {
+      "description": "All problems of the draft by subagent, and files that do not belong to the library last. The file of a problem is its path inside the library. Empty if the draft itself is valid and only breaks flows.",
+      "type": "array",
+      "items": { "$ref": "./flow-problem.json" }
+    },
+    "flows": {
+      "description": "Active flows that are valid with the active library and not with the draft, by project; absent if there are none. A valid draft is refused for them.",
+      "type": "array",
+      "items": {
+        "title": "LibraryBrokenFlow",
+        "type": "object",
+        "properties": {
+          "project": {
+            "description": "Identifier of the project.",
+            "type": "string",
+            "minLength": 1
+          },
+          "problems": {
+            "description": "Problems of the flow with the draft of the library, in the order of files and lines.",
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "./flow-problem.json" }
+          }
+        },
+        "required": ["project", "problems"]
+      }
+    }
+  },
+  "required": ["dir", "problems"]
+}

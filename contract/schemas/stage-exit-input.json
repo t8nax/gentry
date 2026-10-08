@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/stage-exit-input.json",
+  "title": "StageExitInput",
+  "description": "Input of `gentry stage exit --input`: the fields as one object, in a file or on the standard input. An unknown field is an error. The source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "description": "Kind of the exit: artifact — an artifact of the task, result — the result of an event, negative — a negative result with where it was looked for.",
+      "type": "string",
+      "enum": [
+        "artifact",
+        "result",
+        "negative"
+      ]
+    },
+    "text": {
+      "description": "Text of the exit.",
+      "type": "string",
+      "minLength": 1
+    },
+    "artifact": {
+      "description": "Name of the artifact of the task; only for an exit of kind artifact.",
+      "type": "string",
+      "minLength": 1
+    },
+    "to": {
+      "description": "The node to go to, or finish; required at a fork.",
+      "type": "string",
+      "minLength": 1
+    },
+    "reason": {
+      "description": "Why the transition is taken; required at a fork and for a single transition with a condition.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "kind",
+    "text"
+  ],
+  "additionalProperties": false
+}

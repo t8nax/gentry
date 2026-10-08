@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-take-input.json",
+  "title": "TaskTakeInput",
+  "description": "Input of `gentry task take --input`: the fields of the task as one object, in a file or on the standard input. An unknown field is an error. A new task has a title and a statement; a cancelled task taken anew is named by task and keeps its own. The source of the statement is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "task": { "description": "Identifier of a cancelled task to take anew, such as SHOP-2: its next attempt keeps its title and statement.", "type": "string", "minLength": 1 },
+    "scenario": { "description": "Identifier of the scenario of the task.", "type": "string", "minLength": 1 },
+    "title": { "description": "Title of the task: one line of up to 80 characters.", "type": "string", "minLength": 1, "maxLength": 80 },
+    "statement": { "description": "Statement of the task, kept as passed.", "type": "string", "minLength": 1 },
+    "worktree": { "description": "Worktree of the task; the current directory by default.", "type": "string", "minLength": 1 }
+  },
+  "required": ["scenario"],
+  "oneOf": [
+    { "required": ["title", "statement"], "not": { "required": ["task"] } },
+    { "required": ["task"], "not": { "anyOf": [{ "required": ["title"] }, { "required": ["statement"] }] } }
+  ],
+  "additionalProperties": false
+}

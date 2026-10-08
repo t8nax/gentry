@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-step.json",
+  "title": "TaskStep",
+  "description": "A step of a pass of a stage: declared ahead, then done or dropped.",
+  "type": "object",
+  "properties": {
+    "number": {
+      "description": "Number of the step within the pass, from 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "title": {
+      "description": "The step: one line of up to 120 characters.",
+      "type": "string",
+      "minLength": 1
+    },
+    "state": {
+      "description": "State of the step: planned — not done yet, done — done, dropped — dropped with a reason.",
+      "type": "string",
+      "enum": [
+        "planned",
+        "done",
+        "dropped"
+      ]
+    },
+    "check": {
+      "description": "How the result of a done step was checked; absent if not given.",
+      "type": "string",
+      "minLength": 1
+    },
+    "reason": {
+      "description": "Why a dropped step was dropped.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "description": "Who added the step: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    },
+    "added": {
+      "description": "Time the step was added in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "closed_source": {
+      "description": "Who marked the step done or dropped it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    },
+    "closed": {
+      "description": "Time the step was done or dropped in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "number",
+    "title",
+    "state",
+    "source",
+    "added"
+  ]
+}

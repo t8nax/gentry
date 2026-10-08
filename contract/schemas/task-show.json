@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-show.json",
+  "title": "TaskShowOutput",
+  "description": "Output of `gentry task show --json`. The path is always full: --path changes only the text output.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "The task named, or the task of the current worktree.",
+      "$ref": "./task.json"
+    },
+    "path": {
+      "description": "The passes of the task in the order entered; the last one is current unless the scenario is passed, and holds the steps of the current stage.",
+      "type": "array",
+      "items": {
+        "$ref": "./task-pass.json"
+      }
+    },
+    "notes": {
+      "description": "Notes of the task by number.",
+      "type": "array",
+      "items": {
+        "$ref": "./task-note.json"
+      }
+    },
+    "artifacts": {
+      "description": "Artifacts of the task by name.",
+      "type": "array",
+      "items": {
+        "$ref": "./task-artifact.json"
+      }
+    },
+    "operator_decisions": {
+      "description": "Decisions of the operator by number; empty if there are none. --statement changes only the text output.",
+      "type": "array",
+      "items": {
+        "$ref": "./operator-decision.json"
+      }
+    }
+  },
+  "required": [
+    "task",
+    "path",
+    "notes",
+    "artifacts",
+    "operator_decisions"
+  ]
+}

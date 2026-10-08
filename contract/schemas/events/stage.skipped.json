@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/stage.skipped.json",
+  "title": "StageSkippedData",
+  "description": "Data of the stage.skipped event: the task in the envelope skipped its current stage and took a transition.",
+  "type": "object",
+  "properties": {
+    "node": {
+      "description": "Node of the pass skipped.",
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "description": "Stage of that node.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of the pass skipped.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason": {
+      "description": "Why the stage was skipped.",
+      "type": "string",
+      "minLength": 1
+    },
+    "to": {
+      "description": "The node taken, or finish.",
+      "type": "string",
+      "minLength": 1
+    },
+    "returns": {
+      "description": "Which return by the transition this is, for a return.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "finished": {
+      "description": "The scenario of the task is passed.",
+      "type": "boolean"
+    },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "node",
+    "stage",
+    "round",
+    "reason",
+    "to",
+    "finished",
+    "source"
+  ]
+}

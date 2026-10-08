@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-attempts.json",
+  "title": "TaskAttemptsOutput",
+  "description": "Output of `gentry task attempts --json` without an attempt: the attempts of a task. With an attempt the command gives that attempt as `gentry task show --json` gives a task (TaskShowOutput).",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "Identifier of the task, such as SHOP-1.",
+      "type": "string",
+      "minLength": 1
+    },
+    "attempts": {
+      "description": "Attempts of the task in order, from 1; a task never cancelled has one.",
+      "type": "array",
+      "items": {
+        "title": "TaskAttempt",
+        "type": "object",
+        "properties": {
+          "attempt": {
+            "description": "Number of the attempt.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "state": {
+            "description": "State of the attempt, as in Task.",
+            "type": "string",
+            "enum": [
+              "active",
+              "waiting",
+              "closed",
+              "cancelled"
+            ]
+          },
+          "scenario": {
+            "description": "Scenario of the attempt.",
+            "$ref": "./task.json#/$defs/scenario"
+          },
+          "taken": {
+            "description": "Time the attempt was taken in UTC, RFC 3339 with milliseconds.",
+            "type": "string",
+            "format": "date-time"
+          },
+          "ended": {
+            "description": "The closing or the cancelling of the attempt; absent while it is in work.",
+            "$ref": "./task.json#/$defs/ended"
+          }
+        },
+        "required": [
+          "attempt",
+          "state",
+          "scenario",
+          "taken"
+        ]
+      }
+    }
+  },
+  "required": ["task", "attempts"]
+}

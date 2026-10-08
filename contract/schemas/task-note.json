@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-note.json",
+  "title": "TaskNote",
+  "description": "A note of a task: what the agent wants to keep in mind. Notes are only added; a wrong one is corrected by a new one.",
+  "type": "object",
+  "properties": {
+    "number": {
+      "description": "Number of the note within the task, from 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "text": {
+      "description": "Text of the note; may have several lines.",
+      "type": "string",
+      "minLength": 1
+    },
+    "node": {
+      "description": "Node of the pass the note was added at.",
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "description": "Stage of that node.",
+      "type": "string",
+      "minLength": 1
+    },
+    "round": {
+      "description": "Round of that pass.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "source": {
+      "description": "Who added the note: operator or agent.",
+      "type": "string",
+      "enum": [
+        "operator",
+        "agent"
+      ]
+    },
+    "added": {
+      "description": "Time the note was added in UTC, RFC 3339 with milliseconds.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "number",
+    "text",
+    "node",
+    "stage",
+    "round",
+    "source",
+    "added"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-cancel-input.json",
+  "title": "TaskCancelInput",
+  "description": "Input of `gentry task cancel --input`. An unknown field is an error. The task is the argument of the command; the source is not part of the input: Gentry determines it by who calls the command.",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "description": "Why the task is cancelled; not required.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

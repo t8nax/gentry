@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/library-apply.json",
+  "title": "LibraryApplyOutput",
+  "description": "Output of `gentry library apply --json`: the draft of the library became active with a commit of the process repository.",
+  "type": "object",
+  "properties": {
+    "applied": {
+      "description": "The commit that applied the library.",
+      "$ref": "./applied.json"
+    },
+    "sent": {
+      "description": "Whether the commit is sent to the remote repository; false without one or when it did not answer, and then it is sent by a later command.",
+      "type": "boolean"
+    },
+    "sync": {
+      "description": "What the synchronization of the command did; present only when there is something to tell.",
+      "$ref": "./sync.json"
+    }
+  },
+  "required": ["applied", "sent"]
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/task.cancelled.json",
+  "title": "TaskCancelledData",
+  "description": "Data of the task.cancelled event: the task in the event envelope was cancelled and released its worktree.",
+  "type": "object",
+  "properties": {
+    "attempt": { "description": "Attempt of the task.", "type": "integer", "minimum": 1 },
+    "node": { "description": "Node the task was cancelled at; finish if its scenario was passed.", "type": "string", "minLength": 1 },
+    "reason": { "description": "Why the task was cancelled; absent if not given.", "type": "string", "minLength": 1 },
+    "worktree": { "description": "Absolute path of the worktree the task released.", "type": "string", "minLength": 1 },
+    "source": {
+      "description": "Who did it: operator or agent.",
+      "type": "string",
+      "enum": ["operator", "agent"]
+    }
+  },
+  "required": ["attempt", "node", "worktree", "source"]
+}

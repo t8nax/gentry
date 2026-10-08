@@ -14,9 +14,16 @@ func TestSchemasCompile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	events, err := fs.Glob(Schemas, "schemas/events/*.json")
+	if err != nil || len(events) == 0 {
+		t.Fatalf("no event schemas embedded: %v", err)
+	}
+	names = append(names, events...)
 	if len(names) == 0 {
 		t.Fatal("no schemas embedded")
 	}
+	// All schemas first: one may refer to another, as flow-invalid.json to
+	// flow-problem.json.
 	c := jsonschema.NewCompiler()
 	for _, name := range names {
 		f, err := Schemas.Open(name)
@@ -28,10 +35,12 @@ func TestSchemasCompile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if err := c.AddResource(name, doc); err != nil {
+		if err := c.AddResource(schemaURL(name), doc); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if _, err := c.Compile(name); err != nil {
+	}
+	for _, name := range names {
+		if _, err := c.Compile(schemaURL(name)); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -39,12 +48,16 @@ func TestSchemasCompile(t *testing.T) {
 
 func TestVersionOutputRequiredFields(t *testing.T) {
 	var v VersionOutput
-	if err := json.Unmarshal([]byte(`{"gentry":"0.1.0","contract":0,"future_field":1}`), &v); err != nil {
+	if err := json.Unmarshal([]byte(`{"gentry":"0.1.0","contract":0,"state_schema":1,"knowledge_format":1,"future_field":1}`), &v); err != nil {
 		t.Errorf("unknown fields must be accepted: %v", err)
 	}
-	err := json.Unmarshal([]byte(`{"contract":0}`), &v)
+	err := json.Unmarshal([]byte(`{"contract":0,"state_schema":1,"knowledge_format":1}`), &v)
 	if err == nil || !strings.Contains(err.Error(), "gentry") {
 		t.Errorf("missing gentry must be rejected, got %v", err)
+	}
+	err = json.Unmarshal([]byte(`{"gentry":"0.1.0","contract":0,"knowledge_format":1}`), &v)
+	if err == nil || !strings.Contains(err.Error(), "state_schema") {
+		t.Errorf("missing state_schema must be rejected, got %v", err)
 	}
 }
 
@@ -57,7 +70,18 @@ func TestEventRoundTrip(t *testing.T) {
 	if e.Seq != 42 || e.Type != "task.taken" || e.Task == nil || *e.Task != "SHOP-12" || e.Time.Nanosecond() != 123000000 {
 		t.Errorf("unexpected event: %+v", e)
 	}
-	if err := json.Unmarshal([]byte(`{"seq":1,"time":"2026-10-04T18:22:52.123Z","type":"task.taken","data":{}}`), &e); err == nil {
-		t.Error("event without project must be rejected")
+	e = Event{}
+	if err := json.Unmarshal([]byte(`{"seq":1,"time":"2026-10-04T18:22:52.123Z","type":"settings.changed","data":{}}`), &e); err != nil {
+		t.Errorf("event without project must be accepted: %v", err)
+	}
+	if e.Project != nil || e.Task != nil {
+		t.Errorf("unexpected project or task: %+v", e)
+	}
+	if err := json.Unmarshal([]byte(`{"seq":1,"time":"2026-10-04T18:22:52.123Z","type":"task.taken"}`), &e); err == nil {
+		t.Error("event without data must be rejected")
 	}
 }
+
+// schemaURL is the $id of the embedded schema name: schemas refer to each
+// other by it.
+func schemaURL(name string) string { return "https://github.com/t8nax/gentry/contract/" + name }

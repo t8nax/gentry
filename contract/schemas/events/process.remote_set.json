@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/process.remote_set.json",
+  "title": "ProcessRemoteSetData",
+  "description": "Data of the process.remote_set event: the remote repository of the process is connected or its address replaced. The event has no project.",
+  "type": "object",
+  "properties": {
+    "remote": {
+      "description": "Address of the remote repository.",
+      "type": "string",
+      "minLength": 1
+    },
+    "result": {
+      "description": "What the connection did, as result of ProcessRemoteOutput.",
+      "type": "string",
+      "enum": ["sent", "received", "merged", "unchanged"]
+    }
+  },
+  "required": ["remote", "result"]
+}

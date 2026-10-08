@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/note-list.json",
+  "title": "NoteListOutput",
+  "description": "Output of `gentry note list --json`.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "Identifier of the task, such as SHOP-1.",
+      "type": "string",
+      "minLength": 1
+    },
+    "notes": {
+      "description": "Notes of the task by number.",
+      "type": "array",
+      "items": {
+        "$ref": "./task-note.json"
+      }
+    }
+  },
+  "required": ["task", "notes"]
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-list.json",
+  "title": "TaskListOutput",
+  "description": "Output of `gentry task list --json`.",
+  "type": "object",
+  "properties": {
+    "tasks": {
+      "description": "Tasks that match the flags, the last attempt of each: by project, then by number.",
+      "type": "array",
+      "items": {
+        "title": "TaskListItem",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Identifier of the task, such as SHOP-1.",
+            "type": "string",
+            "minLength": 1
+          },
+          "attempt": {
+            "description": "Attempt of the task, as in Task.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "project": {
+            "description": "Identifier of the project.",
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "description": "Title of the task.",
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "description": "State of the task, as in Task.",
+            "type": "string",
+            "enum": [
+              "active",
+              "waiting",
+              "closed",
+              "cancelled"
+            ]
+          },
+          "scenario": {
+            "description": "Scenario of the task.",
+            "$ref": "./task.json#/$defs/scenario"
+          },
+          "stage": {
+            "description": "Current stage of the task; absent once the scenario is passed.",
+            "$ref": "./task.json#/$defs/stage"
+          },
+          "finished": {
+            "description": "The scenario of the task is passed, as in Task.",
+            "type": "boolean"
+          },
+          "progress": {
+            "description": "Progress of the task, as in Task.",
+            "$ref": "./task.json#/$defs/progress"
+          },
+          "worktree": {
+            "description": "Absolute path of the worktree the task holds; absent once the task released it.",
+            "type": "string",
+            "minLength": 1
+          },
+          "taken": {
+            "description": "Time the task was taken in UTC, RFC 3339 with milliseconds.",
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "attempt",
+          "project",
+          "title",
+          "state",
+          "scenario",
+          "finished",
+          "progress",
+          "taken"
+        ]
+      }
+    }
+  },
+  "required": [
+    "tasks"
+  ]
+}

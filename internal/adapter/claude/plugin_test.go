@@ -20,7 +20,7 @@ const testExe = "/opt/Gentry Tools/gentry"
 
 func testPlugin(t *testing.T, exe, version string) Plugin {
 	t.Helper()
-	p, err := Build(integration.Gentry(exe, "Gentry ведёт задачи агента по флоу проекта."), version)
+	p, err := Build(integration.Gentry(exe), version)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestHookCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := hooks.Hooks["SessionStart"][0].Hooks[0].Command
-	want := `"/opt/Gentry Tools/gentry" hook session-start`
+	want := `"/opt/Gentry Tools/gentry" hook session-start --tool claude`
 	if got != want {
 		t.Errorf("command %q, want %q", got, want)
 	}

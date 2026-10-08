@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/artifact-save.json",
+  "title": "ArtifactSaveOutput",
+  "description": "Output of `gentry artifact save --json`.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "Identifier of the task, such as SHOP-1.",
+      "type": "string",
+      "minLength": 1
+    },
+    "artifact": {
+      "description": "The artifact saved.",
+      "$ref": "./task-artifact.json"
+    },
+    "replaced": {
+      "description": "An artifact of the same name was replaced.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "task",
+    "artifact",
+    "replaced"
+  ]
+}

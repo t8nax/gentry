@@ -34,4 +34,7 @@ func TestRootDefault(t *testing.T) {
 	if got, err := Integration("claude"); err != nil || got != wantIntegration {
 		t.Errorf("Integration() = %q, %v; want %q", got, err, wantIntegration)
 	}
+	if got, err := Process(); err != nil || got != filepath.Join(want, "process") {
+		t.Errorf("Process() = %q, %v; want %q", got, err, filepath.Join(want, "process"))
+	}
 }

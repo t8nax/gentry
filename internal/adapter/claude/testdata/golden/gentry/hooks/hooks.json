@@ -1,10 +1,57 @@
 {
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "\"/opt/Gentry Tools/gentry\" hook post-tool --tool claude",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|PowerShell"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "\"/opt/Gentry Tools/gentry\" hook post-tool --tool claude",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|PowerShell"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "\"/opt/Gentry Tools/gentry\" hook pre-tool --tool claude",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|PowerShell"
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
           {
-            "command": "\"/opt/Gentry Tools/gentry\" hook session-start",
+            "command": "\"/opt/Gentry Tools/gentry\" hook session-start --tool claude",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "\"/opt/Gentry Tools/gentry\" hook stop --tool claude",
             "timeout": 10,
             "type": "command"
           }

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/operator-record.json",
+  "title": "OperatorRecordOutput",
+  "description": "Output of `gentry operator record --json`.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "Identifier of the task, such as SHOP-1.",
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "description": "The decision recorded.",
+      "$ref": "./operator-decision.json"
+    },
+    "return": {
+      "description": "The return the decision allows, after the record; only with allow_return.",
+      "type": "object",
+      "properties": {
+        "node": {
+          "description": "Node the return is from: the current node of the task.",
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "description": "Node the return goes back to.",
+          "type": "string",
+          "minLength": 1
+        },
+        "returns": {
+          "description": "Returns made by the transition, counted anew after a return by an outer loop.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_returns": {
+          "description": "Limit of returns by the transition with the returns the operator allowed.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "allowed_returns": {
+          "description": "Returns of the limit the operator allowed beyond the flow.",
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "node",
+        "to",
+        "returns",
+        "max_returns",
+        "allowed_returns"
+      ]
+    }
+  },
+  "required": [
+    "task",
+    "decision"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/events/process.synced.json",
+  "title": "ProcessSyncedData",
+  "description": "Data of the process.synced event: a synchronization of the process received, sent or restored something, or met a conflict; a change made on another machine is known by it. The event has no project.",
+  "type": "object",
+  "properties": {
+    "received": {
+      "description": "Kinds changed on another machine and taken.",
+      "type": "array",
+      "items": { "$ref": "../process-item.json" }
+    },
+    "sent": {
+      "description": "Kinds changed on this machine and sent.",
+      "type": "array",
+      "items": { "$ref": "../process-item.json" }
+    },
+    "conflicts": {
+      "description": "Kinds changed on both machines that could not be brought together.",
+      "type": "array",
+      "items": { "$ref": "../process-item.json" }
+    },
+    "restored": {
+      "description": "Kinds changed around Gentry with problems, restored to the last checked variant.",
+      "type": "array",
+      "items": { "$ref": "../process-item.json" }
+    }
+  },
+  "required": ["received", "sent", "conflicts", "restored"]
+}

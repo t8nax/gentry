@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/task-close.json",
+  "title": "TaskCloseOutput",
+  "description": "Output of `gentry task close --json`: the task is closed and its worktree is free.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "The task closed.",
+      "$ref": "./task.json"
+    },
+    "worktree": {
+      "description": "Absolute path of the worktree the task released.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["task", "worktree"]
+}

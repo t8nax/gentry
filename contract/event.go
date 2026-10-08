@@ -8,14 +8,15 @@ import "regexp"
 import "time"
 import "unicode/utf8"
 
-// An event of the journal, one JSON line per event in the output of `gentry
-// events`.
+// An event of the journal, one JSON line per event in the output of `gentry events
+// --json`.
 type Event struct {
 	// Details of the event; each type defines its own schema.
 	Data EventData `json:"data"`
 
-	// Project the event belongs to.
-	Project string `json:"project"`
+	// Project the event belongs to; absent for events without a project, such as a
+	// change of a setting for all projects.
+	Project *string `json:"project,omitempty,omitzero"`
 
 	// Event number: grows on the machine without gaps in the order of writing. A
 	// client resumes reading after the last number it has processed.
@@ -43,9 +44,6 @@ func (j *Event) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["data"]; raw != nil && !ok {
 		return fmt.Errorf("field data in Event: required")
 	}
-	if _, ok := raw["project"]; raw != nil && !ok {
-		return fmt.Errorf("field project in Event: required")
-	}
 	if _, ok := raw["seq"]; raw != nil && !ok {
 		return fmt.Errorf("field seq in Event: required")
 	}
@@ -60,7 +58,7 @@ func (j *Event) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
-	if utf8.RuneCountInString(string(plain.Project)) < 1 {
+	if plain.Project != nil && utf8.RuneCountInString(string(*plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
 	}
 	if 1 > plain.Seq {

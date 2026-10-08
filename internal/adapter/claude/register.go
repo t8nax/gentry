@@ -135,7 +135,7 @@ func Register(program, dir, version string) (Result, error) {
 		return Result{}, err
 	}
 	if disabled {
-		if err := c.run("plugin", "disable", id, "--json"); err != nil {
+		if err := c.run("plugin", "disable", id, "--scope", "user", "--json"); err != nil {
 			return Result{}, err
 		}
 	}

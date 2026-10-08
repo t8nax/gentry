@@ -77,6 +77,11 @@ func runSetup(args []string, env Env) int {
 	if err := claude.Write(dir, p); err != nil {
 		return fail(env, ioError(dir, err))
 	}
+	// Once written, dir may turn out to be the directory registered, reached
+	// by another path: then nothing is switched.
+	if previous != "" && claude.SamePath(previous, dir) {
+		previous = ""
+	}
 	r, err := claude.Register(program, dir, p.Version)
 	if err != nil {
 		return fail(env, setupToolError(err))
@@ -98,6 +103,11 @@ func runSetup(args []string, env Env) int {
 		fmt.Fprintln(env.Stdout, msg.Text(setupMessages[r.Action]))
 	}
 	if !r.Enabled {
+		// The switch ends with a field line: a blank line keeps the next
+		// message apart from it.
+		if previous != "" {
+			fmt.Fprintln(env.Stdout)
+		}
 		fmt.Fprintln(env.Stdout, msg.Text(msg.SetupDisabled))
 	}
 	return contract.ExitOK

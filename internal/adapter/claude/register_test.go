@@ -137,7 +137,7 @@ func TestRegisterMovedKeepsDisabled(t *testing.T) {
 	if r := register(t, program, moved, plugin(t, moved, "0.1.0")); r != (Result{Installed, false}) {
 		t.Errorf("moved disabled plugin: %+v; want installed and still disabled", r)
 	}
-	if got := log(); got[len(got)-1] != "plugin disable gentry@gentry --json" {
+	if got := log(); got[len(got)-1] != "plugin disable gentry@gentry --scope user --json" {
 		t.Errorf("the moved plugin must be disabled again, last command %q", got[len(got)-1])
 	}
 }

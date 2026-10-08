@@ -274,11 +274,33 @@ func TestSetupSwitchKeepsDisabled(t *testing.T) {
 		t.Fatalf("%v: %s", err, out)
 	}
 	code, stdout, _ := setupFrom(t, b, "--switch")
-	want := msg.Text(msg.SetupSwitched, filepath.Join(a, "integrations", "claude")) + "\n" + msg.Text(msg.SetupDisabled) + "\n"
+	want := msg.Text(msg.SetupSwitched, filepath.Join(a, "integrations", "claude")) + "\n\n" + msg.Text(msg.SetupDisabled) + "\n"
 	if code != contract.ExitOK || stdout != want {
 		t.Errorf("exit code %d, stdout %q, want %q", code, stdout, want)
 	}
 	if p := readFake(t).Plugins; len(p) != 1 || p[0].Enabled {
 		t.Errorf("the plugin the operator disabled must stay disabled after the switch: %+v", p)
+	}
+}
+
+// A plugin registered through a link to the data root of this command, not
+// yet written, is the same directory once written: nothing is switched.
+func TestSetupSameThroughLink(t *testing.T) {
+	base := t.TempDir()
+	b := filepath.Join(base, "b")
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(b, link); err != nil {
+		t.Skipf("symbolic links are not available: %v", err)
+	}
+	state := filepath.Join(base, "fakeclaude-state.json")
+	t.Setenv("FAKECLAUDE_STATE", state)
+	seed, _ := json.Marshal(map[string]any{"marketplaces": []any{map[string]string{
+		"name": "gentry", "source": "directory", "path": filepath.Join(link, "integrations", "claude"),
+	}}})
+	if err := os.WriteFile(state, seed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, stdout, stderr := setupFrom(t, b); code != contract.ExitOK || stdout != msg.Text(msg.SetupInstalled)+"\n" {
+		t.Errorf("exit code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }

@@ -10,12 +10,15 @@ import (
 	"bytes"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"sort"
+	"time"
 
+	"github.com/t8nax/gentry/internal/filelock"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/git"
 	"github.com/t8nax/gentry/internal/paths"
@@ -112,6 +115,9 @@ func planOf(l Layout, t Target) (plan, error) {
 	for _, a := range t.Agents {
 		files = append(files, path.Join(l.Dir(), l.Name(a.ID)))
 	}
+	for name := range present {
+		files = append(files, path.Join(l.Dir(), name))
+	}
 	tracked, err := git.Tracked(t.Path, files)
 	if err != nil {
 		return plan{}, err
@@ -143,8 +149,9 @@ func planOf(l Layout, t Target) (plan, error) {
 		}
 		p.change.Agents = append(p.change.Agents, a.ID)
 	}
-	for _, name := range sortedKeys(present) {
-		if want[name] {
+	for _, name := range slices.Sorted(maps.Keys(present)) {
+		// A marked file the project tracks is the project's: it stays.
+		if want[name] || tracked[path.Join(l.Dir(), name)] {
 			continue
 		}
 		id, _ := l.ID(name)
@@ -197,43 +204,54 @@ func Check(l Layout, targets []Target) ([]Conflict, error) {
 
 // Sync lays out targets: the files of their subagents are written unless
 // they are the same, the files Gentry laid out for subagents no more there
-// are removed, and the subagents in conflict are skipped. Then the block of
-// Gentry in the info/exclude of each repository is made to list the files
-// Gentry laid out in all worktrees of pool that share it; pool is every
-// worktree of the pools, as a worktree outside the targets may have files
-// too.
+// are removed, and the subagents in conflict are skipped. The block of
+// Gentry in the info/exclude of each repository lists the files Gentry laid
+// out in all worktrees of pool that share it; pool is every worktree of the
+// pools, as a worktree outside the targets may have files too. The block
+// gets the files to write before they are written and loses the files
+// removed after they are, so a failure between leaves a pattern too many
+// rather than a file git shows.
 func Sync(l Layout, targets []Target, pool []string) (Result, error) {
 	var res Result
-	touched := map[string]bool{}
+	var plans []plan
 	for _, t := range targets {
 		p, err := planOf(l, t)
 		if err != nil {
 			return Result{}, err
 		}
 		res.Conflicts = append(res.Conflicts, p.conflicts...)
-		if !p.change.Missing {
-			if err := apply(l, t.Path, p); err != nil {
-				return Result{}, err
-			}
-			touched[t.Path] = true
-		}
 		res.Worktrees = append(res.Worktrees, p.change)
+		if !p.change.Missing {
+			plans = append(plans, p)
+		}
 	}
-	if len(touched) == 0 {
+	if len(plans) == 0 {
 		return res, nil
 	}
-	return res, exclude(l, touched, pool)
+	files, err := excludeFiles(plans, pool)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := exclude(l, files, plans, true); err != nil {
+		return Result{}, err
+	}
+	for _, p := range plans {
+		if err := apply(l, p); err != nil {
+			return Result{}, err
+		}
+	}
+	return res, exclude(l, files, plans, false)
 }
 
-// apply writes and removes the files of plan p in worktree root.
-func apply(l Layout, root string, p plan) error {
-	dir := filepath.Join(root, filepath.FromSlash(l.Dir()))
+// apply writes and removes the files of plan p.
+func apply(l Layout, p plan) error {
+	dir := filepath.Join(p.change.Worktree, filepath.FromSlash(l.Dir()))
 	if len(p.write) > 0 {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 	}
-	for _, name := range sortedKeys(p.write) {
+	for _, name := range slices.Sorted(maps.Keys(p.write)) {
 		if err := os.WriteFile(filepath.Join(dir, name), p.write[name], 0o644); err != nil {
 			return err
 		}
@@ -246,62 +264,86 @@ func apply(l Layout, root string, p plan) error {
 	return nil
 }
 
-// exclude rewrites the block of Gentry in the info/exclude of the
-// repositories of the worktrees touched, with the files Gentry laid out in
-// every worktree of pool that shares the file.
-func exclude(l Layout, touched map[string]bool, pool []string) error {
-	files := map[string]string{} // worktree → its info/exclude
+// excludeFiles returns the info/exclude of the worktrees of plans and of
+// pool, by worktree. A worktree of the pool that is not there, or that git
+// does not take for a worktree, is left out: it has no files to hide, and it
+// must not stop the layout of the others.
+func excludeFiles(plans []plan, pool []string) (map[string]string, error) {
+	files := map[string]string{}
+	for _, p := range plans {
+		f, err := git.ExcludeFile(p.change.Worktree)
+		if err != nil {
+			return nil, err
+		}
+		files[p.change.Worktree] = f
+	}
 	for _, w := range pool {
+		if _, ok := files[w]; ok {
+			continue
+		}
 		if fi, err := os.Stat(w); err != nil || !fi.IsDir() {
 			continue
 		}
-		f, err := git.ExcludeFile(w)
-		if err != nil {
-			return err
-		}
-		files[w] = f
-	}
-	for w := range touched {
-		if _, ok := files[w]; !ok {
-			f, err := git.ExcludeFile(w)
-			if err != nil {
-				return err
-			}
+		if f, err := git.ExcludeFile(w); err == nil {
 			files[w] = f
 		}
 	}
+	return files, nil
+}
+
+// exclude rewrites the block of Gentry in the info/exclude of the
+// repositories of plans with the files Gentry laid out in every worktree that
+// shares the file; before the files are written, adding also lists those
+// plans write. The block is worked out and written under a lock, so that two
+// commands in worktrees of one repository do not lose each other's files.
+func exclude(l Layout, files map[string]string, plans []plan, adding bool) error {
 	done := map[string]bool{}
-	for w := range touched {
-		file := files[w]
+	for _, p := range plans {
+		file := files[p.change.Worktree]
 		if done[file] {
 			continue
 		}
 		done[file] = true
-		laid := map[string]bool{}
-		for other, f := range files {
-			if !paths.Same(f, file) {
-				continue
-			}
-			names, err := marked(l, filepath.Join(other, filepath.FromSlash(l.Dir())))
-			if err != nil {
-				return err
-			}
-			for name := range names {
-				laid["/"+path.Join(l.Dir(), name)] = true
-			}
+		lock, err := filelock.Acquire(filepath.Join(filepath.Dir(file), lockName), lockWait)
+		if err != nil {
+			return err
 		}
-		if err := writeBlock(file, sortedKeys(laid)); err != nil {
+		err = func() error {
+			defer lock.Release()
+			laid := map[string]bool{}
+			for w, f := range files {
+				if !paths.Same(f, file) {
+					continue
+				}
+				names, err := marked(l, filepath.Join(w, filepath.FromSlash(l.Dir())))
+				if err != nil {
+					return err
+				}
+				for name := range names {
+					laid["/"+path.Join(l.Dir(), name)] = true
+				}
+			}
+			if adding {
+				for _, q := range plans {
+					if paths.Same(files[q.change.Worktree], file) {
+						for name := range q.write {
+							laid["/"+path.Join(l.Dir(), name)] = true
+						}
+					}
+				}
+			}
+			return writeBlock(file, slices.Sorted(maps.Keys(laid)))
+		}()
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
+// The lock of the block of Gentry, beside info/exclude, and how long a
+// layout waits for another to release it.
+const (
+	lockName = "gentry-exclude.lock"
+	lockWait = 10 * time.Second
+)

@@ -59,5 +59,21 @@ func writeBlock(file string, patterns []string) error {
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(file, []byte(next), 0o644)
+	// A new file takes the place of the old one: a failure halfway leaves
+	// the old one whole, with the lines of the operator.
+	tmp, err := os.CreateTemp(filepath.Dir(file), "exclude-*.tmp")
+	if err != nil {
+		return err
+	}
+	_, err = tmp.WriteString(next)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), file)
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+	}
+	return err
 }

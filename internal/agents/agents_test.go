@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/t8nax/gentry/internal/adapter/claude"
 	"github.com/t8nax/gentry/internal/agents"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/git"
@@ -28,8 +27,23 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// fake lays out a subagent as tools/agents/<id>.txt: the mark, then its
+// identifier and instruction.
+type fake struct{}
+
+func (fake) Dir() string           { return "tools/agents" }
+func (fake) Name(id string) string { return id + ".txt" }
+func (fake) ID(name string) (string, bool) {
+	id, ok := strings.CutSuffix(name, ".txt")
+	return id, ok
+}
+func (fake) File(a flow.Agent) []byte {
+	return []byte(agents.MarkPrefix + " laid out\n" + a.ID + "\n" + a.Instruction + "\n")
+}
+func (fake) Marked(content []byte) bool { return strings.HasPrefix(string(content), agents.MarkPrefix) }
+
 var (
-	layout   = claude.Agents{}
+	layout   = fake{}
 	reviewer = flow.Agent{ID: "reviewer", Purpose: "ревью изменений", Capabilities: []string{"read", "search"}, Instruction: "Проверить корзину."}
 	tester   = flow.Agent{ID: "tester", Purpose: "тесты", Capabilities: []string{"read", "run"}, Instruction: "Запустить тесты."}
 )
@@ -43,7 +57,7 @@ func shop(t *testing.T) (main, linked string) {
 	return main, linked
 }
 
-func agentFile(w, id string) string { return filepath.Join(w, ".claude", "agents", id+".md") }
+func agentFile(w, id string) string { return filepath.Join(w, "tools", "agents", id+".txt") }
 
 func read(t *testing.T, p string) string {
 	t.Helper()
@@ -105,7 +119,7 @@ func TestSyncKeepsOperatorFiles(t *testing.T) {
 	main, _ := shop(t)
 	own := agentFile(main, "helper")
 	os.MkdirAll(filepath.Dir(own), 0o755)
-	os.WriteFile(own, []byte("---\nname: helper\n---\nМой субагент.\n"), 0o644)
+	os.WriteFile(own, []byte("Мой субагент.\n"), 0o644)
 	res := sync(t, []agents.Target{{Path: main, Agents: nil}}, main)
 	if res.Worktrees[0].Changed() {
 		t.Errorf("layout changed the file of the operator: %+v", res.Worktrees[0])
@@ -120,7 +134,7 @@ func TestConflicts(t *testing.T) {
 	tracked := agentFile(main, "reviewer")
 	os.MkdirAll(filepath.Dir(tracked), 0o755)
 	os.WriteFile(tracked, []byte("проектный"), 0o644)
-	gittest.Run(t, main, "add", ".claude/agents/reviewer.md")
+	gittest.Run(t, main, "add", "tools/agents/reviewer.txt")
 	gittest.Run(t, main, "commit", "--quiet", "-m", "reviewer")
 	own := agentFile(linked, "tester")
 	os.MkdirAll(filepath.Dir(own), 0o755)
@@ -132,8 +146,8 @@ func TestConflicts(t *testing.T) {
 	}
 	got, err := agents.Check(layout, targets)
 	want := []agents.Conflict{
-		{Worktree: main, Agent: "reviewer", File: ".claude/agents/reviewer.md", Reason: agents.Tracked},
-		{Worktree: linked, Agent: "tester", File: ".claude/agents/tester.md", Reason: agents.Foreign},
+		{Worktree: main, Agent: "reviewer", File: "tools/agents/reviewer.txt", Reason: agents.Tracked},
+		{Worktree: linked, Agent: "tester", File: "tools/agents/tester.txt", Reason: agents.Foreign},
 	}
 	if err != nil || !slices.Equal(got, want) {
 		t.Fatalf("Check = %+v, %v; want %+v", got, err, want)
@@ -162,7 +176,7 @@ func TestExcludeSharedByWorktrees(t *testing.T) {
 
 	sync(t, []agents.Target{{Path: main, Agents: []flow.Agent{reviewer}}, {Path: linked, Agents: []flow.Agent{reviewer, tester}}}, main, linked)
 	want := "# своё\r\n*.log\r\n" + agents.MarkPrefix + " субагенты, разложенные в рабочие копии\r\n" +
-		"/.claude/agents/reviewer.md\r\n/.claude/agents/tester.md\r\n" + agents.MarkPrefix + " конец блока\r\n"
+		"/tools/agents/reviewer.txt\r\n/tools/agents/tester.txt\r\n" + agents.MarkPrefix + " конец блока\r\n"
 	if got := read(t, exclude); got != want {
 		t.Errorf("exclude = %q, want %q", got, want)
 	}
@@ -171,7 +185,7 @@ func TestExcludeSharedByWorktrees(t *testing.T) {
 	sync(t, []agents.Target{{Path: main, Agents: nil}}, main, linked)
 	clean(t, linked)
 	clean(t, main)
-	if got := read(t, exclude); !strings.Contains(got, "/.claude/agents/tester.md") {
+	if got := read(t, exclude); !strings.Contains(got, "/tools/agents/tester.txt") {
 		t.Errorf("exclude lost tester of the linked worktree: %q", got)
 	}
 
@@ -187,4 +201,58 @@ func TestMissingWorktree(t *testing.T) {
 	if c := res.Worktrees[0]; !c.Missing || c.Changed() {
 		t.Errorf("missing worktree = %+v", c)
 	}
+}
+
+func TestTrackedMarkedFileStays(t *testing.T) {
+	main, _ := shop(t)
+	sync(t, []agents.Target{{Path: main, Agents: []flow.Agent{tester}}}, main)
+	// The project commits the file Gentry laid out.
+	gittest.Run(t, main, "add", "--force", "tools/agents/tester.txt")
+	gittest.Run(t, main, "commit", "--quiet", "-m", "tester")
+
+	res := sync(t, []agents.Target{{Path: main, Agents: nil}}, main)
+	if res.Worktrees[0].Changed() {
+		t.Errorf("layout changed a tracked file: %+v", res.Worktrees[0])
+	}
+	clean(t, main)
+}
+
+func TestBrokenWorktreeOfPool(t *testing.T) {
+	main, linked := shop(t)
+	broken := filepath.Join(filepath.Dir(main), "broken")
+	os.MkdirAll(broken, 0o755) // in the pool, but no worktree of git
+	sync(t, []agents.Target{{Path: linked, Agents: []flow.Agent{reviewer}}}, main, linked, broken)
+	clean(t, linked)
+
+	// A worktree laid out that git does not take: nothing is written.
+	if _, err := agents.Sync(layout, []agents.Target{{Path: broken, Agents: []flow.Agent{reviewer}}}, []string{broken}); err == nil {
+		t.Error("no error for a directory that is not a worktree")
+	}
+	if _, err := os.Stat(agentFile(broken, "reviewer")); !os.IsNotExist(err) {
+		t.Errorf("a file is written where it cannot be hidden: %v", err)
+	}
+}
+
+func TestConcurrentLayouts(t *testing.T) {
+	main, linked := shop(t)
+	done := make(chan error)
+	for i, w := range []string{main, linked} {
+		a := []flow.Agent{reviewer, tester}[i]
+		go func() {
+			var err error
+			for range 20 {
+				if _, err = agents.Sync(layout, []agents.Target{{Path: w, Agents: []flow.Agent{a}}}, []string{main, linked}); err != nil {
+					break
+				}
+			}
+			done <- err
+		}()
+	}
+	for range 2 {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	clean(t, main)
+	clean(t, linked)
 }

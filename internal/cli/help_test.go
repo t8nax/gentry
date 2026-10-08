@@ -155,6 +155,23 @@ func TestDescribeProjectAdd(t *testing.T) {
 	}
 }
 
+func TestDescribeOperatorRecordOptions(t *testing.T) {
+	c, _ := lookup("operator record")
+	got := describe(c)
+	fields := msg.Text(msg.FlagInputFields, "question, options, answer, allow_return")
+	first, rest, _ := strings.Cut(fields, "\n")
+	options := msg.Text(msg.FlagInputOptions)
+	at := strings.Index(got, first)
+	if at < 0 || !strings.Contains(got[at:], "\n") {
+		t.Fatalf("first line of --input %q missing:\n%s", first, got)
+	}
+	// The line on the options follows the first line of --input, then the rest.
+	after := got[at+len(first):]
+	if i, j := strings.Index(after, options), strings.Index(after, strings.SplitN(rest, "\n", 2)[0]); i < 0 || j < i {
+		t.Errorf("line on the options not between the lines of --input:\n%s", got)
+	}
+}
+
 func TestGroupHelp(t *testing.T) {
 	g, _ := topLevel("project")
 	want := groupHelp(g)

@@ -351,7 +351,7 @@ func commands() []command {
 						{name: "answer", value: msg.ArgAnswer, desc: descText(msg.FlagDecisionAnswer)},
 						{name: "allow-return", value: msg.ArgNode, desc: descText(msg.FlagDecisionAllowReturn)},
 						taskFlag,
-						inputFlag("question, options, answer, allow_return", false),
+						inputFlagWith("question, options, answer, allow_return", false, msg.FlagInputOptions),
 						jsonFlag,
 					},
 					run: runOperatorRecord,

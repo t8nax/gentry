@@ -443,6 +443,7 @@ const (
 	FlagSkipReason            Key = "flag.stage_skip.reason"
 	FlagInputFields           Key = "flag.input.fields"
 	FlagInputFieldsArgs       Key = "flag.input.fields_args"
+	FlagInputOptions          Key = "flag.input.options"
 	CmdStepSummary            Key = "cmd.step.summary"
 	CmdStepDesc               Key = "cmd.step.desc"
 	CmdStepAddSummary         Key = "cmd.step_add.summary"

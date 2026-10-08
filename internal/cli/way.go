@@ -32,6 +32,18 @@ func inputFlag(names string, withArgs bool) flagSpec {
 	return flagSpec{name: "input", value: msg.ArgFile, desc: func() string { return msg.Text(k, names) }}
 }
 
+// inputFlagWith is inputFlag with a line on the fields after the first line,
+// for fields that are objects.
+func inputFlagWith(names string, withArgs bool, fields msg.Key) flagSpec {
+	f := inputFlag(names, withArgs)
+	desc := f.desc
+	f.desc = func() string {
+		first, rest, _ := strings.Cut(desc(), "\n")
+		return first + "\n" + msg.Text(fields) + "\n" + rest
+	}
+	return f
+}
+
 // wayTask is the task a command works with.
 type wayTask struct {
 	st   *state.Store

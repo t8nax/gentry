@@ -89,14 +89,24 @@ func Register(program, dir, version string) (Result, error) {
 	if err := c.list(&markets, "plugin", "marketplace", "list", "--json"); err != nil {
 		return Result{}, err
 	}
-	registered := false
+	registered, disabled := false, false
 	for _, m := range markets {
 		if m.Name != integration.Name {
 			continue
 		}
 		if SamePath(m.Path, dir) {
 			registered = true
-		} else if err := c.run("plugin", "marketplace", "remove", integration.Name, "--json"); err != nil {
+			continue
+		}
+		// Removing the marketplace uninstalls its plugin, and the plugin
+		// installed anew is enabled: a plugin the operator disabled is
+		// disabled again after the install.
+		p, found, err := c.plugin(id)
+		if err != nil {
+			return Result{}, err
+		}
+		disabled = found && !p.Enabled
+		if err := c.run("plugin", "marketplace", "remove", integration.Name, "--json"); err != nil {
 			return Result{}, err
 		}
 	}
@@ -108,17 +118,11 @@ func Register(program, dir, version string) (Result, error) {
 		return Result{}, err
 	}
 
-	var plugins []struct {
-		ID, Version, Scope string
-		Enabled            bool
-	}
-	if err := c.list(&plugins, "plugin", "list", "--json"); err != nil {
+	p, found, err := c.plugin(id)
+	if err != nil {
 		return Result{}, err
 	}
-	for _, p := range plugins {
-		if p.ID != id || p.Scope != "user" {
-			continue
-		}
+	if found {
 		if p.Version == version {
 			return Result{Action: Unchanged, Enabled: p.Enabled}, nil
 		}
@@ -130,17 +134,45 @@ func Register(program, dir, version string) (Result, error) {
 	if err := c.run("plugin", "install", id, "--scope", "user", "--json"); err != nil {
 		return Result{}, err
 	}
-	return Result{Action: Installed, Enabled: true}, nil
+	if disabled {
+		if err := c.run("plugin", "disable", id, "--json"); err != nil {
+			return Result{}, err
+		}
+	}
+	return Result{Action: Installed, Enabled: !disabled}, nil
 }
 
-// SamePath tells whether two paths name one directory: case-insensitively on
-// Windows.
+// SamePath tells whether two paths name one directory: equal after cleaning,
+// case-insensitively on Windows, or one directory reached by different
+// paths, such as through a symbolic link or a short name.
 func SamePath(a, b string) bool {
 	a, b = filepath.Clean(a), filepath.Clean(b)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(a, b)
+	if a == b || runtime.GOOS == "windows" && strings.EqualFold(a, b) {
+		return true
 	}
-	return a == b
+	ia, errA := os.Stat(a)
+	ib, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ia, ib)
+}
+
+// installed is the plugin as claude plugin list shows it.
+type installed struct {
+	ID, Version, Scope string
+	Enabled            bool
+}
+
+// plugin returns the plugin id installed for the user, if it is.
+func (c cli) plugin(id string) (installed, bool, error) {
+	var plugins []installed
+	if err := c.list(&plugins, "plugin", "list", "--json"); err != nil {
+		return installed{}, false, err
+	}
+	for _, p := range plugins {
+		if p.ID == id && p.Scope == "user" {
+			return p, true, nil
+		}
+	}
+	return installed{}, false, nil
 }
 
 type cli struct{ program string }

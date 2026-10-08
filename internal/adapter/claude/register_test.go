@@ -123,6 +123,42 @@ func TestRegisterMovedMarketplace(t *testing.T) {
 	}
 }
 
+// Removing the marketplace uninstalls its plugin in Claude Code, and the fake
+// does the same: the plugin installed from the new directory is disabled
+// again.
+func TestRegisterMovedKeepsDisabled(t *testing.T) {
+	program, log := fake(t)
+	old := filepath.Join(t.TempDir(), "claude")
+	register(t, program, old, plugin(t, old, "0.1.0"))
+	if out, err := exec.Command(program, "plugin", "disable", "gentry@gentry").CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	moved := filepath.Join(t.TempDir(), "claude")
+	if r := register(t, program, moved, plugin(t, moved, "0.1.0")); r != (Result{Installed, false}) {
+		t.Errorf("moved disabled plugin: %+v; want installed and still disabled", r)
+	}
+	if got := log(); got[len(got)-1] != "plugin disable gentry@gentry --json" {
+		t.Errorf("the moved plugin must be disabled again, last command %q", got[len(got)-1])
+	}
+}
+
+func TestSamePathLink(t *testing.T) {
+	dir := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Skipf("symbolic links are not available: %v", err)
+	}
+	if !SamePath(dir, link) {
+		t.Errorf("SamePath(%q, %q) = false; want true for a link to the directory", dir, link)
+	}
+	if SamePath(dir, t.TempDir()) {
+		t.Error("SamePath of two directories = true")
+	}
+	if SamePath(dir, filepath.Join(dir, "missing")) {
+		t.Error("SamePath of a directory and a missing path = true")
+	}
+}
+
 func TestRegisterFailure(t *testing.T) {
 	program, _ := fake(t)
 	dir := filepath.Join(t.TempDir(), "claude")

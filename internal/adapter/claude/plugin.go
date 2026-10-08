@@ -102,6 +102,13 @@ func buildFiles(d integration.Description, version string) (map[string][]byte, e
 		"version":     version,
 		"description": d.Description,
 	}
+	if len(d.Servers) > 0 {
+		servers := map[string]any{}
+		for _, s := range d.Servers {
+			servers[s.Name] = map[string]any{"command": filepath.ToSlash(s.Command[0]), "args": s.Command[1:]}
+		}
+		plugin["mcpServers"] = servers
+	}
 	marketplace := map[string]any{
 		"name":        d.Name,
 		"description": d.Description,

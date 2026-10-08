@@ -18,6 +18,14 @@ type Description struct {
 	Description string // operator-facing, in the operator's language
 	Hooks       []Hook
 	Skills      []Skill
+	Servers     []Server
+}
+
+// Server is a tool server the agent tool starts for a session and talks to
+// over the standard input and output.
+type Server struct {
+	Name    string
+	Command []string // program and arguments
 }
 
 // Hook is a command the tool runs on a hook event.
@@ -61,6 +69,7 @@ func Gentry(exe string) Description {
 			{Event: hook.PostTool, Command: []string{exe, "hook", hook.PostTool}},
 			{Event: hook.Stop, Command: []string{exe, "hook", hook.Stop}},
 		},
+		Servers: []Server{{Name: Name, Command: []string{exe, "mcp"}}},
 	}
 	for _, s := range skills {
 		sk := Skill{Name: s.name, Description: msg.Text(s.description), Text: agenttext.Skill(s.name, exe)}

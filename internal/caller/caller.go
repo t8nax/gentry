@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync/atomic"
 
 	"github.com/t8nax/gentry/internal/home"
 )
@@ -87,11 +88,18 @@ func Clear(session string) error {
 	return os.RemoveAll(d)
 }
 
-// ByAgent reports whether the agent calls the running command: a session of
-// the driver, or a session of Claude Code with a marked call. Any failure to
-// tell counts as the operator.
+// agentProcess is set in a process that serves only the agent: gentry mcp.
+var agentProcess atomic.Bool
+
+// ServeAgent tells that the process serves only the agent: every command it
+// runs is called by the agent.
+func ServeAgent() { agentProcess.Store(true) }
+
+// ByAgent reports whether the agent calls the running command: a process that
+// serves the agent, a session of the driver, or a session of Claude Code with
+// a marked call. Any failure to tell counts as the operator.
 func ByAgent() bool {
-	if os.Getenv(SessionEnv) != "" {
+	if agentProcess.Load() || os.Getenv(SessionEnv) != "" {
 		return true
 	}
 	session := os.Getenv(ClaudeSessionEnv)

@@ -71,6 +71,7 @@ const (
 	CodeTaskInWork           = "task_in_work"            // the task named to take anew is in work; details: task, worktree
 	CodeTaskProjectMismatch  = "task_project_mismatch"   // the task named to take anew belongs to another project than the worktree; details: task, project, worktree, worktree_project
 	CodeAttemptNotFound      = "attempt_not_found"       // the task has no attempt of that number; details: task, attempt, attempts (their number)
+	CodeAgentsConflict       = "agents_conflict"         // subagents cannot be laid out: files of their names are there and Gentry did not lay them out; details: conflicts (AgentsConflict)
 	CodeInternal             = "internal"                // a failure inside Gentry
 )
 

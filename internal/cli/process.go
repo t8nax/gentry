@@ -62,17 +62,24 @@ func push(r *process.Repo, s *process.Sync) *failure {
 }
 
 // syncDone finishes the synchronization inside a command: it records what it
-// did as an event and, in text, prints it on stderr before the output of the
-// command. apply tells a command that commits, for which an unavailable
-// remote repository defers the sending.
-func syncDone(env Env, r *process.Repo, s *process.Sync, apply bool) {
+// did as an event, lays out the free worktrees of the projects whose flow or
+// library it changed and, in text, prints both on stderr before the output of
+// the command. apply tells a command that commits, for which an unavailable
+// remote repository defers the sending. It returns what the layout did, for
+// the output in JSON.
+func syncDone(env Env, r *process.Repo, s *process.Sync, apply bool) *contract.AgentsLayout {
 	if s == nil {
-		return
+		return nil
 	}
 	recordSync(s)
 	if !env.json {
 		writeSync(env.Stderr, r, s, syncText{apply: apply, received: true, conflicts: true})
 	}
+	o, p := layoutFree(r, syncProjects(r, s))
+	if !env.json {
+		writeFreeLayout(env.Stderr, o, p)
+	}
+	return o.json(p)
 }
 
 // syncText selects what writeSync prints.
@@ -266,12 +273,15 @@ func restoredKinds(rs []process.Restored) []process.Kind {
 
 // syncJSON returns what the synchronization did as the contract has it; nil
 // if there is nothing to tell.
-func syncJSON(s *process.Sync) *contract.Sync {
+func syncJSON(s *process.Sync, agents *contract.AgentsLayout) *contract.Sync {
 	if s == nil {
 		return nil
 	}
 	var out contract.Sync
 	empty := true
+	if agents != nil {
+		out.Agents, empty = agents, false
+	}
 	if len(s.Received) > 0 {
 		out.Received, empty = items(s.Received), false
 	}
@@ -527,6 +537,7 @@ func runProcessSync(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	recordSync(s)
+	layout, laidPool := layoutFree(r, syncProjects(r, s))
 	if s.Unavailable {
 		url, _ := r.RemoteURL()
 		if !env.json {
@@ -538,6 +549,7 @@ func runProcessSync(args []string, env Env) int {
 		out := contract.ProcessSyncOutput{
 			Received: items(s.Received), Sent: items(s.Sent),
 			Conflicts: items(conflictKinds(s.Conflicts)), Restored: items(restoredKinds(s.Restored)),
+			Agents: layout.json(laidPool),
 		}
 		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
@@ -556,6 +568,7 @@ func runProcessSync(args []string, env Env) int {
 		writeList(&b, msg.Text(msg.ProcessSent), kindNames(s.Sent))
 	}
 	fmt.Fprint(env.Stdout, b.String())
+	writeFreeLayout(env.Stdout, layout, laidPool)
 	return contract.ExitOK
 }
 

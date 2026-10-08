@@ -29,13 +29,13 @@ func runLibraryDiff(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	syncDone(env, r, s, false)
+	synced := syncDone(env, r, s, false)
 	res, err := flow.LibraryDiff(r)
 	if err != nil {
 		return fail(env, libraryFailure(err))
 	}
 	if *asJSON {
-		out := contract.LibraryDiffOutput{Dir: r.KindDir(process.Library), Applied: appliedJSON(res.Applied), Changes: []contract.LibraryChange{}, Sync: syncJSON(s)}
+		out := contract.LibraryDiffOutput{Dir: r.KindDir(process.Library), Applied: appliedJSON(res.Applied), Changes: []contract.LibraryChange{}, Sync: syncJSON(s, synced)}
 		for _, c := range res.Changes {
 			out.Changes = append(out.Changes, contract.LibraryChange{Id: c.ID, Change: contract.LibraryDiffOutputChangesElemChange(c.Change)})
 		}
@@ -84,10 +84,11 @@ func runLibraryApply(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	record(event{typ: flow.EventLibraryApplied, data: contract.LibraryAppliedData{Commit: applied.Commit}})
-	syncDone(env, r, s, true)
+	synced := syncDone(env, r, s, true)
+	layout, laidPool := layoutFree(r, allProjects(r))
 	sent := s.Remote && !s.Unavailable
 	if *asJSON {
-		out := contract.LibraryApplyOutput{Applied: *appliedJSON(&applied), Sent: sent, Sync: syncJSON(s)}
+		out := contract.LibraryApplyOutput{Applied: *appliedJSON(&applied), Sent: sent, Sync: syncJSON(s, synced), Agents: layout.json(laidPool)}
 		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
 		}
@@ -95,6 +96,7 @@ func runLibraryApply(args []string, env Env) int {
 	}
 	fmt.Fprintln(env.Stdout, msg.Text(msg.LibraryApplied))
 	fmt.Fprintln(env.Stdout, msg.Text(msg.LibraryAppliedAt, localTime(applied.Time)))
+	writeLayout(env.Stdout, layout, false, "")
 	return contract.ExitOK
 }
 

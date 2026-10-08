@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/agents-worktree.json",
+  "title": "AgentsWorktree",
+  "description": "The subagents of a worktree after a layout and what the layout changed there.",
+  "type": "object",
+  "properties": {
+    "path": {
+      "description": "Absolute path of the worktree.",
+      "type": "string",
+      "minLength": 1
+    },
+    "task": {
+      "description": "The task the worktree holds, such as SHOP-3; absent for a free worktree, whose subagents are those of the active flow.",
+      "type": "string"
+    },
+    "missing": {
+      "description": "Present and true if the directory of the worktree does not exist: the worktree is skipped.",
+      "type": "boolean"
+    },
+    "agents": {
+      "description": "Identifiers of the subagents laid out in the worktree.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "added": {
+      "description": "Subagents whose files the layout wrote anew.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "updated": {
+      "description": "Subagents whose files the layout rewrote.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "removed": {
+      "description": "Subagents no more in the flow whose files the layout removed.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["path", "agents", "added", "updated", "removed"]
+}

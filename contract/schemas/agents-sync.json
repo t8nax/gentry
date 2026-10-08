@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/agents-sync.json",
+  "title": "AgentsSyncOutput",
+  "description": "Output of `gentry agents sync --json`: the subagents are laid out in every worktree of the pool of the project.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "description": "Identifier of the project.",
+      "type": "string",
+      "minLength": 1
+    },
+    "changed": {
+      "description": "Whether the layout changed any worktree.",
+      "type": "boolean"
+    },
+    "worktrees": {
+      "description": "Every worktree of the pool, the main one first, then by path.",
+      "type": "array",
+      "items": { "$ref": "./agents-worktree.json" }
+    }
+  },
+  "required": ["project", "changed", "worktrees"]
+}

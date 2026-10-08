@@ -29,7 +29,7 @@ func runFlowDiff(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer r.Close()
-	s, bad := syncFlow(env, r)
+	s, synced, bad := syncFlow(env, r)
 	if bad != nil {
 		return fail(env, *bad)
 	}
@@ -58,7 +58,7 @@ func runFlowDiff(args []string, env Env) int {
 		})
 	}
 	if *asJSON {
-		out := contract.FlowDiffOutput{Project: places.Project, Applied: appliedJSON(res.Applied), Changes: []contract.FlowChange{}, Report: report, Sync: syncJSON(s)}
+		out := contract.FlowDiffOutput{Project: places.Project, Applied: appliedJSON(res.Applied), Changes: []contract.FlowChange{}, Report: report, Sync: syncJSON(s, synced)}
 		for _, c := range res.Changes {
 			cc := contract.FlowChange{
 				Object: contract.FlowDiffOutputChangesElemObject(c.Object),

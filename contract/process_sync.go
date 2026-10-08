@@ -8,6 +8,10 @@ import "fmt"
 // Output of `gentry process sync --json`: the process is synchronized with the
 // remote repository.
 type ProcessSyncOutput struct {
+	// What the layout of subagents in the free worktrees of the projects whose flow
+	// or library was received did; present only when there is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// Kinds changed on both machines that could not be brought together: the variant
 	// of the other machine is active, the changes of this machine are a draft.
 	Conflicts []ProcessItem `json:"conflicts"`

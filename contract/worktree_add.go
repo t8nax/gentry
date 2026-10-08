@@ -12,6 +12,10 @@ type WorktreeAddOutput struct {
 	// value as is.
 	Action string `json:"action"`
 
+	// What the layout of subagents in the worktree added did; present only when there
+	// is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// Whether this is the main worktree of the project.
 	Main bool `json:"main"`
 

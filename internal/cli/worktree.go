@@ -46,8 +46,18 @@ func runWorktreeAdd(args []string, env Env) int {
 	}
 
 	w := res.Worktree
+	// The worktree is in the pool: a layout that fails or meets a conflict is
+	// told, and the worktree stays there.
+	var layout layoutOutcome
+	var laidPool *layoutPool
+	if r, bad := openProcess(); bad != nil {
+		layout.err = errors.New(bad.message)
+	} else {
+		layout, laidPool = layoutAdded(st, r, w.Project, []string{w.Path})
+		r.Close()
+	}
 	if *asJSON {
-		out := contract.WorktreeAddOutput{Path: w.Path, Project: w.Project, Main: w.Main, Action: actionAdded}
+		out := contract.WorktreeAddOutput{Path: w.Path, Project: w.Project, Main: w.Main, Action: actionAdded, Agents: layout.json(laidPool)}
 		if res.Unchanged {
 			out.Action = actionUnchanged
 		}
@@ -61,6 +71,7 @@ func runWorktreeAdd(args []string, env Env) int {
 	} else {
 		fmt.Fprintln(env.Stdout, msg.Text(msg.WorktreeAdded, w.Project, w.Path))
 	}
+	writeLayout(env.Stdout, layout, true, "")
 	return contract.ExitOK
 }
 

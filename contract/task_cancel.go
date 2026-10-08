@@ -9,6 +9,10 @@ import "unicode/utf8"
 // Output of `gentry task cancel --json`: the task is cancelled and its worktree is
 // free. The task can be taken anew by `gentry task take --task`.
 type TaskCancelOutput struct {
+	// What the layout of subagents in the worktree the task released did; present
+	// only when there is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// The task cancelled.
 	Task Task `json:"task"`
 

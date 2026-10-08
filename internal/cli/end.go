@@ -80,10 +80,16 @@ func endTask(env Env, cmd string, args []string, cancel bool, reason string, asJ
 	if bad != nil {
 		return fail(env, *bad)
 	}
+	// The worktree is free: it gets the subagents of the active flow.
+	var layout layoutOutcome
+	var laidPool *layoutPool
+	if ended.Worktree != "" {
+		layout, laidPool = layoutReleased(w.task.Project, ended.Worktree)
+	}
 	if asJSON {
-		var out any = contract.TaskCloseOutput{Task: taskJSON(v), Worktree: ended.Worktree}
+		var out any = contract.TaskCloseOutput{Task: taskJSON(v), Worktree: ended.Worktree, Agents: layout.json(laidPool)}
 		if cancel {
-			out = contract.TaskCancelOutput{Task: taskJSON(v), Worktree: ended.Worktree}
+			out = contract.TaskCancelOutput{Task: taskJSON(v), Worktree: ended.Worktree, Agents: layout.json(laidPool)}
 		}
 		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
@@ -94,6 +100,7 @@ func endTask(env Env, cmd string, args []string, cancel bool, reason string, asJ
 	if !cancel {
 		fmt.Fprintln(&b, msg.Text(msg.TaskClosed, v.Key()))
 		fmt.Fprintln(&b, msg.Text(msg.WorktreeReleased, ended.Worktree))
+		writeLayout(&b, layout, true, "")
 		fmt.Fprint(env.Stdout, b.String())
 		return contract.ExitOK
 	}
@@ -103,7 +110,8 @@ func endTask(env Env, cmd string, args []string, cancel bool, reason string, asJ
 		fmt.Fprintln(&b, msg.Text(msg.ReasonLine, oneLine(v.Reason)))
 	}
 	fmt.Fprintln(&b, msg.Text(msg.WorktreeReleased, ended.Worktree))
-	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintTaskAgain, v.Key()))
+	writeLayout(&b, layout, true, "")
+	fmt.Fprintf(&b,"\n%s\n", msg.Text(msg.HintTaskAgain, v.Key()))
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK
 }

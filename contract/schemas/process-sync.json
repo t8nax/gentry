@@ -24,6 +24,10 @@
       "description": "Kinds changed around Gentry with problems: the last checked variant is active again, the change is a draft.",
       "type": "array",
       "items": { "$ref": "./process-item.json" }
+    },
+    "agents": {
+      "description": "What the layout of subagents in the free worktrees of the projects whose flow or library was received did; present only when there is something to tell.",
+      "$ref": "./agents-layout.json"
     }
   },
   "required": ["received", "sent", "conflicts", "restored"]

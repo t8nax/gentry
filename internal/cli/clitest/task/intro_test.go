@@ -185,10 +185,13 @@ func TestIntroStalePlugin(t *testing.T) {
 	}
 	t.Setenv(claude.PluginRootEnv, root)
 
+	exe, _ := os.Executable()
+	exe, _ = filepath.EvalSymlinks(exe)
+
 	writeVersion("0.0.0+00000000")
 	want := clitest.Lines(
 		msg.Text(msg.IntroPluginStale),
-		msg.Text(msg.HintIntroPluginStale),
+		msg.Text(msg.HintIntroPluginStale, filepath.ToSlash(exe)),
 		"",
 		"Проект: shop",
 	)
@@ -196,8 +199,6 @@ func TestIntroStalePlugin(t *testing.T) {
 		t.Errorf("stale plugin:\n%s", got)
 	}
 
-	exe, _ := os.Executable()
-	exe, _ = filepath.EvalSymlinks(exe)
 	p, err := claude.Build(integration.Gentry(exe), buildinfo.Version())
 	if err != nil {
 		t.Fatal(err)

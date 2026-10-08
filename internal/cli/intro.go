@@ -93,7 +93,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	var b strings.Builder
 	if in.Tool == claude.Tool && pluginStale() {
 		fmt.Fprintln(&b, msg.Text(msg.IntroPluginStale))
-		fmt.Fprintln(&b, msg.Text(msg.HintIntroPluginStale))
+		fmt.Fprintln(&b, msg.Text(msg.HintIntroPluginStale, programPath()))
 		b.WriteString("\n")
 	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskProject, wt.Project))
@@ -185,4 +185,14 @@ func pluginStale() bool {
 	}
 	p, err := claude.Build(integration.Gentry(exe), buildinfo.Version())
 	return err == nil && p.Version != running
+}
+
+// programPath returns the path of the running gentry as skills name it, or
+// the bare name if the path is unknown.
+func programPath() string {
+	exe, err := executable()
+	if err != nil {
+		return "gentry"
+	}
+	return filepath.ToSlash(exe)
 }

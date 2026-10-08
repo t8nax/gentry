@@ -120,8 +120,10 @@ func runStepClose(cmd string, args []string, env Env) int {
 	return writeSteps(env, w, res, *asJSON, message)
 }
 
-// writeSteps prints the steps of the current pass after a change: message,
-// the table of steps and, once none is planned, the hint to close the stage.
+// writeSteps prints the result of a change of the steps of the current pass:
+// the message and the numbers of the steps added, or the message and the
+// number of steps left with, once none is left, the hint to close the stage.
+// The table of steps is in task show.
 func writeSteps(env Env, w wayTask, res task.Steps, asJSON bool, message string) int {
 	if asJSON {
 		out := contract.StepListOutput{Task: res.Task.Key(), Node: res.Pass.Node, Round: res.Pass.Round, Steps: stepsJSON(res.Pass.Steps)}
@@ -135,13 +137,23 @@ func writeSteps(env Env, w wayTask, res task.Steps, asJSON bool, message string)
 	}
 	var b strings.Builder
 	fmt.Fprintln(&b, message)
-	b.WriteString("\n")
-	writeStepTable(&b, res.Pass.Steps)
-	planned := false
-	for _, s := range res.Pass.Steps {
-		planned = planned || s.State == state.StepPlanned
+	if n := len(res.Added); n > 0 {
+		if n == 1 {
+			fmt.Fprintln(&b, msg.Text(msg.StepNumber, res.Added[0]))
+		} else {
+			fmt.Fprintln(&b, msg.Text(msg.StepNumbers, res.Added[0], res.Added[n-1]))
+		}
+		fmt.Fprint(env.Stdout, b.String())
+		return contract.ExitOK
 	}
-	if !planned {
+	left := 0
+	for _, s := range res.Pass.Steps {
+		if s.State == state.StepPlanned {
+			left++
+		}
+	}
+	fmt.Fprintln(&b, msg.Text(msg.StepsLeft, left))
+	if left == 0 {
 		fmt.Fprintf(&b, "\n%s\n", w.hint(msg.Text(msg.HintStageExit)))
 	}
 	fmt.Fprint(env.Stdout, b.String())

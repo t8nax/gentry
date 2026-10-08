@@ -53,15 +53,11 @@ func TestStageFeature(t *testing.T) {
 		"stage", "exit", "--kind", "result", "--text", "Создана ветка")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
 		"К этапу добавлено шагов: 1.",
-		"",
-		"№  СОСТОЯНИЕ     ШАГ                           ПОЯСНЕНИЕ",
-		"1  запланирован  Создать ветку feature/shop-1  —",
+		"Номер шага: 1",
 	), "", "step", "add", "Создать ветку feature/shop-1")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
 		"Шаг 1 выполнен.",
-		"",
-		"№  СОСТОЯНИЕ  ШАГ                           ПОЯСНЕНИЕ",
-		"1  выполнен   Создать ветку feature/shop-1  git branch --show-current",
+		"Осталось шагов: 0",
 		"",
 		"Закрыть этап: gentry stage exit --kind <вид> --text <текст>",
 	), "", "step", "done", "1", "--check", "git branch --show-current")
@@ -93,8 +89,14 @@ func TestStageFeature(t *testing.T) {
 	}
 
 	// Implementation: a step not done is listed; a dropped step needs a reason.
-	clitest.MustRun(t, "step", "add", "Добавить расчёт суммы", "Покрыть расчёт тестами")
-	clitest.MustRun(t, "step", "done", "1", "--check", "go test ./backend/payments/...")
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
+		"К этапу добавлено шагов: 2.",
+		"Номера шагов: 1–2",
+	), "", "step", "add", "Добавить расчёт суммы", "Покрыть расчёт тестами")
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
+		"Шаг 1 выполнен.",
+		"Осталось шагов: 1",
+	), "", "step", "done", "1", "--check", "go test ./backend/payments/...")
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(
 		msg.Text(msg.ErrStepsOpen),
 		"",
@@ -107,7 +109,12 @@ func TestStageFeature(t *testing.T) {
 	if code, c := clitest.ErrorCode(t, "step", "drop", "2"); code != contract.ExitUsage || c != contract.CodeMissingField {
 		t.Errorf("step drop without a reason: exit code %d, code %s", code, c)
 	}
-	clitest.MustRun(t, "step", "drop", "2", "--reason", "Тесты уже есть в шаге 1")
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
+		"Шаг 2 снят.",
+		"Осталось шагов: 0",
+		"",
+		"Закрыть этап: gentry stage exit --kind <вид> --text <текст>",
+	), "", "step", "drop", "2", "--reason", "Тесты уже есть в шаге 1")
 	clitest.WantRun(t, contract.ExitOK, "Заметка 1 добавлена.\n", "", "note", "add", "На ревью проверить, что возврат по СБП не задет")
 	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Изменения сделаны, тесты проходят")
 

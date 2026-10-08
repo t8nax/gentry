@@ -160,7 +160,7 @@ func TestDescribeOperatorRecordOptions(t *testing.T) {
 	got := describe(c)
 	fields := msg.Text(msg.FlagInputFields, "question, options, answer, allow_return")
 	first, rest, _ := strings.Cut(fields, "\n")
-	options := msg.Text(msg.FlagInputOptions)
+	options, _, _ := strings.Cut(msg.Text(msg.FlagInputOptions), "\n")
 	at := strings.Index(got, first)
 	if at < 0 || !strings.Contains(got[at:], "\n") {
 		t.Fatalf("first line of --input %q missing:\n%s", first, got)

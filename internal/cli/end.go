@@ -111,7 +111,7 @@ func endTask(env Env, cmd string, args []string, cancel bool, reason string, asJ
 	}
 	fmt.Fprintln(&b, msg.Text(msg.WorktreeReleased, ended.Worktree))
 	writeLayout(&b, layout, true, "")
-	fmt.Fprintf(&b,"\n%s\n", msg.Text(msg.HintTaskAgain, v.Key()))
+	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintTaskAgain, v.Key()))
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK
 }

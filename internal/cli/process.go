@@ -203,14 +203,18 @@ func refuseOnConflict(env Env, r *process.Repo, s *process.Sync, k process.Kind)
 	s.Conflicts = append(s.Conflicts, c)
 	recordSync(s)
 	if bad != nil {
+		layoutRefused(env, r, s)
 		return fail(env, *bad), true
 	}
-	s.Conflicts = s.Conflicts[:len(s.Conflicts)-1]
 	if !env.json {
 		rest := *s
+		rest.Conflicts = s.Conflicts[:len(s.Conflicts)-1]
 		rest.Received = slices.DeleteFunc(slices.Clone(s.Received), func(x process.Kind) bool { return x == k })
 		writeSync(env.Stderr, r, &rest, syncText{received: true, conflicts: true})
 	}
+	// The variant of the other machine is active: the free worktrees get it.
+	layoutRefused(env, r, s)
+	s.Conflicts = s.Conflicts[:len(s.Conflicts)-1]
 	return fail(env, conflictFailure(r, c)), true
 }
 
@@ -542,6 +546,7 @@ func runProcessSync(args []string, env Env) int {
 		url, _ := r.RemoteURL()
 		if !env.json {
 			writeSync(env.Stderr, r, &process.Sync{Conflicts: s.Conflicts, Restored: s.Restored}, syncText{conflicts: true})
+			writeFreeLayout(env.Stderr, layout, laidPool)
 		}
 		return fail(env, remoteUnavailable(url, s.Output))
 	}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -126,11 +128,22 @@ func activeAgents(r *process.Repo, project string) ([]flow.Agent, bool, error) {
 type layoutOutcome struct {
 	changes   []agents.Change // the worktrees changed
 	conflicts []agents.Conflict
-	err       error
+	err       error    // the layout failed
+	bad       *failure // the store or the process could not be read for it
 }
 
+func (o layoutOutcome) failed() bool { return o.err != nil || o.bad != nil }
+
 func (o layoutOutcome) empty() bool {
-	return len(o.changes) == 0 && len(o.conflicts) == 0 && o.err == nil
+	return len(o.changes) == 0 && len(o.conflicts) == 0 && !o.failed()
+}
+
+// reason names why the layout failed, as other failures of Gentry do.
+func (o layoutOutcome) reason() string {
+	if o.bad != nil {
+		return o.bad.message
+	}
+	return layoutFailure(o.err).message
 }
 
 // json returns the outcome as the contract has it; nil if there is nothing
@@ -143,14 +156,14 @@ func (o layoutOutcome) json(p *layoutPool) *contract.AgentsLayout {
 	for _, c := range o.changes {
 		out.Worktrees = append(out.Worktrees, changeJSON(c, p))
 	}
-	if o.err != nil {
-		e := o.err.Error()
+	if o.failed() {
+		e := o.reason()
 		out.Error = &e
 	}
 	return out
 }
 
-// layoutWorktree lays out the subagents of agents in worktree path.
+// layoutWorktree lays out the subagents of list in worktree path.
 func layoutWorktree(p *layoutPool, path string, list []flow.Agent) layoutOutcome {
 	res, err := agents.Sync(agentsLayout, []agents.Target{{Path: path, Agents: list}}, p.paths())
 	return layoutOutcome{changes: res.Changed(), conflicts: res.Conflicts, err: err}
@@ -165,11 +178,11 @@ func layoutFree(r *process.Repo, projects map[string]bool) (layoutOutcome, *layo
 	}
 	p, bad := readLayoutPool()
 	if bad != nil {
-		return layoutOutcome{err: errors.New(bad.message)}, nil
+		return layoutOutcome{bad: bad}, nil
 	}
 	defer p.close()
 	var targets []agents.Target
-	for _, id := range sortedSet(projects) {
+	for _, id := range slices.Sorted(maps.Keys(projects)) {
 		list, ok, err := activeAgents(r, id)
 		if err != nil {
 			return layoutOutcome{err: err}, p
@@ -191,22 +204,21 @@ func layoutFree(r *process.Repo, projects map[string]bool) (layoutOutcome, *layo
 }
 
 // layoutReleased lays out a worktree a task released, in the active flow of
-// its project.
-func layoutReleased(project, path string) (layoutOutcome, *layoutPool) {
+// its project; st is open.
+func layoutReleased(st *state.Store, project, path string) (layoutOutcome, *layoutPool) {
 	r, bad := openProcess()
 	if bad != nil {
-		return layoutOutcome{err: errors.New(bad.message)}, nil
+		return layoutOutcome{bad: bad}, nil
 	}
 	defer r.Close()
 	list, ok, err := activeAgents(r, project)
 	if err != nil || !ok {
 		return layoutOutcome{err: err}, nil
 	}
-	p, bad := readLayoutPool()
+	p, bad := poolOf(st)
 	if bad != nil {
-		return layoutOutcome{err: errors.New(bad.message)}, nil
+		return layoutOutcome{bad: bad}, nil
 	}
-	defer p.close()
 	return layoutWorktree(p, path, list), p
 }
 
@@ -218,7 +230,7 @@ func layoutAdded(st *state.Store, r *process.Repo, project string, paths []strin
 	}
 	p, bad := poolOf(st)
 	if bad != nil {
-		return layoutOutcome{err: errors.New(bad.message)}, nil
+		return layoutOutcome{bad: bad}, nil
 	}
 	active, activeOK, err := activeAgents(r, project)
 	if err != nil {
@@ -242,7 +254,8 @@ func layoutAdded(st *state.Store, r *process.Repo, project string, paths []strin
 
 // syncProjects returns the projects whose free worktrees a synchronization
 // changed the active flow or library of: those of the flows received, in
-// conflict or restored, and every project if the library is.
+// conflict or restored, and those whose flow uses the library if the library
+// is.
 func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	if s == nil {
 		return nil
@@ -253,23 +266,34 @@ func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	out := map[string]bool{}
 	for _, k := range kinds {
 		if k.IsLibrary() {
-			return allProjects(r)
+			maps.Copy(out, libraryProjects(r))
+			continue
 		}
 		out[k.Project] = true
 	}
 	return out
 }
 
-// allProjects returns the projects that have a flow in the process.
-func allProjects(r *process.Repo) map[string]bool {
+// libraryProjects returns the projects whose active flow has subagents of the
+// library.
+func libraryProjects(r *process.Repo) map[string]bool {
 	out := map[string]bool{}
 	kinds, err := r.Kinds()
 	if err != nil {
 		return out
 	}
 	for _, k := range kinds {
-		if !k.IsLibrary() {
-			out[k.Project] = true
+		if k.IsLibrary() {
+			continue
+		}
+		list, ok, err := activeAgents(r, k.Project)
+		if err != nil || !ok {
+			continue
+		}
+		for _, a := range list {
+			if a.Library {
+				out[k.Project] = true
+			}
 		}
 	}
 	return out
@@ -297,8 +321,8 @@ func writeLayout(w io.Writer, o layoutOutcome, single bool, project string) {
 		writeConflicts(&b, o.conflicts)
 		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintAgentsConflictWarning))
 	}
-	if o.err != nil {
-		fmt.Fprintf(&b, "\n%s\n\n%s\n", msg.Text(msg.AgentsSyncFailed, o.err), msg.Text(msg.HintAgentsSyncFailed))
+	if o.failed() {
+		fmt.Fprintf(&b, "\n%s\n%s\n\n%s\n", msg.Text(msg.AgentsSyncFailed), msg.Text(msg.AgentsSyncFailedReason, o.reason()), msg.Text(msg.HintAgentsSyncFailed))
 	}
 	io.WriteString(w, b.String())
 }
@@ -317,7 +341,7 @@ func writeFreeLayout(w io.Writer, o layoutOutcome, p *layoutPool) {
 		}
 		var b strings.Builder
 		b.WriteString("\n")
-		for _, id := range sortedSet(byProject) {
+		for _, id := range slices.Sorted(maps.Keys(byProject)) {
 			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSynced, id, byProject[id]))
 		}
 		fmt.Fprintln(&b, msg.Text(msg.AgentsNextSession))
@@ -402,15 +426,6 @@ func nonNil(s []string) []string {
 		return []string{}
 	}
 	return s
-}
-
-func sortedSet[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // runAgentsSync lays out the subagents in every worktree of the pool of a
@@ -539,4 +554,22 @@ func layoutFailure(err error) failure {
 		return ioError(pe.Path, pe.Err)
 	}
 	return internal(err)
+}
+
+// layoutRefused lays out the free worktrees of a command refused after the
+// synchronization or the apply changed active flows: of the projects of the
+// synchronization and of also. In text, what it did goes to stderr before the
+// refusal.
+func layoutRefused(env Env, r *process.Repo, s *process.Sync, also ...string) {
+	projects := syncProjects(r, s)
+	if projects == nil {
+		projects = map[string]bool{}
+	}
+	for _, id := range also {
+		projects[id] = true
+	}
+	o, p := layoutFree(r, projects)
+	if !env.json {
+		writeFreeLayout(env.Stderr, o, p)
+	}
 }

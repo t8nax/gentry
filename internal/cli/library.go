@@ -3,6 +3,8 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
@@ -81,11 +83,12 @@ func runLibraryApply(args []string, env Env) int {
 		return fail(env, libraryFailure(err))
 	}
 	if bad := push(r, s); bad != nil {
+		layoutRefused(env, r, s, slices.Collect(maps.Keys(libraryProjects(r)))...)
 		return fail(env, *bad)
 	}
 	record(event{typ: flow.EventLibraryApplied, data: contract.LibraryAppliedData{Commit: applied.Commit}})
 	synced := syncDone(env, r, s, true)
-	layout, laidPool := layoutFree(r, allProjects(r))
+	layout, laidPool := layoutFree(r, libraryProjects(r))
 	sent := s.Remote && !s.Unavailable
 	if *asJSON {
 		out := contract.LibraryApplyOutput{Applied: *appliedJSON(&applied), Sent: sent, Sync: syncJSON(s, synced), Agents: layout.json(laidPool)}

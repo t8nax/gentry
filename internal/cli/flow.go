@@ -98,6 +98,10 @@ func syncFlow(env Env, r *process.Repo) (*process.Sync, *contract.AgentsLayout, 
 	s, bad := pull(r)
 	if bad == nil {
 		bad = push(r, s)
+		if bad != nil {
+			// What the pull took is active all the same.
+			layoutRefused(env, r, s)
+		}
 	}
 	if bad != nil {
 		return nil, nil, bad
@@ -544,6 +548,7 @@ func runFlowApply(args []string, env Env) int {
 		return fail(env, flowFailure(err, places))
 	}
 	if bad := push(r, s); bad != nil {
+		layoutRefused(env, r, s, places.Project)
 		return fail(env, *bad)
 	}
 	record(event{typ: flow.EventApplied, project: places.Project, data: contract.FlowAppliedData{Commit: applied.Commit}})

@@ -84,7 +84,7 @@ func endTask(env Env, cmd string, args []string, cancel bool, reason string, asJ
 	var layout layoutOutcome
 	var laidPool *layoutPool
 	if ended.Worktree != "" {
-		layout, laidPool = layoutReleased(w.task.Project, ended.Worktree)
+		layout, laidPool = layoutReleased(w.st, w.task.Project, ended.Worktree)
 	}
 	if asJSON {
 		var out any = contract.TaskCloseOutput{Task: taskJSON(v), Worktree: ended.Worktree, Agents: layout.json(laidPool)}

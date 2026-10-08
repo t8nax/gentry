@@ -62,6 +62,21 @@ func Program() (string, error) {
 	return p, nil
 }
 
+// Registered returns the directory Claude Code serves the plugin of Gentry
+// from, or "" if its marketplace is not added.
+func Registered(program string) (string, error) {
+	var markets []struct{ Name, Path string }
+	if err := (cli{program: program}).list(&markets, "plugin", "marketplace", "list", "--json"); err != nil {
+		return "", err
+	}
+	for _, m := range markets {
+		if m.Name == integration.Name {
+			return m.Path, nil
+		}
+	}
+	return "", nil
+}
+
 // Register makes Claude Code serve the plugin built in dir with the given
 // version: it adds the marketplace (again, if it points elsewhere), installs
 // the plugin for the user or updates it. It does only what is missing and
@@ -79,7 +94,7 @@ func Register(program, dir, version string) (Result, error) {
 		if m.Name != integration.Name {
 			continue
 		}
-		if samePath(m.Path, dir) {
+		if SamePath(m.Path, dir) {
 			registered = true
 		} else if err := c.run("plugin", "marketplace", "remove", integration.Name, "--json"); err != nil {
 			return Result{}, err
@@ -118,7 +133,9 @@ func Register(program, dir, version string) (Result, error) {
 	return Result{Action: Installed, Enabled: true}, nil
 }
 
-func samePath(a, b string) bool {
+// SamePath tells whether two paths name one directory: case-insensitively on
+// Windows.
+func SamePath(a, b string) bool {
 	a, b = filepath.Clean(a), filepath.Clean(b)
 	if runtime.GOOS == "windows" {
 		return strings.EqualFold(a, b)

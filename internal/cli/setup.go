@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +19,10 @@ import (
 // tools lists the tools `gentry setup` supports.
 var tools = []string{claude.Tool}
 
+// setupSwitched is the action of a setup that moved the plugin from the
+// directory of another data root.
+const setupSwitched = "switched"
+
 var setupMessages = map[string]msg.Key{
 	claude.Installed: msg.SetupInstalled,
 	claude.Updated:   msg.SetupUpdated,
@@ -26,6 +31,7 @@ var setupMessages = map[string]msg.Key{
 
 func runSetup(args []string, env Env) int {
 	f := newFlags("setup")
+	switchFlag := f.Bool("switch")
 	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
@@ -42,6 +48,24 @@ func runSetup(args []string, env Env) int {
 	if err != nil {
 		return fail(env, homeUnknown())
 	}
+	program, err := claude.Program()
+	if err != nil {
+		return fail(env, toolNotFound(claude.Tool, "claude", "Claude Code"))
+	}
+	// The plugin serves every session of the tool, whatever the data root of
+	// this call: it is moved from an existing directory of another data root
+	// only by --switch, and before anything is written.
+	registered, err := claude.Registered(program)
+	if err != nil {
+		return fail(env, setupToolError(err))
+	}
+	previous := ""
+	if registered != "" && !claude.SamePath(registered, dir) {
+		if _, err := os.Stat(registered); !errors.Is(err, fs.ErrNotExist) && !*switchFlag {
+			return fail(env, pluginElsewhere(claude.Tool, registered, dir))
+		}
+		previous = registered
+	}
 	exe, err := executable()
 	if err != nil {
 		return fail(env, internal(err))
@@ -53,31 +77,39 @@ func runSetup(args []string, env Env) int {
 	if err := claude.Write(dir, p); err != nil {
 		return fail(env, ioError(dir, err))
 	}
-	program, err := claude.Program()
-	if err != nil {
-		return fail(env, toolNotFound(claude.Tool, "claude", "Claude Code"))
-	}
 	r, err := claude.Register(program, dir, p.Version)
-	var ce *claude.CommandError
-	if errors.As(err, &ce) {
-		return fail(env, toolFailed(claude.Tool, ce.Command, ce.Output))
-	}
 	if err != nil {
-		return fail(env, internal(err))
+		return fail(env, setupToolError(err))
 	}
 
 	out := contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled}
+	if previous != "" {
+		out.Action, out.PreviousDir = setupSwitched, &previous
+	}
 	if *asJSON {
 		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
 		}
 		return contract.ExitOK
 	}
-	fmt.Fprintln(env.Stdout, msg.Text(setupMessages[r.Action]))
+	if previous != "" {
+		fmt.Fprintln(env.Stdout, msg.Text(msg.SetupSwitched, previous))
+	} else {
+		fmt.Fprintln(env.Stdout, msg.Text(setupMessages[r.Action]))
+	}
 	if !r.Enabled {
 		fmt.Fprintln(env.Stdout, msg.Text(msg.SetupDisabled))
 	}
 	return contract.ExitOK
+}
+
+// setupToolError reports a failure of the tool program as tool_failed.
+func setupToolError(err error) failure {
+	var ce *claude.CommandError
+	if errors.As(err, &ce) {
+		return toolFailed(claude.Tool, ce.Command, ce.Output)
+	}
+	return internal(err)
 }
 
 // executable returns the absolute path of the running gentry, with symbolic

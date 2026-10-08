@@ -31,8 +31,9 @@ type Skill struct {
 	Name        string
 	Description string // when to use the skill; the tool shows it to the agent and the operator
 	Text        string // what the agent does, in markdown
-	// Files lie beside the text, by name, such as a guide the text names:
-	// the agent reads them when it needs them.
+	// Files lie beside the text, by their paths in the directory of the
+	// skill, such as a guide the text names: the agent reads them when it
+	// needs them.
 	Files map[string]string
 }
 
@@ -45,7 +46,7 @@ var skills = []struct {
 	{agenttext.WorkingOnTask, msg.SkillWorkingOnTask, nil},
 	{agenttext.CancelingTask, msg.SkillCancelingTask, nil},
 	{agenttext.EditingFlow, msg.SkillEditingFlow, func() map[string]string {
-		return map[string]string{agenttext.FlowGuideFile: agenttext.FlowGuide()}
+		return map[string]string{agenttext.FlowGuidePath: agenttext.FlowGuide()}
 	}},
 }
 

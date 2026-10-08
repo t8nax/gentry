@@ -28,9 +28,13 @@ const (
 	EditingFlow   = "editing-flow"    // show, write, edit and apply the flow of a project
 )
 
-// FlowGuideFile is the name of the guide to the format of the flow beside
-// the skill editing-flow, which names it.
+// FlowGuideFile is the name of the guide to the format of the flow.
 const FlowGuideFile = "flow-guide.md"
+
+// FlowGuidePath is where the guide lies in the directory of the skill
+// editing-flow, which names it: reference material of a skill goes to
+// references/, as the Agent Skills specification has it.
+const FlowGuidePath = "references/" + FlowGuideFile
 
 // Skill returns the text of the skill name for the gentry at exe. The path
 // has forward slashes, which every shell on Windows accepts. References to

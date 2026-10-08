@@ -9,7 +9,7 @@
       "description": "Gentry ведёт задачи агента по флоу проекта и хранит их состояние.",
       "name": "gentry",
       "source": "./gentry",
-      "version": "0.1.0+922eec68"
+      "version": "0.1.0+b2cd0513"
     }
   ]
 }

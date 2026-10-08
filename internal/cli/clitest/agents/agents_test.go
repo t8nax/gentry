@@ -233,3 +233,62 @@ func TestAgentsSyncText(t *testing.T) {
 		t.Error("a worktree is laid out despite the conflict")
 	}
 }
+
+// passScenario takes the task of the current worktree through the feature
+// scenario by skips.
+func passScenario(t *testing.T) {
+	t.Helper()
+	for range 3 {
+		clitest.MustRun(t, "stage", "skip", "--reason", "Не нужен")
+	}
+	clitest.MustRun(t, "stage", "skip", "--reason", "Не нужен", "--to", "merge")
+	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
+}
+
+func TestCloseAndFlowApplyWithTask(t *testing.T) {
+	_, fix := clitest.TaskShop(t)
+	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
+	before := read(t, reviewerFile(fix))
+
+	// flow apply leaves the worktree of the task to its snapshot.
+	clitest.WriteDraft(t, clitest.ShopPlaces(), map[string]string{
+		"stages/review.yaml": "title: Ревью\nexit: замечания ревью записаны и разобраны\nexecutor: orchestrator\ninclude: [review-checklist]\n",
+	})
+	clitest.MustRun(t, "flow", "apply")
+	if read(t, reviewerFile(fix)) != before {
+		t.Error("flow apply changed the worktree of the task")
+	}
+
+	t.Chdir(fix)
+	passScenario(t)
+	code, stdout, _ := clitest.Run("task", "close")
+	if code != contract.ExitOK || !strings.HasSuffix(stdout, "\n\nСубагенты в рабочей копии изменены: удалён reviewer.\n"+nextSession+"\n") {
+		t.Errorf("close: exit code %d, output:\n%s", code, stdout)
+	}
+	if clitest.FileExists(reviewerFile(fix)) {
+		t.Error("the released worktree keeps reviewer")
+	}
+	clean(t, fix)
+}
+
+func TestLayoutFailureText(t *testing.T) {
+	shop, _ := clitest.TaskShop(t)
+	extra := gittest.Worktree(t, shop, filepath.Join(filepath.Dir(shop), "shop-broken"), "broken")
+	// A file where the directory of subagents must be.
+	os.WriteFile(filepath.Join(extra, ".claude"), []byte("файл\n"), 0o644)
+	gittest.Run(t, extra, "add", ".claude")
+	gittest.Run(t, extra, "commit", "--quiet", "-m", "file")
+
+	code, stdout, _ := clitest.Run("worktree", "add", extra)
+	head := clitest.Lines("Рабочая копия внесена в пул проекта shop: "+extra, "", "Субагентов не удалось разложить.")
+	tail := clitest.Lines("", "Повторить раскладку: gentry agents sync")
+	if code != contract.ExitOK || !strings.HasPrefix(stdout, head+"Причина: ") || !strings.HasSuffix(stdout, tail) {
+		t.Errorf("exit code %d, output:\n%s", code, stdout)
+	}
+	out := clitest.WantJSON(t, contract.ExitOK, "schemas/worktree-add.json", "worktree", "add", extra)
+	var res contract.WorktreeAddOutput
+	json.Unmarshal([]byte(out), &res)
+	if res.Agents == nil || res.Agents.Error == nil || *res.Agents.Error == "" {
+		t.Errorf("JSON: %s", out)
+	}
+}

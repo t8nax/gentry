@@ -678,8 +678,6 @@ const (
 	HintIntroContinue       Key = "hint.intro_continue"
 	IntroPluginStale        Key = "intro.plugin_stale"
 	HintIntroPluginStale    Key = "hint.intro_plugin_stale"
-	CmdFlowGuideSummary     Key = "cmd.flow_guide.summary"
-	CmdFlowGuideDesc        Key = "cmd.flow_guide.desc"
 	SkillEditingFlow        Key = "skill.editing_flow"
 	DiffReportFile          Key = "diff.report_file"
 	DiffScenarios           Key = "diff.scenarios"

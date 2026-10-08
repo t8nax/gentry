@@ -31,16 +31,22 @@ type Skill struct {
 	Name        string
 	Description string // when to use the skill; the tool shows it to the agent and the operator
 	Text        string // what the agent does, in markdown
+	// Files lie beside the text, by name, such as a guide the text names:
+	// the agent reads them when it needs them.
+	Files map[string]string
 }
 
 // skills are the skills of Gentry with the keys of their descriptions.
 var skills = []struct {
 	name        string
 	description msg.Key
+	files       func() map[string]string
 }{
-	{agenttext.WorkingOnTask, msg.SkillWorkingOnTask},
-	{agenttext.CancelingTask, msg.SkillCancelingTask},
-	{agenttext.EditingFlow, msg.SkillEditingFlow},
+	{agenttext.WorkingOnTask, msg.SkillWorkingOnTask, nil},
+	{agenttext.CancelingTask, msg.SkillCancelingTask, nil},
+	{agenttext.EditingFlow, msg.SkillEditingFlow, func() map[string]string {
+		return map[string]string{agenttext.FlowGuideFile: agenttext.FlowGuide()}
+	}},
 }
 
 // Gentry returns the integration description for the gentry binary at exe.
@@ -56,7 +62,11 @@ func Gentry(exe string) Description {
 		},
 	}
 	for _, s := range skills {
-		d.Skills = append(d.Skills, Skill{Name: s.name, Description: msg.Text(s.description), Text: agenttext.Skill(s.name, exe)})
+		sk := Skill{Name: s.name, Description: msg.Text(s.description), Text: agenttext.Skill(s.name, exe)}
+		if s.files != nil {
+			sk.Files = s.files()
+		}
+		d.Skills = append(d.Skills, sk)
 	}
 	return d
 }

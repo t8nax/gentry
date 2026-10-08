@@ -130,7 +130,6 @@ func commands() []command {
 					},
 					run: runFlowShow,
 				},
-				{name: "flow guide", summary: msg.CmdFlowGuideSummary, desc: msg.CmdFlowGuideDesc, run: runFlowGuide},
 				{
 					name: "flow diff", summary: msg.CmdFlowDiffSummary, desc: msg.CmdFlowDiffDesc,
 					flags: []flagSpec{

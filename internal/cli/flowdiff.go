@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/agenttext"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/msg"
 )
@@ -361,15 +360,4 @@ func (d diffView) transitionLine(sd flow.ScenarioDiff, td flow.TransitionDiff) (
 		return mark(flow.Modified) + " " + subject + ": " + strings.Join(details, ", "), true
 	}
 	return "", false
-}
-
-// runFlowGuide prints the guide to the format of the flow: a text to read,
-// without JSON, as the help.
-func runFlowGuide(args []string, env Env) int {
-	f := newFlags("flow guide")
-	if code, done := f.parse(args, env); done {
-		return code
-	}
-	fmt.Fprint(env.Stdout, agenttext.FlowGuide())
-	return contract.ExitOK
 }

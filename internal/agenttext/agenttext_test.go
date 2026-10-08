@@ -22,6 +22,9 @@ func TestNeutral(t *testing.T) {
 		if strings.Contains(text, "<gentry>") {
 			t.Errorf("%s keeps the place of the program", name)
 		}
+		if strings.Contains(text, "${") {
+			t.Errorf("%s names the directory of the skill the way of a tool", name)
+		}
 	}
 }
 
@@ -33,10 +36,10 @@ func TestResolveSkills(t *testing.T) {
 }
 
 // TestFlowGuideNeutral checks that the guide names neither a tool nor a place
-// to fill: gentry flow guide prints it as it is.
+// to fill: it lies beside the skill as it is.
 func TestFlowGuideNeutral(t *testing.T) {
 	text := FlowGuide()
-	for _, s := range []string{"gentry:", "<gentry>", "<skill:"} {
+	for _, s := range []string{"gentry:", "<gentry>", "<skill:", SkillDir} {
 		if strings.Contains(text, s) {
 			t.Errorf("the guide contains %q", s)
 		}

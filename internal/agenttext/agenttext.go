@@ -28,8 +28,9 @@ const (
 	EditingFlow   = "editing-flow"    // show, write, edit and apply the flow of a project
 )
 
-// flowGuide is the file of the guide to the format of the flow.
-const flowGuide = "flow-guide"
+// FlowGuideFile is the name of the guide to the format of the flow beside
+// the skill editing-flow, which names it.
+const FlowGuideFile = "flow-guide.md"
 
 // Skill returns the text of the skill name for the gentry at exe. The path
 // has forward slashes, which every shell on Windows accepts. References to
@@ -46,12 +47,17 @@ func Skill(name, exe string) string {
 // reads before it writes a flow. It names neither the program nor skills, so
 // it is the same for every tool.
 func FlowGuide() string {
-	b, err := files.ReadFile(language + "/" + flowGuide + ".md")
+	b, err := files.ReadFile(language + "/" + FlowGuideFile)
 	if err != nil {
 		panic("agenttext: no guide to the flow")
 	}
 	return string(b)
 }
+
+// SkillDir is the place of the directory of the skill in its text: the files
+// of the skill lie there, and each tool names the directory its own way, such
+// as ${CLAUDE_SKILL_DIR} in Claude Code.
+const SkillDir = "<skill-dir>"
 
 // skillRef matches a neutral reference to a skill: each tool names skills its
 // own way, such as gentry:working-on-task in Claude Code.

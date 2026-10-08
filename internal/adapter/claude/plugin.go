@@ -121,6 +121,9 @@ func buildFiles(d integration.Description, version string) (map[string][]byte, e
 	files := map[string][]byte{}
 	for _, s := range d.Skills {
 		files[d.Name+"/skills/"+s.Name+"/SKILL.md"] = skillFile(s)
+		for name, text := range s.Files {
+			files[d.Name+"/skills/"+s.Name+"/"+name] = []byte(agenttext.ResolveSkills(text, SkillRef))
+		}
 	}
 	for path, v := range out {
 		b, err := json.MarshalIndent(v, "", "  ")
@@ -132,16 +135,20 @@ func buildFiles(d integration.Description, version string) (map[string][]byte, e
 	return files, nil
 }
 
+// skillDir is how a skill of Claude Code names its directory: Claude Code
+// puts the path in place of it when the skill is invoked.
+const skillDir = "${CLAUDE_SKILL_DIR}"
+
 // SkillRef is how Claude Code names the skill name of the plugin.
 func SkillRef(name string) string { return integration.Name + ":" + name }
 
 // skillFile is the SKILL.md of a skill: a YAML front matter with its name and
-// description, then its text, with the references to skills named as Claude
-// Code names them. A Go quoted string is a valid YAML double-quoted scalar
+// description, then its text, with the references to skills and to its
+// directory named as Claude Code names them. A Go quoted string is a valid YAML double-quoted scalar
 // for the texts of Gentry: they have no control characters.
 func skillFile(s integration.Skill) []byte {
 	description := agenttext.ResolveSkills(s.Description, SkillRef)
-	text := agenttext.ResolveSkills(s.Text, SkillRef)
+	text := strings.ReplaceAll(agenttext.ResolveSkills(s.Text, SkillRef), agenttext.SkillDir, skillDir)
 	return []byte("---\nname: " + s.Name + "\ndescription: " + strconv.Quote(description) + "\n---\n\n" + text)
 }
 

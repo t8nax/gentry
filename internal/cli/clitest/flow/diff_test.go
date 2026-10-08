@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/agenttext"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/gittest"
@@ -343,13 +342,5 @@ func TestFlowDiffLibrary(t *testing.T) {
 	clitest.MustRun(t, "library", "discard")
 	if clitest.FileExists(report) {
 		t.Error("the file of changes after library discard")
-	}
-}
-
-func TestFlowGuide(t *testing.T) {
-	clitest.WantRun(t, contract.ExitOK, agenttext.FlowGuide(), "", "flow", "guide")
-	clitest.WantRun(t, contract.ExitUsage, "", "Команда flow guide не поддерживает флаг --json.\n", "flow", "guide", "--json")
-	if code, _, _ := clitest.Run("flow", "guide", "extra"); code != contract.ExitUsage {
-		t.Errorf("an argument: exit code %d", code)
 	}
 }

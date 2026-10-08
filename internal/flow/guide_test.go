@@ -83,3 +83,21 @@ func TestGuideFields(t *testing.T) {
 		}
 	}
 }
+
+// TestGuideContents checks that the list of sections at the top of the guide
+// names its sections in order: the agent reads a part of a long file by it.
+func TestGuideContents(t *testing.T) {
+	var sections []string
+	var contents string
+	for _, line := range strings.Split(agenttext.FlowGuide(), "\n") {
+		if s, ok := strings.CutPrefix(line, "## "); ok {
+			sections = append(sections, s)
+		}
+		if s, ok := strings.CutPrefix(line, "Разделы: "); ok && contents == "" {
+			contents = s
+		}
+	}
+	if want := strings.Join(sections, " · ") + "."; contents != want {
+		t.Errorf("contents %q, want %q", contents, want)
+	}
+}

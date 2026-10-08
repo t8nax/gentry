@@ -363,7 +363,7 @@ func commands() []command {
 			args: []argSpec{{name: msg.ArgTool, desc: func() string {
 				return msg.Text(msg.ArgToolDesc, strings.Join(tools, ", "))
 			}}},
-			flags: []flagSpec{jsonFlag},
+			flags: []flagSpec{{name: "switch", desc: descText(msg.FlagSetupSwitch)}, jsonFlag},
 			run:   runSetup,
 		},
 		{

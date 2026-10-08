@@ -125,14 +125,17 @@ func TestHelpMatchesFlags(t *testing.T) {
 
 func TestDescribeLayout(t *testing.T) {
 	c, _ := lookup("setup")
+	width := len([]rune(msg.Text(msg.ArgTool)))
+	column := strings.Repeat(" ", 2+width+3)
 	want := msg.Text(msg.CmdSetupDesc) + "\n\n" +
 		msg.Text(msg.HelpUsageTitle) + "\n" +
-		"  gentry setup " + msg.Text(msg.ArgTool) + " [--json]\n\n" +
+		"  gentry setup " + msg.Text(msg.ArgTool) + " [--switch] [--json]\n\n" +
 		msg.Text(msg.HelpArgs) + "\n" +
 		// The second line of the description keeps the column.
-		"  " + msg.Text(msg.ArgTool) + "   " + strings.ReplaceAll(msg.Text(msg.ArgToolDesc, "claude"), "\n", "\n"+strings.Repeat(" ", 2+len([]rune(msg.Text(msg.ArgTool)))+3)) + "\n\n" +
+		"  " + msg.Text(msg.ArgTool) + "   " + strings.ReplaceAll(msg.Text(msg.ArgToolDesc, "claude"), "\n", "\n"+column) + "\n\n" +
 		msg.Text(msg.HelpFlags) + "\n" +
-		"  --json" + strings.Repeat(" ", len([]rune(msg.Text(msg.ArgTool)))-len("--json")+3) + msg.Text(msg.FlagJSON) + "\n"
+		"  --switch" + strings.Repeat(" ", width-len("--switch")+3) + strings.ReplaceAll(msg.Text(msg.FlagSetupSwitch), "\n", "\n"+column) + "\n" +
+		"  --json" + strings.Repeat(" ", width-len("--json")+3) + msg.Text(msg.FlagJSON) + "\n"
 	if got := describe(c); got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}

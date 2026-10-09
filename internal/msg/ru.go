@@ -769,6 +769,7 @@ var ru = catalog{
 		HintAgentsConflictWarning: "Разложить субагентов после разбора файлов: gentry agents sync",
 		AgentsSyncFailed:          "Субагентов не удалось разложить.",
 		AgentsSyncFailedReason:    "Причина: %s",
+		ErrAgentsBusy:             "Субагентов в рабочие копии этого репозитория раскладывает другая команда Gentry.",
 		HintAgentsSyncFailed:      "Повторить раскладку: gentry agents sync",
 		AgentFileMark:             "файл разложен из флоу проекта и перезаписывается при раскладке субагентов.",
 		ExcludeBlockStart:         "субагенты, разложенные в рабочие копии",

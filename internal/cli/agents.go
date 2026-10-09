@@ -549,6 +549,15 @@ func layoutFailure(err error) failure {
 	if f, ok := gitFailure(err); ok {
 		return f
 	}
+	var busy *agents.BusyError
+	if errors.As(err, &busy) {
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeAgentsBusy,
+			message: msg.Text(msg.ErrAgentsBusy),
+			details: map[string]any{"path": busy.Path},
+		}
+	}
 	var pe *fs.PathError
 	if errors.As(err, &pe) {
 		return ioError(pe.Path, pe.Err)

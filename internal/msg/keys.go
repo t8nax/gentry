@@ -775,6 +775,7 @@ const (
 	HintAgentsConflictWarning Key = "hint.agents_conflict_warning"
 	AgentsSyncFailed          Key = "agents.sync_failed"
 	AgentsSyncFailedReason    Key = "agents.sync_failed_reason"
+	ErrAgentsBusy             Key = "err.agents_busy"
 	HintAgentsSyncFailed      Key = "hint.agents_sync_failed"
 	AgentFileMark             Key = "agents.file_mark"
 	ExcludeBlockStart         Key = "agents.exclude_start"

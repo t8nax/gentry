@@ -1,13 +1,17 @@
 package agents_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/t8nax/gentry/internal/agents"
+	"github.com/t8nax/gentry/internal/filelock"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/git"
 	"github.com/t8nax/gentry/internal/gittest"
@@ -255,4 +259,44 @@ func TestConcurrentLayouts(t *testing.T) {
 	}
 	clean(t, main)
 	clean(t, linked)
+}
+
+func TestBusyBlock(t *testing.T) {
+	main, _ := shop(t)
+	exclude, err := git.ExcludeFile(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := filelock.Acquire(filepath.Join(filepath.Dir(exclude), "gentry-exclude.lock"), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+	wait := agents.LockWait
+	agents.LockWait = 100 * time.Millisecond
+	defer func() { agents.LockWait = wait }()
+
+	_, err = agents.Sync(layout, []agents.Target{{Path: main, Agents: []flow.Agent{reviewer}}}, []string{main})
+	var busy *agents.BusyError
+	if !errors.As(err, &busy) || !paths.Same(busy.Path, exclude) {
+		t.Fatalf("Sync with the block held: %v", err)
+	}
+	if _, err := os.Stat(agentFile(main, "reviewer")); !os.IsNotExist(err) {
+		t.Errorf("a file is written while the block is held: %v", err)
+	}
+}
+
+func TestExcludeKeepsPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no permission bits of a group on Windows")
+	}
+	main, _ := shop(t)
+	exclude, _ := git.ExcludeFile(main)
+	os.MkdirAll(filepath.Dir(exclude), 0o755)
+	os.WriteFile(exclude, []byte("*.log\n"), 0o664)
+	os.Chmod(exclude, 0o664)
+	sync(t, []agents.Target{{Path: main, Agents: []flow.Agent{reviewer}}}, main)
+	if fi, err := os.Stat(exclude); err != nil || fi.Mode().Perm() != 0o664 {
+		t.Errorf("mode of info/exclude = %v, %v; want 0664", fi.Mode().Perm(), err)
+	}
 }

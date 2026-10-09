@@ -6,7 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/t8nax/gentry/internal/msg"
 )
@@ -69,11 +71,34 @@ func writeBlock(file string, patterns []string) error {
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
+	// The file keeps its permissions: CreateTemp makes it readable by the
+	// owner alone, and a shared repository reads it by the group too.
+	mode := fs.FileMode(0o644)
+	if fi, serr := os.Stat(file); serr == nil {
+		mode = fi.Mode().Perm()
+	}
 	if err == nil {
-		err = os.Rename(tmp.Name(), file)
+		err = os.Chmod(tmp.Name(), mode)
+	}
+	if err == nil {
+		err = rename(tmp.Name(), file)
 	}
 	if err != nil {
 		os.Remove(tmp.Name())
 	}
 	return err
+}
+
+// rename puts file from in the place of to. On Windows the place cannot be
+// taken while another program, such as git, reads the file without sharing
+// its deletion: it is tried again for a while.
+func rename(from, to string) error {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err := os.Rename(from, to)
+		if err == nil || runtime.GOOS != "windows" || !errors.Is(err, fs.ErrPermission) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

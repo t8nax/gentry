@@ -304,7 +304,10 @@ func exclude(l Layout, files map[string]string, plans []plan, adding bool) error
 			continue
 		}
 		done[file] = true
-		lock, err := filelock.Acquire(filepath.Join(filepath.Dir(file), lockName), lockWait)
+		lock, err := filelock.Acquire(filepath.Join(filepath.Dir(file), lockName), LockWait)
+		if errors.Is(err, filelock.ErrBusy) {
+			return &BusyError{Path: file}
+		}
 		if err != nil {
 			return err
 		}
@@ -341,9 +344,15 @@ func exclude(l Layout, files map[string]string, plans []plan, adding bool) error
 	return nil
 }
 
-// The lock of the block of Gentry, beside info/exclude, and how long a
-// layout waits for another to release it.
-const (
-	lockName = "gentry-exclude.lock"
-	lockWait = 10 * time.Second
-)
+// BusyError means another command held the lock of the block of Gentry in
+// the info/exclude at Path for the whole wait.
+type BusyError struct{ Path string }
+
+func (e *BusyError) Error() string { return e.Path + ": the block of Gentry is busy" }
+
+// lockName is the lock of the block of Gentry, beside info/exclude.
+const lockName = "gentry-exclude.lock"
+
+// LockWait is how long a layout waits for another to release the lock of the
+// block.
+var LockWait = 10 * time.Second

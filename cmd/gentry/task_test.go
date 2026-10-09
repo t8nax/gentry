@@ -30,7 +30,7 @@ func shopWithFlow(t *testing.T, bin string, n int) []string {
 	}
 	t.Setenv(home.EnvVar, filepath.Join(root, "home"))
 	t.Setenv(caller.SessionEnv, "")
-	t.Setenv(caller.ClaudeSessionEnv, "")
+	t.Setenv(caller.ClaudeCodeEnv, "")
 	shop := gittest.Repo(t, filepath.Join(root, "shop"))
 	gentry(t, bin, shop, "project", "add", "shop", "--knowledge", filepath.Join(root, "shop-knowledge"))
 	process := filepath.Join(root, "home", "process")

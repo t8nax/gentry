@@ -204,7 +204,7 @@ const Statement = "Клиент возвращает часть заказа. Д
 func TaskShop(t *testing.T) (shop, fix string) {
 	t.Helper()
 	t.Setenv(caller.SessionEnv, "")
-	t.Setenv(caller.ClaudeSessionEnv, "")
+	t.Setenv(caller.ClaudeCodeEnv, "")
 	shop, fix = filepath.Join(work, "shop"), filepath.Join(work, "shop-fix")
 	Layer(t, "pool", func() {
 		ShopFlow(t)

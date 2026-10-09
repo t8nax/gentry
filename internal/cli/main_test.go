@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/internal/adapter/claude"
+	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
 )
@@ -29,6 +30,16 @@ func isolated(m *testing.M) int {
 	os.Setenv(home.EnvVar, dir)
 	os.Setenv("HOME", dir)
 	os.Setenv("USERPROFILE", dir)
+	// The tests run outside a session of an AI tool even when they are run
+	// from one.
+	// The tools of Gentry are allowed in the settings of Claude Code, as by an
+	// earlier setup; a test of the permission gives setup settings of its own.
+	settings := filepath.Join(dir, "claude-config")
+	os.MkdirAll(settings, 0o755)
+	os.WriteFile(filepath.Join(settings, "settings.json"), []byte(`{"permissions":{"allow":["`+claude.PermissionRule+`"]}}`), 0o644)
+	os.Setenv(claude.ConfigDirEnv, settings)
+	os.Unsetenv(caller.ClaudeCodeEnv)
+	os.Unsetenv(caller.SessionEnv)
 	if err := gittest.Isolate(dir); err != nil {
 		panic(err)
 	}

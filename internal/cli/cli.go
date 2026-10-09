@@ -21,6 +21,9 @@ type Env struct {
 	Stderr io.Writer
 
 	json bool // --json is among the arguments: failures are printed as JSON
+	// agent is set for the commands gentry mcp runs for the agent: commands
+	// only of the agent run, and hints name tools.
+	agent bool
 }
 
 // command is a gentry command. Its arguments and flags are declared here and
@@ -36,6 +39,9 @@ type command struct {
 	flags   []flagSpec
 	actions []command
 	run     func(args []string, env Env) int
+	// agentOnly marks a command only the agent runs, as a tool of gentry mcp:
+	// the command line and the help do not know it.
+	agentOnly bool
 }
 
 // hidden reports whether c is a service command: not shown in the help.
@@ -48,6 +54,10 @@ type argSpec struct {
 	desc     func() string
 	optional bool
 	many     bool // the argument may be given several times; only the last one
+	// field names the argument as a field of the tool of the command, as
+	// --input names flags.
+	field  string
+	number bool // the value is an integer
 }
 
 // flagSpec is a flag. A flag with a value placeholder takes a value. The
@@ -77,7 +87,7 @@ func commands() []command {
 			actions: []command{
 				{
 					name: "project add", summary: msg.CmdProjectAddSummary, desc: msg.CmdProjectAddDesc,
-					args: []argSpec{{name: msg.ArgProjectID, desc: descText(msg.ArgProjectIDDesc), optional: true}},
+					args: []argSpec{{name: msg.ArgProjectID, field: "project", desc: descText(msg.ArgProjectIDDesc), optional: true}},
 					flags: []flagSpec{
 						{name: "knowledge", value: msg.ArgPath, desc: descText(msg.FlagKnowledgeDesc), required: true},
 						{name: "prefix", value: msg.ArgPrefix, desc: descText(msg.FlagPrefixDesc)},
@@ -97,7 +107,7 @@ func commands() []command {
 			actions: []command{
 				{
 					name: "worktree add", summary: msg.CmdWorktreeAddSummary, desc: msg.CmdWorktreeAddDesc,
-					args: []argSpec{{name: msg.ArgPath, desc: descText(msg.ArgWorktreePathDesc), optional: true}},
+					args: []argSpec{{name: msg.ArgPath, field: "path", desc: descText(msg.ArgWorktreePathDesc), optional: true}},
 					flags: []flagSpec{
 						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagWorktreeAddProject)},
 						jsonFlag,
@@ -169,7 +179,7 @@ func commands() []command {
 			actions: []command{
 				{
 					name: "process remote", summary: msg.CmdProcessRemoteSummary, desc: msg.CmdProcessRemoteDesc,
-					args:  []argSpec{{name: msg.ArgRemote, desc: descText(msg.ArgRemoteDesc)}},
+					args:  []argSpec{{name: msg.ArgRemote, field: "remote", desc: descText(msg.ArgRemoteDesc)}},
 					flags: []flagSpec{jsonFlag},
 					run:   runProcessRemote,
 				},
@@ -195,7 +205,7 @@ func commands() []command {
 				},
 				{
 					name: "task show", summary: msg.CmdTaskShowSummary, desc: msg.CmdTaskShowDesc,
-					args: []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
+					args: []argSpec{{name: msg.ArgTask, field: "task", desc: descText(msg.ArgTaskDesc), optional: true}},
 					flags: []flagSpec{
 						{name: "path", desc: descText(msg.FlagTaskShowPath)},
 						{name: "statement", desc: descText(msg.FlagTaskShowStatement)},
@@ -214,14 +224,14 @@ func commands() []command {
 					run: runTaskList,
 				},
 				{
-					name: "task close", summary: msg.CmdTaskCloseSummary, desc: msg.CmdTaskCloseDesc,
-					args:  []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
+					name: "task close", agentOnly: true, summary: msg.CmdTaskCloseSummary, desc: msg.CmdTaskCloseDesc,
+					args:  []argSpec{{name: msg.ArgTask, field: "task", desc: descText(msg.ArgTaskDesc), optional: true}},
 					flags: []flagSpec{jsonFlag},
 					run:   runTaskClose,
 				},
 				{
 					name: "task cancel", summary: msg.CmdTaskCancelSummary, desc: msg.CmdTaskCancelDesc,
-					args: []argSpec{{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true}},
+					args: []argSpec{{name: msg.ArgTask, field: "task", desc: descText(msg.ArgTaskDesc), optional: true}},
 					flags: []flagSpec{
 						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagCancelReason)},
 						inputFlag("reason", false),
@@ -232,8 +242,8 @@ func commands() []command {
 				{
 					name: "task attempts", summary: msg.CmdTaskAttemptsSummary, desc: msg.CmdTaskAttemptsDesc,
 					args: []argSpec{
-						{name: msg.ArgTask, desc: descText(msg.ArgTaskDesc), optional: true},
-						{name: msg.ArgAttempt, desc: descText(msg.ArgAttemptDesc), optional: true},
+						{name: msg.ArgTask, field: "task", desc: descText(msg.ArgTaskDesc), optional: true},
+						{name: msg.ArgAttempt, field: "attempt", number: true, desc: descText(msg.ArgAttemptDesc), optional: true},
 					},
 					flags: []flagSpec{jsonFlag},
 					run:   runTaskAttempts,
@@ -249,7 +259,7 @@ func commands() []command {
 					run:   runStageShow,
 				},
 				{
-					name: "stage exit", summary: msg.CmdStageExitSummary, desc: msg.CmdStageExitDesc,
+					name: "stage exit", agentOnly: true, summary: msg.CmdStageExitSummary, desc: msg.CmdStageExitDesc,
 					flags: []flagSpec{
 						{name: "kind", value: msg.ArgKind, desc: descText(msg.FlagExitKind)},
 						{name: "text", value: msg.ArgText, desc: descText(msg.FlagExitText)},
@@ -263,7 +273,7 @@ func commands() []command {
 					run: runStageExit,
 				},
 				{
-					name: "stage skip", summary: msg.CmdStageSkipSummary, desc: msg.CmdStageSkipDesc,
+					name: "stage skip", agentOnly: true, summary: msg.CmdStageSkipSummary, desc: msg.CmdStageSkipDesc,
 					flags: []flagSpec{
 						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagSkipReason)},
 						{name: "to", value: msg.ArgNode, desc: descText(msg.FlagExitTo)},
@@ -276,17 +286,17 @@ func commands() []command {
 			},
 		},
 		{
-			name: "step", section: msg.HelpSectionTasks, summary: msg.CmdStepSummary, desc: msg.CmdStepDesc,
+			name: "step", agentOnly: true, section: msg.HelpSectionTasks, summary: msg.CmdStepSummary, desc: msg.CmdStepDesc,
 			actions: []command{
 				{
-					name: "step add", summary: msg.CmdStepAddSummary, desc: msg.CmdStepAddDesc,
-					args:  []argSpec{{name: msg.ArgStep, desc: descText(msg.ArgStepDesc), many: true}},
+					name: "step add", agentOnly: true, summary: msg.CmdStepAddSummary, desc: msg.CmdStepAddDesc,
+					args:  []argSpec{{name: msg.ArgStep, field: "steps", desc: descText(msg.ArgStepDesc), many: true}},
 					flags: []flagSpec{taskFlag, inputFlag("steps", true), jsonFlag},
 					run:   runStepAdd,
 				},
 				{
-					name: "step done", summary: msg.CmdStepDoneSummary, desc: msg.CmdStepDoneDesc,
-					args: []argSpec{{name: msg.ArgNumber, desc: descText(msg.ArgStepNumberDesc)}},
+					name: "step done", agentOnly: true, summary: msg.CmdStepDoneSummary, desc: msg.CmdStepDoneDesc,
+					args: []argSpec{{name: msg.ArgNumber, field: "step", number: true, desc: descText(msg.ArgStepNumberDesc)}},
 					flags: []flagSpec{
 						{name: "check", value: msg.ArgCheck, desc: descText(msg.FlagStepCheck)},
 						taskFlag,
@@ -296,8 +306,8 @@ func commands() []command {
 					run: runStepDone,
 				},
 				{
-					name: "step drop", summary: msg.CmdStepDropSummary, desc: msg.CmdStepDropDesc,
-					args: []argSpec{{name: msg.ArgNumber, desc: descText(msg.ArgStepNumberDesc)}},
+					name: "step drop", agentOnly: true, summary: msg.CmdStepDropSummary, desc: msg.CmdStepDropDesc,
+					args: []argSpec{{name: msg.ArgNumber, field: "step", number: true, desc: descText(msg.ArgStepNumberDesc)}},
 					flags: []flagSpec{
 						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagStepReason)},
 						taskFlag,
@@ -313,7 +323,7 @@ func commands() []command {
 			actions: []command{
 				{
 					name: "note add", summary: msg.CmdNoteAddSummary, desc: msg.CmdNoteAddDesc,
-					args:  []argSpec{{name: msg.ArgText, desc: descText(msg.ArgNoteDesc)}},
+					args:  []argSpec{{name: msg.ArgText, field: "text", desc: descText(msg.ArgNoteDesc)}},
 					flags: []flagSpec{taskFlag, inputFlag("text", true), jsonFlag},
 					run:   runNoteAdd,
 				},
@@ -325,11 +335,11 @@ func commands() []command {
 			},
 		},
 		{
-			name: "artifact", section: msg.HelpSectionTasks, summary: msg.CmdArtifactSummary, desc: msg.CmdArtifactDesc,
+			name: "artifact", agentOnly: true, section: msg.HelpSectionTasks, summary: msg.CmdArtifactSummary, desc: msg.CmdArtifactDesc,
 			actions: []command{
 				{
-					name: "artifact save", summary: msg.CmdArtifactSaveSummary, desc: msg.CmdArtifactSaveDesc,
-					args: []argSpec{{name: msg.ArgName, desc: descText(msg.ArgArtifactNameDesc)}},
+					name: "artifact save", agentOnly: true, summary: msg.CmdArtifactSaveSummary, desc: msg.CmdArtifactSaveDesc,
+					args: []argSpec{{name: msg.ArgName, field: "name", desc: descText(msg.ArgArtifactNameDesc)}},
 					flags: []flagSpec{
 						{name: "file", value: msg.ArgPath, desc: descText(msg.FlagArtifactFile), group: "source"},
 						{name: "url", value: msg.ArgURL, desc: descText(msg.FlagArtifactURL), group: "source"},
@@ -360,7 +370,7 @@ func commands() []command {
 		},
 		{
 			name: "setup", section: msg.HelpSectionMaint, summary: msg.CmdSetupSummary, desc: msg.CmdSetupDesc,
-			args: []argSpec{{name: msg.ArgTool, desc: func() string {
+			args: []argSpec{{name: msg.ArgTool, field: "tool", desc: func() string {
 				return msg.Text(msg.ArgToolDesc, strings.Join(tools, ", "))
 			}}},
 			flags: []flagSpec{{name: "switch", desc: descText(msg.FlagSetupSwitch)}, jsonFlag},
@@ -431,17 +441,34 @@ func (g command) action(a string) (command, bool) {
 
 // actionNames returns the action names of group g, such as add, list.
 func (g command) actionNames() []string {
-	names := make([]string, len(g.actions))
-	for i, c := range g.actions {
-		names[i] = strings.TrimPrefix(c.name, g.name+" ")
+	var names []string
+	for _, c := range g.actions {
+		if !c.agentOnly {
+			names = append(names, strings.TrimPrefix(c.name, g.name+" "))
+		}
 	}
 	return names
+}
+
+// RunAgent executes the command given by args as a tool of the agent does:
+// commands only of the agent run, and hints name tools.
+func RunAgent(args []string, env Env) int {
+	env.agent = true
+	return Run(args, env)
 }
 
 // Run executes the command given by args (without the program name)
 // and returns the exit code.
 func Run(args []string, env Env) int {
 	env.json = hasJSONFlag(args)
+	if !env.json {
+		// Hints name tools for the agent; the command line has no hints of
+		// commands only the agent runs.
+		out, errs := &hintFilter{out: env.Stdout, agent: env.agent}, &hintFilter{out: env.Stderr, agent: env.agent}
+		env.Stdout, env.Stderr = out, errs
+		defer out.flush()
+		defer errs.flush()
+	}
 	if len(args) == 0 {
 		return runHelp(nil, env)
 	}
@@ -450,7 +477,7 @@ func Run(args []string, env Env) int {
 		return runHelp(nil, env)
 	}
 	c, ok := topLevel(name)
-	if !ok {
+	if !ok || c.agentOnly && !env.agent {
 		// An unknown command fails in JSON when asked: a client newer than this
 		// gentry learns from the code that the command does not exist yet.
 		return fail(env, unknownCommand(name))
@@ -464,7 +491,7 @@ func Run(args []string, env Env) int {
 			return fail(env, missingAction(c))
 		}
 		a, ok := c.action(args[0])
-		if !ok {
+		if !ok || a.agentOnly && !env.agent {
 			// As with an unknown command, in JSON when asked.
 			return fail(env, unknownAction(c, args[0]))
 		}

@@ -55,7 +55,7 @@ func runStepAdd(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer w.close()
-	res, err := task.AddSteps(w.st, w.task.ID, steps, source())
+	res, err := task.AddSteps(w.st, w.task.ID, steps, source(env))
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}
@@ -109,7 +109,7 @@ func runStepClose(cmd string, args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer w.close()
-	res, err := task.CloseStep(w.st, w.task.ID, number, done, note, source())
+	res, err := task.CloseStep(w.st, w.task.ID, number, done, note, source(env))
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}

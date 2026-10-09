@@ -225,7 +225,7 @@ func TestStageFeature(t *testing.T) {
 			"Итог: результат",
 			"Выход: Изменения сделаны, тесты проходят",
 			"Переход: review",
-			"Записано: оператором",
+			"Записано: агентом",
 			"Закрыт: <время>",
 			"",
 			"№  СОСТОЯНИЕ  ШАГ                     ПОЯСНЕНИЕ",
@@ -375,11 +375,11 @@ func TestStageOtherDirectory(t *testing.T) {
 		"stage", "exit", "--kind", "result", "--text", "Готово", "--task", "SHOP-1")
 	clitest.MustRun(t, "step", "add", "Создать ветку", "--task", "shop-1")
 	_, stdout, _ := clitest.Run("step", "done", "1", "--task", "SHOP-1")
-	if !strings.HasSuffix(stdout, "\nЗакрыть этап: gentry stage exit --kind <вид> --text <текст> --task SHOP-1\n") {
+	if !strings.HasSuffix(stdout, "\nЗакрыть этап: stage_exit (kind, text, task: SHOP-1)\n") {
 		t.Errorf("step done:\n%s", stdout)
 	}
 	_, stdout, _ = clitest.Run("stage", "exit", "--kind", "result", "--text", "Готово", "--task", "SHOP-1")
-	if !strings.HasSuffix(stdout, "\nПосмотреть этап: gentry stage show --task SHOP-1\n") {
+	if !strings.HasSuffix(stdout, "\nПосмотреть этап: stage_show (task: SHOP-1)\n") {
 		t.Errorf("stage exit:\n%s", stdout)
 	}
 	// In the main worktree, which holds no task, a command without --task finds none.
@@ -468,7 +468,8 @@ func TestWayRefusals(t *testing.T) {
 	}
 	for _, tt := range tests {
 		code, stdout, stderr := clitest.Run(tt.args...)
-		if code != tt.exit || stdout != "" || stderr != tt.stderr {
+		if want := clitest.InChannel(tt.stderr, tt.args); code != tt.exit || stdout != "" || stderr != want {
+			tt.stderr = want
 			t.Errorf("%s: exit code %d, stdout %q, stderr:\n%s\nwant %d:\n%s", tt.name, code, stdout, stderr, tt.exit, tt.stderr)
 		}
 		if code, c := clitest.ErrorCode(t, tt.args...); code != tt.exit || c != tt.code {
@@ -499,7 +500,7 @@ func TestStepsInput(t *testing.T) {
 		t.Errorf("step done --input: exit code %d, %s", code, out)
 	}
 	code, out, _ = clitest.RunWith(`{"step":3,"reason":"Лишний"}`, "step", "drop", "--input", "-", "--json")
-	if code != contract.ExitOK || !strings.Contains(out, `"reason":"Лишний"`) || !strings.Contains(out, `"closed_source":"operator"`) {
+	if code != contract.ExitOK || !strings.Contains(out, `"reason":"Лишний"`) || !strings.Contains(out, `"closed_source":"agent"`) {
 		t.Errorf("step drop --input: exit code %d, %s", code, out)
 	}
 	code, out, _ = clitest.RunWith(`{"text":"Строка 1.\nСтрока 2."}`, "note", "add", "--input", "-", "--json")

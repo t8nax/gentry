@@ -58,7 +58,7 @@ func runArtifactSave(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer w.close()
-	a, replaced, err := task.SaveArtifact(w.st, w.task, name, file, u, source())
+	a, replaced, err := task.SaveArtifact(w.st, w.task, name, file, u, source(env))
 	if err != nil {
 		f := wayFailure(cmd, err)
 		if f.code == contract.CodeFieldInvalid {

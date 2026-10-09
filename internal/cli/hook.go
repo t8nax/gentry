@@ -25,22 +25,15 @@ func runHook(args []string, env Env) int {
 	switch {
 	case len(f.args) == 0:
 		return fail(env, missingArgument("hook", "event", msg.Text(msg.ErrHookEventMissing), msg.Text(msg.HintHookEvents, events)))
+	case slices.Contains(hook.Retired, f.args[0]):
+		return contract.ExitOK
 	case !slices.Contains(hook.Events, f.args[0]):
 		e := f.args[0]
 		return fail(env, invalidArgument("hook", "event", e, msg.Text(msg.ErrHookEventUnknown, e), msg.Text(msg.HintHookEvents, events)))
 	}
 	in := hook.ReadInput(hookStdin(env.Stdin))
 	in.Tool = tool.Value
-	switch f.args[0] {
-	case hook.SessionStart:
-		runSessionStart(env.Stdout, in)
-	case hook.PreTool:
-		quietly(func() error { return hook.RunPreTool(in) })
-	case hook.PostTool:
-		quietly(func() error { return hook.RunPostTool(in) })
-	case hook.Stop:
-		quietly(func() error { return hook.RunStop(in) })
-	}
+	runSessionStart(env.Stdout, in)
 	return contract.ExitOK
 }
 
@@ -54,13 +47,6 @@ func hookStdin(r io.Reader) io.Reader {
 		}
 	}
 	return r
-}
-
-// quietly runs a hook that prints nothing and never fails: a failure to mark
-// a call must not get in the way of the command of the agent.
-func quietly(fn func() error) {
-	defer func() { recover() }()
-	fn()
 }
 
 // runSessionStart never breaks the agent session: on any failure, including a

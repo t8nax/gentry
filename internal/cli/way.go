@@ -201,9 +201,10 @@ func (w wayTask) view() (task.View, *failure) {
 	return task.View{}, &f
 }
 
-// source is who calls the command: the agent or the operator (R122).
-func source() string {
-	if caller.ByAgent() {
+// source is who calls the command: the agent, through its tools or in its
+// session, or the operator.
+func source(env Env) string {
+	if env.agent || caller.ByAgent() {
 		return state.SourceAgent
 	}
 	return state.SourceOperator

@@ -47,7 +47,7 @@ func TestTaskClose(t *testing.T) {
 	t.Chdir(fix)
 	passScenario(t)
 	_, stdout, _ := clitest.Run("task", "show")
-	if !strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show --statement\nЗакрыть задачу: gentry task close\n") {
+	if !strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show --statement\n") || strings.Contains(stdout, "task close") {
 		t.Errorf("task show of a passed scenario:\n%s", stdout)
 	}
 
@@ -57,20 +57,20 @@ func TestTaskClose(t *testing.T) {
 	), "", "task", "close")
 	typ, data := lastEvent(t)
 	clitest.Validate(t, "schemas/events/task.closed.json", data)
-	if want := `{"attempt":1,"source":"operator","worktree":` + clitest.JSONString(fix) + `}`; typ != "task.closed" || data != want {
+	if want := `{"attempt":1,"source":"agent","worktree":` + clitest.JSONString(fix) + `}`; typ != "task.closed" || data != want {
 		t.Errorf("event %s %s, want task.closed %s", typ, data, want)
 	}
 
 	t.Chdir(shop)
 	_, stdout, _ = clitest.Run("task", "show", "SHOP-1")
 	if !strings.Contains(clitest.Masked(stdout), "Состояние: закрыта\n") ||
-		!strings.Contains(clitest.Masked(stdout), "Взята: <время>\nЗакрыта оператором: <время>\nФлоу задачи применён: <время>\n\n") ||
+		!strings.Contains(clitest.Masked(stdout), "Взята: <время>\nЗакрыта агентом: <время>\nФлоу задачи применён: <время>\n\n") ||
 		strings.Contains(stdout, "Рабочая копия") ||
 		!strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show SHOP-1 --statement\n") {
 		t.Errorf("task show of a closed task:\n%s", stdout)
 	}
 	out := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "SHOP-1")
-	if !strings.Contains(out, `"ended":{"source":"operator","time":"`) || strings.Contains(out, `"worktree"`) {
+	if !strings.Contains(out, `"ended":{"source":"agent","time":"`) || strings.Contains(out, `"worktree"`) {
 		t.Errorf("task show --json of a closed task: %s", out)
 	}
 	// Closed, the task is not in the list of open ones; the worktree takes

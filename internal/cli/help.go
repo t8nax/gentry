@@ -26,7 +26,7 @@ func runHelp(args []string, env Env) int {
 		return contract.ExitOK
 	}
 	c, ok := topLevel(f.args[0])
-	if !ok {
+	if !ok || c.agentOnly {
 		return fail(env, unknownCommand(f.args[0]))
 	}
 	if len(f.args) == 2 {
@@ -34,7 +34,7 @@ func runHelp(args []string, env Env) int {
 			return fail(env, extraArgs("help", f.args[1:]))
 		}
 		a, ok := c.action(f.args[1])
-		if !ok {
+		if !ok || a.agentOnly {
 			return fail(env, unknownAction(c, f.args[1]))
 		}
 		c = a
@@ -84,7 +84,7 @@ func commandList() string {
 	var sections []msg.Key
 	bySection := map[msg.Key][]row{}
 	for _, c := range commands() {
-		if c.hidden() {
+		if c.hidden() || c.agentOnly {
 			continue
 		}
 		if !slices.Contains(sections, c.section) {
@@ -111,6 +111,9 @@ func commandList() string {
 func groupHelp(g command) string {
 	var rows []row
 	for _, a := range g.actions {
+		if a.agentOnly {
+			continue
+		}
 		rows = append(rows, row{strings.TrimPrefix(a.name, g.name+" "), msg.Text(a.summary)})
 	}
 	var b strings.Builder

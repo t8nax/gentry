@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
-	"sync"
 )
 
 // Tool is a tool of the server.
@@ -26,18 +25,21 @@ type Server struct {
 	Name    string
 	Version string
 	Tools   []Tool
-	// OnInitialized runs once the client is initialized, with a function
-	// that sends a message to it.
-	OnInitialized func(send func(any) error)
 }
 
 // latestProtocol is the protocol version offered to a client that asks for
-// none the server knows.
+// one the server does not know.
 const latestProtocol = "2025-11-25"
 
 // protocols are the protocol versions the server speaks: the methods it
-// serves are the same in all of them.
+// serves are the same in all of them. A client of a newer version first asks
+// server/discover; the server does not know it, and the client falls back to
+// initialize.
 var protocols = map[string]bool{"2024-11-05": true, "2025-03-26": true, "2025-06-18": true, "2025-11-25": true}
+
+// maxMessage limits one message: the arguments of a call carry the texts of
+// the agent, such as a plan.
+const maxMessage = 64 << 20
 
 // JSON-RPC error codes.
 const (
@@ -46,11 +48,10 @@ const (
 	codeInvalidParams  = -32602
 )
 
-type request struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
+type message struct {
+	ID     json.RawMessage `json:"id,omitempty"`
+	Method string          `json:"method"`
+	Params json.RawMessage `json:"params,omitempty"`
 }
 
 type response struct {
@@ -65,61 +66,45 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-// Serve reads requests from in and writes responses to out until in ends.
-// Calls run one at a time, in the order they come.
+// Serve reads messages from in and answers the requests on out until in
+// ends. Calls run one at a time, in the order they come.
 func (s *Server) Serve(in io.Reader, out io.Writer) error {
-	var mu sync.Mutex
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
-	send := func(r response) error {
-		mu.Lock()
-		defer mu.Unlock()
-		return enc.Encode(r)
-	}
 	sc := bufio.NewScanner(in)
-	sc.Buffer(make([]byte, 64*1024), 64*1024*1024)
+	sc.Buffer(make([]byte, 64*1024), maxMessage)
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(line) == 0 {
 			continue
 		}
-		var req request
-		if err := json.Unmarshal(line, &req); err != nil {
-			if err := send(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{codeParse, err.Error()}}); err != nil {
+		var m message
+		if err := json.Unmarshal(line, &m); err != nil {
+			if err := enc.Encode(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{codeParse, err.Error()}}); err != nil {
 				return err
 			}
 			continue
 		}
-		// A response to a request of the server has no method.
-		if req.Method == "" {
+		// A notification has no id, and a response of the client has no
+		// method: neither gets an answer.
+		if len(m.ID) == 0 || m.Method == "" {
 			continue
 		}
-		if req.Method == "notifications/initialized" && s.OnInitialized != nil {
-			s.OnInitialized(func(v any) error {
-				mu.Lock()
-				defer mu.Unlock()
-				return enc.Encode(v)
-			})
-		}
-		// A notification has no id and gets no response.
-		if len(req.ID) == 0 {
-			continue
-		}
-		result, rerr := s.handle(req)
-		if err := send(response{JSONRPC: "2.0", ID: req.ID, Result: result, Error: rerr}); err != nil {
+		result, rerr := s.handle(m)
+		if err := enc.Encode(response{JSONRPC: "2.0", ID: m.ID, Result: result, Error: rerr}); err != nil {
 			return err
 		}
 	}
 	return sc.Err()
 }
 
-func (s *Server) handle(req request) (any, *rpcError) {
-	switch req.Method {
+func (s *Server) handle(m message) (any, *rpcError) {
+	switch m.Method {
 	case "initialize":
 		var p struct {
 			ProtocolVersion string `json:"protocolVersion"`
 		}
-		json.Unmarshal(req.Params, &p)
+		json.Unmarshal(m.Params, &p)
 		version := latestProtocol
 		if protocols[p.ProtocolVersion] {
 			version = p.ProtocolVersion
@@ -142,23 +127,24 @@ func (s *Server) handle(req request) (any, *rpcError) {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := json.Unmarshal(m.Params, &p); err != nil {
 			return nil, &rpcError{codeInvalidParams, err.Error()}
 		}
 		for _, t := range s.Tools {
-			if t.Name == p.Name {
-				args := p.Arguments
-				if len(args) == 0 || string(args) == "null" {
-					args = json.RawMessage("{}")
-				}
-				text, failed := t.Call(args)
-				return map[string]any{
-					"content": []any{map[string]any{"type": "text", "text": text}},
-					"isError": failed,
-				}, nil
+			if t.Name != p.Name {
+				continue
 			}
+			args := p.Arguments
+			if len(args) == 0 || string(args) == "null" {
+				args = json.RawMessage("{}")
+			}
+			text, failed := t.Call(args)
+			return map[string]any{
+				"content": []any{map[string]any{"type": "text", "text": text}},
+				"isError": failed,
+			}, nil
 		}
 		return nil, &rpcError{codeInvalidParams, "unknown tool: " + p.Name}
 	}
-	return nil, &rpcError{codeMethodNotFound, "method not found: " + req.Method}
+	return nil, &rpcError{codeMethodNotFound, "method not found: " + m.Method}
 }

@@ -63,7 +63,7 @@ func endTask(env Env, cmd string, args []string, cancel bool, reason string, asJ
 			return fail(env, taskFailure(err))
 		}
 	}
-	ended, err := task.EndTask(w.st, task.End{Task: w.task.ID, Cancel: cancel, Reason: reason, Source: source()})
+	ended, err := task.EndTask(w.st, task.End{Task: w.task.ID, Cancel: cancel, Reason: reason, Source: source(env)})
 	var nf *task.NotFinishedError
 	switch {
 	case errors.As(err, &nf):

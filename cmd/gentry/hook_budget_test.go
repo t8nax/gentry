@@ -53,7 +53,7 @@ func TestHookBudget(t *testing.T) {
 	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
-	gentry(t, bin, shop, "step", "add", "Создать ветку", "Проверить имя ветки")
+	tool(t, bin, shop, "step_add", map[string]any{"steps": []string{"Создать ветку", "Проверить имя ветки"}})
 	stalePlugin(t)
 
 	platform := runtime.GOOS + "/" + runtime.GOARCH
@@ -72,7 +72,7 @@ func TestHookBudget(t *testing.T) {
 		if n > hook.MaxOutput {
 			t.Errorf("hook output %s is %d characters, limit %d", place.name, n, hook.MaxOutput)
 		}
-		if place.name == "worktree with a task" && !strings.Contains(string(out), "gentry stage show") {
+		if place.name == "worktree with a task" && !strings.Contains(string(out), "Шаги этапа: выполнено 0 из 2") {
 			t.Fatalf("no introduction to the task:\n%s", out)
 		}
 
@@ -98,7 +98,7 @@ func TestReadBudget(t *testing.T) {
 	shop := shopWithFlow(t, bin, 1)[0]
 	gentry(t, bin, shop, "task", "take", "--scenario", "feature",
 		"--title", string([]rune(strings.Repeat("Частичный возврат по карте. ", 3))[:80]), "--statement", "Постановка.")
-	gentry(t, bin, shop, "step", "add", "Создать ветку")
+	tool(t, bin, shop, "step_add", map[string]any{"steps": []string{"Создать ветку"}})
 	stalePlugin(t)
 
 	cmd := exec.Command(bin, "hook", hook.SessionStart, "--tool", claude.Tool)

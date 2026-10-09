@@ -30,6 +30,16 @@ func Text(k Key, args ...any) string {
 	return current.text(k, args...)
 }
 
+// Keys returns the keys of the texts of the language in use, for checks of
+// all texts.
+func Keys() []Key {
+	keys := make([]Key, 0, len(current.texts))
+	for k := range current.texts {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // Count returns the text for k in the plural form matching n, formatted with
 // n followed by args.
 func Count(k Key, n int, args ...any) string {

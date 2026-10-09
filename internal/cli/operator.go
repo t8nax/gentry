@@ -58,7 +58,7 @@ func runOperatorRecord(args []string, env Env) int {
 	}
 	req := task.Decision{
 		Question: text(values, "question"), Options: options, Answer: text(values, "answer"),
-		AllowReturn: text(values, "allow_return"), Source: source(),
+		AllowReturn: text(values, "allow_return"), Source: source(env),
 	}
 	if strings.TrimSpace(req.Question) == "" {
 		req.Question = ""

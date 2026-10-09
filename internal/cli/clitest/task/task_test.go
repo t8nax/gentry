@@ -10,6 +10,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/caller"
+	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
@@ -172,63 +173,42 @@ func TestTaskJSON(t *testing.T) {
 	}
 }
 
-// TestTaskTakeByAgent checks the source of the statement: a call of the agent
-// is marked by the hooks; a command typed by the operator with ! in the same
-// session is not.
+// TestTaskTakeByAgent checks the source of the statement: the tool of the
+// agent and a command in a session of Claude Code are the agent's, a command
+// outside a session is the operator's.
 func TestTaskTakeByAgent(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
-	t.Setenv(caller.ClaudeSessionEnv, "sess-1")
-	hookInput := `{"session_id":"sess-1","tool_use_id":"toolu_1","tool_name":"Bash","tool_input":{"command":"gentry task take"}}`
-	if code, stdout, stderr := clitest.RunWith(hookInput, "hook", "pre-tool"); code != contract.ExitOK || stdout != "" || stderr != "" {
-		t.Fatalf("hook pre-tool: exit code %d, stdout %q, stderr %q", code, stdout, stderr)
-	}
 	input := `{"scenario":"feature","title":"Частичный возврат по карте","statement":"` + clitest.Statement + `","worktree":` + clitest.JSONString(fix) + `}`
-	code, stdout, stderr := clitest.RunWith(input, "task", "take", "--input", "-")
-	if code != contract.ExitOK || !strings.Contains(stdout, msg.Text(msg.TaskSource, "агентом со слов оператора")+"\n") {
-		t.Fatalf("by the agent: exit code %d, stderr %q, output:\n%s", code, stderr, stdout)
-	}
-	if code, _, _ := clitest.RunWith(hookInput, "hook", "post-tool"); code != contract.ExitOK {
-		t.Fatalf("hook post-tool: exit code %d", code)
+	text, failed := cli.CallTool("task_take", []byte(input))
+	if failed || !strings.Contains(text, msg.Text(msg.TaskSource, "агентом со слов оператора")+"\n") {
+		t.Fatalf("by the tool of the agent: failed %v, output:\n%s", failed, text)
 	}
 	t.Chdir(shop)
 	if _, stdout, _ := clitest.Run(clitest.TakeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, "оператором")+"\n") {
-		t.Errorf("after the call of the agent:\n%s", stdout)
+		t.Errorf("by the operator:\n%s", stdout)
 	}
-	_, stdout, _ = clitest.Run("task", "show", "SHOP-1", "--json")
+	_, stdout, _ := clitest.Run("task", "show", "SHOP-1", "--json")
 	if !strings.Contains(stdout, `"source":"agent"`) {
 		t.Errorf("task show --json: %s", stdout)
 	}
 
-	// Stop removes a mark left by an interrupted call.
-	clitest.RunWith(`{"session_id":"sess-1","tool_use_id":"toolu_2"}`, "hook", "pre-tool")
-	if !caller.ByAgent() {
-		t.Fatal("the call is not marked")
+	// A command in a session of Claude Code is the agent's, whoever typed it.
+	clitest.MustRun(t, "task", "cancel", "SHOP-2")
+	t.Setenv(caller.ClaudeCodeEnv, "1")
+	if _, stdout, _ := clitest.Run(clitest.TakeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, "агентом со слов оператора")+"\n") {
+		t.Errorf("in a session of Claude Code:\n%s", stdout)
 	}
-	clitest.RunWith(`{"session_id":"sess-1"}`, "hook", "stop")
-	if caller.ByAgent() {
-		t.Error("stop left the mark")
-	}
-	clitest.RunWith(`{"session_id":"sess-1","tool_use_id":"toolu_3"}`, "hook", "pre-tool")
-	clitest.RunWith(`{"session_id":"sess-1","source":"resume"}`, "hook", "session-start")
-	if caller.ByAgent() {
-		t.Error("session-start left the mark")
-	}
-	// A hook with input it cannot read does nothing and does not fail; the
-	// session start hook introduces the current directory.
+
+	// The hooks of an earlier plugin before and after a tool call and at the
+	// end of a turn do nothing and never fail; the session start hook
+	// introduces the current directory.
 	_, intro, _ := clitest.RunWith("{}", "hook", "session-start")
 	for e, want := range map[string]string{"pre-tool": "", "post-tool": "", "stop": "", "session-start": intro} {
 		if code, stdout, stderr := clitest.RunWith("not json", "hook", e); code != contract.ExitOK || stdout != want || stderr != "" {
 			t.Errorf("hook %s with bad input: exit code %d, stdout %q, stderr %q", e, code, stdout, stderr)
 		}
 	}
-	// A session of the driver is the agent's.
-	t.Setenv(caller.ClaudeSessionEnv, "")
-	t.Setenv(caller.SessionEnv, "drv-1")
-	if !caller.ByAgent() {
-		t.Error("a session of the driver is not the agent's")
-	}
 }
-
 func TestTaskTakeRefusals(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	root := filepath.Dir(shop)
@@ -310,7 +290,7 @@ func TestTaskTakeRefusals(t *testing.T) {
 
 func TestTaskTakeWithoutFlow(t *testing.T) {
 	t.Setenv(caller.SessionEnv, "")
-	t.Setenv(caller.ClaudeSessionEnv, "")
+	t.Setenv(caller.ClaudeCodeEnv, "")
 	p := clitest.EmptyShopFlow(t)
 	code, _, stderr := clitest.Run(clitest.TakeArgs()...)
 	want := msg.Text(msg.ErrFlowNotFound, "shop") + "\n" + msg.Text(msg.FlowDir, p.Dir) + "\n"

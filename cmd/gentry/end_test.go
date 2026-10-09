@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -11,37 +12,54 @@ import (
 func passedShop(t *testing.T, bin string) string {
 	t.Helper()
 	shop := takenShop(t, bin)
-	for range 3 {
-		gentry(t, bin, shop, "stage", "skip", "--reason", "Не нужен")
+	s := startServer(t, bin, shop)
+	for _, args := range []map[string]any{
+		{"reason": "Не нужен"}, {"reason": "Не нужен"}, {"reason": "Не нужен"},
+		{"reason": "Не нужен", "to": "merge"},
+	} {
+		if text, failed := s.call(t, "stage_skip", args); failed {
+			t.Fatalf("stage_skip: %s", text)
+		}
 	}
-	gentry(t, bin, shop, "stage", "skip", "--reason", "Не нужен", "--to", "merge")
-	gentry(t, bin, shop, "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
+	if text, failed := s.call(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка влита в main"}); failed {
+		t.Fatalf("stage_exit: %s", text)
+	}
 	return shop
 }
 
-// TestEndTaskAtOnce checks that of several processes closing and cancelling
-// one task at once exactly one does: the others find it ended.
+// TestEndTaskAtOnce checks that of several sessions closing and processes
+// cancelling one task at once exactly one does: the others find it ended.
 func TestEndTaskAtOnce(t *testing.T) {
 	if testing.Short() {
 		t.Skip("concurrent processes are skipped in short mode")
 	}
 	bin := buildGentry(t)
 	shop := passedShop(t, bin)
-	commands := make([][]string, writers)
+	commands := make([][]string, writers/2)
+	closes := make([]any, writers/2)
 	for i := range commands {
-		action := "close"
-		if i%2 == 1 {
-			action = "cancel"
-		}
-		commands[i] = []string{"task", action, "SHOP-1", "--json"}
+		commands[i] = []string{"task", "cancel", "SHOP-1", "--json"}
+		closes[i] = map[string]any{"task": "SHOP-1"}
 	}
+	var cancels []result
+	var closed []toolResult
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); cancels = atOnce(t, bin, shop, commands) }()
+	go func() { defer wg.Done(); closed = toolsAtOnce(t, bin, shop, "task_close", closes) }()
+	wg.Wait()
 	ended := 0
-	for _, r := range atOnce(t, bin, shop, commands) {
+	for _, r := range cancels {
 		switch {
 		case r.code == 0:
 			ended++
 		case r.code != 1 || !strings.Contains(r.stdout, `"code":"task_ended"`):
 			t.Errorf("exit code %d, output %s; want task_ended", r.code, r.stdout)
+		}
+	}
+	for _, r := range closed {
+		if !r.failed {
+			ended++
 		}
 	}
 	if ended != 1 {

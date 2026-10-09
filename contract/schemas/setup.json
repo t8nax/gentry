@@ -33,6 +33,16 @@
     "enabled": {
       "description": "Whether the plugin is enabled in the tool; Gentry does not enable a plugin the operator disabled.",
       "type": "boolean"
+    },
+    "permission": {
+      "description": "The rule that allows the tools of Gentry in the user settings of the tool: added, present (the settings had it) or failed (the settings cannot be read and are left as they are). The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    },
+    "settings": {
+      "description": "The file of the user settings of the tool the rule is in.",
+      "type": "string",
+      "minLength": 1
     }
   },
   "required": [

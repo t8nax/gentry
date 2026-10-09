@@ -139,7 +139,7 @@ func TestProcessSyncText(t *testing.T) {
 		t.Errorf("library diff:\n%s\nwant:\n%s", stdout, want)
 	}
 	if _, stdout, _ := clitest.Run("library", "apply"); clitest.Masked(stdout) != "Изменения библиотеки применены.\nБиблиотека применена: <время>\n\n"+
-		"Субагенты разложены в свободные рабочие копии: 1.\nИзменения вступят в силу со следующей сессии агента.\n" {
+		"Субагенты разложены в свободные рабочие копии.\nИзменения вступят в силу со следующей сессии агента.\n" {
 		t.Errorf("library apply:\n%s", stdout)
 	}
 	m.onB()
@@ -405,7 +405,7 @@ func TestSyncLaysOutFreeWorktrees(t *testing.T) {
 	m.onB()
 	_, stdout, _ := clitest.Run("process", "sync")
 	want := "Процесс синхронизирован.\n\nПолучено:\n  библиотека субагентов\n\n" +
-		"Субагенты разложены в свободные рабочие копии проекта shop: 1.\nИзменения вступят в силу со следующей сессии агента.\n"
+		"Субагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n"
 	if stdout != want {
 		t.Errorf("process sync:\n%s\nwant:\n%s", stdout, want)
 	}
@@ -429,7 +429,7 @@ func TestImplicitSyncLaysOut(t *testing.T) {
 	// messages of the synchronization, before the output.
 	m.onB()
 	_, _, stderr := clitest.Run("flow", "show")
-	if !strings.Contains(stderr, "\nСубагенты разложены в свободные рабочие копии проекта shop: 1.\nИзменения вступят в силу со следующей сессии агента.\n") {
+	if !strings.Contains(stderr, "\nСубагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n") {
 		t.Errorf("flow show, stderr:\n%s", stderr)
 	}
 	if !clitest.FileExists(file) {
@@ -447,7 +447,7 @@ func TestProjectAddWithFlow(t *testing.T) {
 	t.Setenv(home.EnvVar, filepath.Join(filepath.Dir(m.a), "home-c"))
 	clitest.MustRun(t, "process", "remote", m.remote)
 	_, stdout, _ := clitest.Run("project", "add", "--knowledge", "../shop-knowledge")
-	if !strings.Contains(stdout, "\n\nСубагенты разложены в свободные рабочие копии проекта shop: 1.\nИзменения вступят в силу со следующей сессии агента.\n") {
+	if !strings.Contains(stdout, "\n\nСубагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n") {
 		t.Errorf("project add:\n%s", stdout)
 	}
 	if !clitest.FileExists(file) {

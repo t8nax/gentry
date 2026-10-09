@@ -156,7 +156,7 @@ func TestApplyLaysOutFreeWorktreesOnly(t *testing.T) {
 	before := read(t, reviewerFile(fix))
 
 	stdout := changeLibrary(t, "Проверить изменения и тексты.\n")
-	if !strings.HasSuffix(clitest.Masked(stdout), "\n\nСубагенты разложены в свободные рабочие копии: 1.\n"+nextSession+"\n") {
+	if !strings.HasSuffix(clitest.Masked(stdout), "\n\nСубагенты разложены в свободные рабочие копии.\n"+nextSession+"\n") {
 		t.Errorf("library apply:\n%s", stdout)
 	}
 	if !strings.Contains(read(t, reviewerFile(shop)), "Проверить изменения и тексты.") {
@@ -183,7 +183,7 @@ func TestFlowApplyRemoves(t *testing.T) {
 		"stages/review.yaml": "title: Ревью\nexit: замечания ревью записаны и разобраны\nexecutor: orchestrator\ninclude: [review-checklist]\n",
 	})
 	_, stdout, _ := clitest.Run("flow", "apply")
-	if !strings.HasSuffix(clitest.Masked(stdout), "\n\nСубагенты разложены в свободные рабочие копии проекта shop: 2.\n"+nextSession+"\n") {
+	if !strings.HasSuffix(clitest.Masked(stdout), "\n\nСубагенты разложены в свободные рабочие копии проекта shop.\n"+nextSession+"\n") {
 		t.Errorf("flow apply:\n%s", stdout)
 	}
 	for _, w := range []string{shop, fix} {

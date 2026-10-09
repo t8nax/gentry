@@ -310,9 +310,9 @@ func writeLayout(w io.Writer, o layoutOutcome, single bool, project string) {
 		case single:
 			fmt.Fprintln(&b, msg.Text(msg.AgentsWorktreeChanged, changesText(o.changes[0])))
 		case project == "":
-			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSyncedAll, len(o.changes)))
+			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSyncedAll))
 		default:
-			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSynced, project, len(o.changes)))
+			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSynced, project))
 		}
 		fmt.Fprintln(&b, msg.Text(msg.AgentsNextSession))
 	}
@@ -331,18 +331,18 @@ func writeLayout(w io.Writer, o layoutOutcome, single bool, project string) {
 // by project.
 func writeFreeLayout(w io.Writer, o layoutOutcome, p *layoutPool) {
 	if len(o.changes) > 0 && p != nil {
-		byProject := map[string]int{}
+		byProject := map[string]bool{}
 		for _, c := range o.changes {
 			for _, wt := range p.worktrees {
 				if wt.Path == c.Worktree {
-					byProject[wt.Project]++
+					byProject[wt.Project] = true
 				}
 			}
 		}
 		var b strings.Builder
 		b.WriteString("\n")
 		for _, id := range slices.Sorted(maps.Keys(byProject)) {
-			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSynced, id, byProject[id]))
+			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSynced, id))
 		}
 		fmt.Fprintln(&b, msg.Text(msg.AgentsNextSession))
 		io.WriteString(w, b.String())

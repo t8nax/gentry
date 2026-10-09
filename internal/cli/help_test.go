@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"bytes"
+	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,9 +27,9 @@ func TestCommandList(t *testing.T) {
 		}
 	}
 	for _, c := range commands() {
-		if c.hidden() {
+		if c.hidden() || c.agentOnly {
 			if strings.Contains(list, "  "+c.name+" ") {
-				t.Errorf("service command %s is listed:\n%s", c.name, list)
+				t.Errorf("service or agent command %s is listed:\n%s", c.name, list)
 			}
 			continue
 		}
@@ -45,7 +48,7 @@ func TestCommandList(t *testing.T) {
 // argument and flag it declares, and that all ways to ask for it agree.
 func TestCommandHelp(t *testing.T) {
 	for _, c := range allCommands() {
-		if c.hidden() {
+		if c.hidden() || c.agentOnly {
 			continue
 		}
 		if c.desc == "" || c.summary == "" {
@@ -108,7 +111,7 @@ func TestHelpMatchesFlags(t *testing.T) {
 	t.Cleanup(func() { onHelp = func(*flags) {} })
 	for _, c := range allCommands() {
 		got = nil
-		run(append(strings.Fields(c.name), "--help")...)
+		Run(append(strings.Fields(c.name), "--help"), Env{Stdout: io.Discard, Stderr: io.Discard, agent: c.agentOnly})
 		if got == nil {
 			t.Errorf("%s --help did not reach the flag parser", c.name)
 			continue
@@ -254,4 +257,32 @@ func TestHelpErrors(t *testing.T) {
 		}
 	}
 
+}
+
+// TestAgentOnly checks that the commands only the agent runs are neither in
+// the help nor on the command line, and run for the agent.
+func TestAgentOnly(t *testing.T) {
+	var names []string
+	for _, c := range allCommands() {
+		if c.agentOnly {
+			names = append(names, c.name)
+		}
+	}
+	want := []string{"task close", "stage exit", "stage skip", "step add", "step done", "step drop", "artifact save"}
+	if !slices.Equal(names, want) {
+		t.Errorf("commands only of the agent %v, want %v", names, want)
+	}
+	for _, args := range [][]string{{"step", "add", "Шаг"}, {"step", "--help"}, {"help", "step"}, {"artifact", "save", "plan"}, {"stage", "exit"}, {"task", "close"}, {"help", "stage", "skip"}} {
+		code, _, stderr := run(args...)
+		if code != contract.ExitUsage || !(strings.Contains(stderr, "Неизвестная команда") || strings.Contains(stderr, "Неизвестное действие")) {
+			t.Errorf("%v from the command line: exit code %d, stderr %q", args, code, stderr)
+		}
+	}
+	if _, stdout, _ := run("stage", "--help"); strings.Contains(stdout, "exit") || strings.Contains(stdout, "skip") {
+		t.Errorf("stage --help names commands of the agent:\n%s", stdout)
+	}
+	var out bytes.Buffer
+	if code := RunAgent([]string{"step", "add", "--help"}, Env{Stdout: &out, Stderr: &out}); code != contract.ExitOK {
+		t.Errorf("step add --help for the agent: exit code %d, %s", code, out.String())
+	}
 }

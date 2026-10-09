@@ -35,42 +35,6 @@ func introBy(t *testing.T, dir string, flags ...string) string {
 	return stdout
 }
 
-// program is the gentry of the tests as the introduction names it.
-func program(t *testing.T) string {
-	t.Helper()
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if exe, err = filepath.EvalSymlinks(exe); err != nil {
-		t.Fatal(err)
-	}
-	return filepath.ToSlash(exe)
-}
-
-// taskCommands is the table of the commands of the agent with its hints.
-var taskCommands = clitest.Table(
-	[]string{"КОМАНДА", "НАЗНАЧЕНИЕ"},
-	[]string{"gentry task show", "задача: этап, шаги, путь, артефакты"},
-	[]string{"gentry task show --statement", "постановка и решения оператора"},
-	[]string{"gentry stage show", "исполнитель, выход, переходы и инструкция этапа"},
-	[]string{"gentry step add <шаг>...", "добавить шаги этапа"},
-	[]string{"gentry step done <номер>", "отметить шаг выполненным"},
-	[]string{"gentry step drop <номер>", "снять шаг с обоснованием"},
-	[]string{"gentry stage exit", "закрыть этап выходом"},
-	[]string{"gentry stage skip", "пропустить этап с обоснованием"},
-	[]string{"gentry artifact save <имя>", "сохранить артефакт задачи"},
-	[]string{"gentry note add <текст>", "добавить заметку задачи"},
-	[]string{"gentry note list", "показать заметки задачи"},
-	[]string{"gentry operator record", "записать решение оператора"},
-	[]string{"gentry task close", "закрыть задачу"},
-	[]string{"gentry task cancel", "отменить задачу по слову оператора"},
-) + clitest.Lines(
-	"",
-	"Посмотреть описание команды: gentry <команда> --help",
-	"Продолжить задачу по слову оператора: скилл gentry:working-on-task",
-)
-
 func TestIntroWithoutTask(t *testing.T) {
 	_, fix := clitest.TaskShop(t)
 	want := clitest.Lines(
@@ -111,7 +75,7 @@ func TestIntroWithTask(t *testing.T) {
 		"Задача SHOP-1: Частичный возврат по карте",
 		"Сценарий: Фича (feature)",
 	)
-	tail := clitest.Lines("Программа gentry: "+program(t), "") + taskCommands
+	tail := clitest.Lines("", "Продолжить задачу по слову оператора: скилл gentry:working-on-task")
 
 	want := head + clitest.Lines("Этап: Ветка (branch), круг 1", "Шаги этапа: не заданы", "Прогресс: 0 из 5") + tail
 	if got := introIn(t, fix); got != want {
@@ -191,7 +155,7 @@ func TestIntroStalePlugin(t *testing.T) {
 	writeVersion("0.0.0+00000000")
 	want := clitest.Lines(
 		msg.Text(msg.IntroPluginStale),
-		msg.Text(msg.HintIntroPluginStale, filepath.ToSlash(exe)),
+		msg.Text(msg.HintIntroPluginStale),
 		"",
 		"Проект: shop",
 	)

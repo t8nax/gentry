@@ -20,12 +20,22 @@ type SetupOutput struct {
 	// operator disabled.
 	Enabled bool `json:"enabled"`
 
+	// The rule that allows the tools of Gentry in the user settings of the tool:
+	// added, present (the settings had it), failed (the settings cannot be read) or
+	// unwritten (the settings cannot be written); with failed and unwritten the
+	// settings are left as they are. The list is open: a client shows an unknown
+	// value as is.
+	Permission *string `json:"permission,omitempty,omitzero"`
+
 	// Version of the built plugin; it changes whenever the plugin content does.
 	PluginVersion string `json:"plugin_version"`
 
 	// Directory the tool served the plugin from before it was switched to dir; only
 	// with the action switched.
 	PreviousDir *string `json:"previous_dir,omitempty,omitzero"`
+
+	// The file of the user settings of the tool the rule is in.
+	Settings *string `json:"settings,omitempty,omitzero"`
 
 	// The tool Gentry was set up for, such as claude.
 	Tool string `json:"tool"`
@@ -63,11 +73,17 @@ func (j *SetupOutput) UnmarshalJSON(value []byte) error {
 	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
 	}
+	if plain.Permission != nil && utf8.RuneCountInString(string(*plain.Permission)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "permission", 1)
+	}
 	if utf8.RuneCountInString(string(plain.PluginVersion)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "plugin_version", 1)
 	}
 	if plain.PreviousDir != nil && utf8.RuneCountInString(string(*plain.PreviousDir)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "previous_dir", 1)
+	}
+	if plain.Settings != nil && utf8.RuneCountInString(string(*plain.Settings)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "settings", 1)
 	}
 	if utf8.RuneCountInString(string(plain.Tool)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "tool", 1)

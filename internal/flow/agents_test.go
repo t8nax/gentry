@@ -84,13 +84,13 @@ func TestAgentProblems(t *testing.T) {
 			"agents/auditor.yaml": "capabilities: read\nmodel: x\n",
 		}, nil, []Problem{
 			{contract.ProblemMissingField, "agents/auditor.yaml", 0, "Субагент auditor: не заполнено поле «purpose»."},
-			{contract.ProblemInvalidValue, "agents/auditor.yaml", 1, "Субагент auditor: значение поля «capabilities» должно быть списком из read, search, edit, run, web."},
+			{contract.ProblemInvalidValue, "agents/auditor.yaml", 1, "Субагент auditor: значение поля «capabilities» должно быть списком из read, search, edit, run, web, task, progress."},
 			{contract.ProblemUnknownField, "agents/auditor.yaml", 2, "Субагент auditor: неизвестное поле «model»."},
 		}},
 		{"unknown capability", map[string]string{
 			"agents/auditor.yaml": "purpose: x\ncapabilities: [read, write]\n",
 		}, nil, []Problem{
-			{contract.ProblemInvalidValue, "agents/auditor.yaml", 2, "Субагент auditor: значение поля «capabilities» должно быть списком из read, search, edit, run, web."},
+			{contract.ProblemInvalidValue, "agents/auditor.yaml", 2, "Субагент auditor: значение поля «capabilities» должно быть списком из read, search, edit, run, web, task, progress."},
 		}},
 		{"no capabilities", map[string]string{
 			"agents/auditor.yaml": "purpose: x\n",
@@ -113,7 +113,7 @@ func TestAgentProblems(t *testing.T) {
 			"reviewer.yaml": "purpose: x\ncapabilities: [all]\n",
 			"reviewer.md":   "",
 		}, []Problem{
-			{contract.ProblemInvalidValue, "", 0, "Субагент reviewer из библиотеки: значение поля «capabilities» должно быть списком из read, search, edit, run, web."},
+			{contract.ProblemInvalidValue, "", 0, "Субагент reviewer из библиотеки: значение поля «capabilities» должно быть списком из read, search, edit, run, web, task, progress."},
 			{contract.ProblemMissingInstruction, "", 0, "Субагент reviewer из библиотеки: нет инструкции."},
 			{contract.ProblemExtraFile, "README.md", 0, "Файл не относится к флоу: README.md"},
 		}},
@@ -140,5 +140,19 @@ func TestAgentProblems(t *testing.T) {
 				t.Errorf("problems:\n%s\nwant:\n%s", dump(got), dump(tt.want))
 			}
 		})
+	}
+}
+
+// TestAgentGentryCapabilities checks that a subagent may see the task and
+// lead its progress.
+func TestAgentGentryCapabilities(t *testing.T) {
+	res := readShop(t, shop(t, with(auditor, map[string]string{
+		"agents/auditor.yaml": "purpose: код по плану задачи\ncapabilities: [read, edit, task, progress]\n",
+	})))
+	if len(res.Problems) > 0 {
+		t.Fatal(dump(res.Problems))
+	}
+	if a, _ := res.Flow.Agent("auditor"); !reflect.DeepEqual(a.Capabilities, []string{"read", "edit", "task", "progress"}) {
+		t.Errorf("capabilities %v", a.Capabilities)
 	}
 }

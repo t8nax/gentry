@@ -87,7 +87,18 @@ func runSetup(args []string, env Env) int {
 		return fail(env, setupToolError(err))
 	}
 
-	out := contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled}
+	// The tools of the agent are allowed once for every session.
+	settings, err := claude.SettingsPath()
+	permission := claude.PermissionFailed
+	if err == nil {
+		permission = claude.AllowTools(settings)
+	}
+	removeCallMarks()
+
+	out := contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled, Permission: &permission}
+	if settings != "" {
+		out.Settings = &settings
+	}
 	if previous != "" {
 		out.Action, out.PreviousDir = setupSwitched, &previous
 	}
@@ -102,15 +113,48 @@ func runSetup(args []string, env Env) int {
 	} else {
 		fmt.Fprintln(env.Stdout, msg.Text(setupMessages[r.Action]))
 	}
+	// A message after a field line, such as the previous directory of a
+	// switch, is kept apart from it by a blank line.
+	afterField := previous != ""
+	if permission != claude.PermissionPresent {
+		if afterField {
+			fmt.Fprintln(env.Stdout)
+		}
+		k := msg.SetupPermissionAdded
+		switch permission {
+		case claude.PermissionFailed:
+			k = msg.SetupPermissionFailed
+		case claude.PermissionUnwritten:
+			k = msg.SetupPermissionUnwritten
+		}
+		fmt.Fprintln(env.Stdout, msg.Text(k))
+		if settings != "" {
+			fmt.Fprintln(env.Stdout, msg.Text(msg.SetupSettings, settings))
+			afterField = true
+		}
+	}
 	if !r.Enabled {
-		// The switch ends with a field line: a blank line keeps the next
-		// message apart from it.
-		if previous != "" {
+		if afterField {
 			fmt.Fprintln(env.Stdout)
 		}
 		fmt.Fprintln(env.Stdout, msg.Text(msg.SetupDisabled))
 	}
+	if permission == claude.PermissionFailed || permission == claude.PermissionUnwritten {
+		// The hint joins the hint block of a disabled plugin.
+		if r.Enabled {
+			fmt.Fprintln(env.Stdout)
+		}
+		fmt.Fprintln(env.Stdout, msg.Text(msg.HintSetupPermission, claude.PermissionRule))
+	}
 	return contract.ExitOK
+}
+
+// removeCallMarks removes the marks of calls the hooks of an earlier Gentry
+// left in the data root: the source of a record no longer needs them.
+func removeCallMarks() {
+	if root, err := home.Root(); err == nil {
+		os.RemoveAll(filepath.Join(root, "state", "calls"))
+	}
 }
 
 // setupToolError reports a failure of the tool program as tool_failed.

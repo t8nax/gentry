@@ -55,19 +55,19 @@ func TestCloseStageAtOnce(t *testing.T) {
 	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
-	gentry(t, bin, shop, "step", "add", "Создать ветку")
-	gentry(t, bin, shop, "step", "done", "1")
-	commands := make([][]string, writers)
-	for i := range commands {
-		commands[i] = []string{"stage", "exit", "--kind", "result", "--text", fmt.Sprintf("Ветка %d", i), "--json"}
+	tool(t, bin, shop, "step_add", map[string]any{"steps": []string{"Создать ветку"}})
+	tool(t, bin, shop, "step_done", map[string]any{"step": 1})
+	args := make([]any, writers)
+	for i := range args {
+		args[i] = map[string]any{"kind": "result", "text": fmt.Sprintf("Ветка %d", i)}
 	}
 	closed := 0
-	for _, r := range atOnce(t, bin, shop, commands) {
+	for _, r := range toolsAtOnce(t, bin, shop, "stage_exit", args) {
 		switch {
-		case r.code == 0:
+		case !r.failed:
 			closed++
-		case r.code != 1 || !strings.Contains(r.stdout, `"code":"steps_empty"`):
-			t.Errorf("exit code %d, output %s; want steps_empty", r.code, r.stdout)
+		case !strings.Contains(r.text, "нет шагов"):
+			t.Errorf("%s; want no steps", r.text)
 		}
 	}
 	if closed != 1 {
@@ -92,13 +92,13 @@ func TestAddStepsAtOnce(t *testing.T) {
 	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
-	commands := make([][]string, writers)
-	for i := range commands {
-		commands[i] = []string{"step", "add", fmt.Sprintf("Шаг %d", i), "--json"}
+	args := make([]any, writers)
+	for i := range args {
+		args[i] = map[string]any{"steps": []string{fmt.Sprintf("Шаг %d", i)}}
 	}
-	for _, r := range atOnce(t, bin, shop, commands) {
-		if r.code != 0 {
-			t.Errorf("exit code %d, output %s", r.code, r.stdout)
+	for _, r := range toolsAtOnce(t, bin, shop, "step_add", args) {
+		if r.failed {
+			t.Errorf("step_add: %s", r.text)
 		}
 	}
 	var shown struct {

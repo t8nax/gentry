@@ -1,5 +1,13 @@
 {
   "description": "Gentry ведёт задачи агента по флоу проекта и хранит их состояние.",
+  "mcpServers": {
+    "core": {
+      "args": [
+        "mcp"
+      ],
+      "command": "/opt/Gentry Tools/gentry"
+    }
+  },
   "name": "gentry",
-  "version": "0.1.0+617524ca"
+  "version": "0.1.0+cac841e8"
 }

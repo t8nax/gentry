@@ -28,9 +28,6 @@ const Tool = "claude"
 // takes milliseconds.
 const hookTimeout = 10
 
-// shellTools matches the tools the agent runs commands with, and so gentry.
-const shellTools = "Bash|PowerShell"
-
 // claudeHook is a Claude Code hook event and the tools it is limited to;
 // empty for all.
 type claudeHook struct {
@@ -40,13 +37,9 @@ type claudeHook struct {
 
 // events maps neutral hook events to Claude Code hook events. SessionStart
 // without a matcher fires on every kind of start: startup, resume, clear and
-// compact. A command that fails ends with PostToolUseFailure, not
-// PostToolUse: the mark of its call goes either way.
+// compact.
 var events = map[string][]claudeHook{
 	hook.SessionStart: {{event: "SessionStart"}},
-	hook.PreTool:      {{event: "PreToolUse", matcher: shellTools}},
-	hook.PostTool:     {{event: "PostToolUse", matcher: shellTools}, {event: "PostToolUseFailure", matcher: shellTools}},
-	hook.Stop:         {{event: "Stop"}},
 }
 
 // Plugin is a built plugin: files of the marketplace directory by
@@ -101,6 +94,13 @@ func buildFiles(d integration.Description, version string) (map[string][]byte, e
 		"name":        d.Name,
 		"version":     version,
 		"description": d.Description,
+	}
+	if len(d.Servers) > 0 {
+		servers := map[string]any{}
+		for _, s := range d.Servers {
+			servers[s.Name] = map[string]any{"command": filepath.ToSlash(s.Command[0]), "args": s.Command[1:]}
+		}
+		plugin["mcpServers"] = servers
 	}
 	marketplace := map[string]any{
 		"name":        d.Name,

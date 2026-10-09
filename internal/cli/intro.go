@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/t8nax/gentry/internal/adapter/claude"
@@ -19,38 +18,15 @@ import (
 	"github.com/t8nax/gentry/internal/task"
 )
 
-// startSession answers the session start hook: it removes the marks of an
-// interrupted session and writes the introduction for the agent.
+// startSession answers the session start hook: it writes the introduction
+// for the agent.
 func startSession(w io.Writer, in hook.Input) error {
-	hook.RunSessionStart(in)
 	return introduce(w, in)
-}
-
-// introCommands are the commands of the agent in the introduction to a task,
-// with their purposes.
-var introCommands = []struct {
-	command string
-	purpose msg.Key
-}{
-	{"gentry task show", msg.IntroTaskShow},
-	{"gentry task show --statement", msg.IntroStatement},
-	{"gentry stage show", msg.IntroStageShow},
-	{"gentry step add <шаг>...", msg.IntroStepAdd},
-	{"gentry step done <номер>", msg.IntroStepDone},
-	{"gentry step drop <номер>", msg.IntroStepDrop},
-	{"gentry stage exit", msg.IntroStageExit},
-	{"gentry stage skip", msg.IntroStageSkip},
-	{"gentry artifact save <имя>", msg.IntroArtifactSave},
-	{"gentry note add <текст>", msg.IntroNoteAdd},
-	{"gentry note list", msg.IntroNoteList},
-	{"gentry operator record", msg.IntroOperatorRecord},
-	{"gentry task close", msg.IntroTaskClose},
-	{"gentry task cancel", msg.IntroTaskCancel},
 }
 
 // introduce writes the introduction for the agent in a worktree of a pool:
 // the project and the worktree, then either how to take a task or the task
-// with the commands of the agent. Anywhere else it writes nothing. It only
+// with its state. Anywhere else it writes nothing. It only
 // reads the state store and never creates it.
 func introduce(w io.Writer, in hook.Input) error {
 	dir := in.Dir
@@ -93,7 +69,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	var b strings.Builder
 	if in.Tool == claude.Tool && pluginStale() {
 		fmt.Fprintln(&b, msg.Text(msg.IntroPluginStale))
-		fmt.Fprintln(&b, msg.Text(msg.HintIntroPluginStale, programPath()))
+		fmt.Fprintln(&b, msg.Text(msg.HintIntroPluginStale))
 		b.WriteString("\n")
 	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskProject, wt.Project))
@@ -119,17 +95,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	if v.Flow != nil {
 		fmt.Fprintln(&b, msg.Text(msg.ProgressLine, progressText(v.Progress)))
 	}
-	if exe, err := executable(); err == nil {
-		fmt.Fprintln(&b, msg.Text(msg.IntroProgram, filepath.ToSlash(exe)))
-	}
 	b.WriteString("\n")
-	rows := [][]string{{msg.Text(msg.ColCommand), msg.Text(msg.ColPurpose)}}
-	for _, c := range introCommands {
-		rows = append(rows, []string{c.command, msg.Text(c.purpose)})
-	}
-	writeTable(&b, rows)
-	b.WriteString("\n")
-	fmt.Fprintln(&b, msg.Text(msg.HintIntroHelp))
 	fmt.Fprintln(&b, msg.Text(msg.HintIntroContinue, skillName(in.Tool, agenttext.WorkingOnTask)))
 	_, err = io.WriteString(w, b.String())
 	return err
@@ -185,14 +151,4 @@ func pluginStale() bool {
 	}
 	p, err := claude.Build(integration.Gentry(exe), buildinfo.Version())
 	return err == nil && p.Version != running
-}
-
-// programPath returns the path of the running gentry as skills name it, or
-// the bare name if the path is unknown.
-func programPath() string {
-	exe, err := executable()
-	if err != nil {
-		return "gentry"
-	}
-	return filepath.ToSlash(exe)
 }

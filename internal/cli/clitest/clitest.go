@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
+	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
@@ -40,6 +42,11 @@ func Main(m *testing.M) int {
 	os.Setenv(home.EnvVar, dir)
 	os.Setenv("HOME", dir)
 	os.Setenv("USERPROFILE", dir)
+	// The settings of Claude Code are in the home, and the tests run outside a
+	// session of an AI tool even when they are run from one.
+	os.Unsetenv(claude.ConfigDirEnv)
+	os.Unsetenv(caller.ClaudeCodeEnv)
+	os.Unsetenv(caller.SessionEnv)
 	if err := gittest.Isolate(dir); err != nil {
 		panic(err)
 	}
@@ -53,17 +60,42 @@ func Main(m *testing.M) int {
 	return m.Run()
 }
 
-// Run runs a command and returns its exit code and output.
+// agentOnly are the commands only the agent runs, as its tools: Run runs them
+// as a tool does.
+var agentOnly = []string{"step add", "step done", "step drop", "stage exit", "stage skip", "artifact save", "task close"}
+
+// byAgent reports whether the command of args is one of agentOnly.
+func byAgent(args []string) bool {
+	return len(args) > 1 && slices.Contains(agentOnly, args[0]+" "+args[1])
+}
+
+// InChannel states text as the command of args prints it in its channel: the
+// hints of the help name tools for a command only the agent runs.
+func InChannel(text string, args []string) string {
+	return cli.Hints(text, byAgent(args))
+}
+
+// run runs a command of the operator, or of the agent for a command of
+// agentOnly.
+func run(args []string, env cli.Env) int {
+	if byAgent(args) {
+		return cli.RunAgent(args, env)
+	}
+	return cli.Run(args, env)
+}
+
+// Run runs a command and returns its exit code and output. A command only the
+// agent runs runs as its tool does: hints name tools.
 func Run(args ...string) (code int, stdout, stderr string) {
 	var out, errOut bytes.Buffer
-	code = cli.Run(args, cli.Env{Stdout: &out, Stderr: &errOut})
+	code = run(args, cli.Env{Stdout: &out, Stderr: &errOut})
 	return code, out.String(), errOut.String()
 }
 
 // RunWith runs a command with stdin as its standard input.
 func RunWith(stdin string, args ...string) (code int, stdout, stderr string) {
 	var out, errOut bytes.Buffer
-	code = cli.Run(args, cli.Env{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errOut})
+	code = run(args, cli.Env{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errOut})
 	return code, out.String(), errOut.String()
 }
 
@@ -77,9 +109,14 @@ func MustRun(t *testing.T, args ...string) string {
 	return stdout
 }
 
-// WantRun runs a command and checks its exit code, stdout and stderr.
+// WantRun runs a command and checks its exit code, stdout and stderr. The
+// hints of stdout and stderr are given as the help names them; they are
+// checked in the channel of the command.
 func WantRun(t *testing.T, exit int, stdout, stderr string, args ...string) {
 	t.Helper()
+	if !slices.Contains(args, "--json") {
+		stdout, stderr = InChannel(stdout, args), InChannel(stderr, args)
+	}
 	code, out, errOut := Run(args...)
 	if code != exit || out != stdout || errOut != stderr {
 		t.Errorf("%v: exit code %d, stdout:\n%s\nstderr:\n%s\nwant %d, stdout:\n%s\nstderr:\n%s", args, code, out, errOut, exit, stdout, stderr)

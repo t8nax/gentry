@@ -13,13 +13,29 @@ import (
 
 // tools maps the capabilities of a subagent to the tools of Claude Code.
 // Claude Code gives a subagent the tools that exist on its system and skips
-// the rest, so run names the shells of every system.
+// the rest, so run names the shells of every system. task and progress are
+// tools of the server of Gentry: progress leads the work of a stage, the
+// main session closes it.
 var tools = map[string][]string{
-	"read":   {"Read"},
-	"search": {"Grep", "Glob"},
-	"edit":   {"Edit", "Write", "NotebookEdit"},
-	"run":    {"Bash", "PowerShell"},
-	"web":    {"WebFetch", "WebSearch"},
+	"read":     {"Read"},
+	"search":   {"Grep", "Glob"},
+	"edit":     {"Edit", "Write", "NotebookEdit"},
+	"run":      {"Bash", "PowerShell"},
+	"web":      {"WebFetch", "WebSearch"},
+	"task":     gentryTools(taskTools...),
+	"progress": gentryTools(append(taskTools, "step_add", "step_done", "step_drop", "note_add", "artifact_save")...),
+}
+
+// taskTools are the tools that show the task.
+var taskTools = []string{"stage_show", "task_show", "note_list"}
+
+// gentryTools names the tools of the server of Gentry the way of Claude Code.
+func gentryTools(names ...string) []string {
+	full := make([]string, len(names))
+	for i, n := range names {
+		full[i] = PermissionRule + "__" + n
+	}
+	return full
 }
 
 // Agents lays out subagents as Claude Code reads them from a project:

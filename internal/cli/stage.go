@@ -147,7 +147,7 @@ func runStageClose(cmd string, args []string, env Env) int {
 	}
 	req := task.Close{
 		Skip: skip, Kind: text(values, "kind"), Text: text(values, "text"), Artifact: text(values, "artifact"),
-		To: text(values, "to"), Reason: text(values, "reason"), Source: source(),
+		To: text(values, "to"), Reason: text(values, "reason"), Source: source(env),
 	}
 	if bad := checkClose(cmd, req, input.Set); bad != nil {
 		return fail(env, *bad)

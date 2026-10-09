@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -21,13 +22,18 @@ func TestSetupClaude(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(home.EnvVar, root)
 	t.Setenv("FAKECLAUDE_STATE", filepath.Join(root, "fakeclaude-state.json"))
+	t.Setenv(claude.ConfigDirEnv, filepath.Join(root, "claude-config"))
+	settings := filepath.Join(root, "claude-config", "settings.json")
 	dir := filepath.Join(root, "integrations", "claude")
+	// Marks of calls left by the hooks of an earlier Gentry are removed.
+	marks := filepath.Join(root, "state", "calls", "s1")
+	os.MkdirAll(marks, 0o755)
 
 	code, stdout, stderr := run("setup", "claude")
 	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("exit code %d, stderr %q", code, stderr)
 	}
-	if want := msg.Text(msg.SetupInstalled) + "\n"; stdout != want {
+	if want := msg.Text(msg.SetupInstalled) + "\n" + msg.Text(msg.SetupPermissionAdded) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n"; stdout != want {
 		t.Errorf("first run: stdout %q, want %q", stdout, want)
 	}
 	for _, f := range []string{".claude-plugin/marketplace.json", "gentry/.claude-plugin/plugin.json", "gentry/hooks/hooks.json"} {
@@ -48,8 +54,54 @@ func TestSetupClaude(t *testing.T) {
 	validate(t, "schemas/setup.json", stdout)
 	var out contract.SetupOutput
 	json.Unmarshal([]byte(stdout), &out)
-	if out.Tool != "claude" || out.Dir != dir || out.PluginVersion == "" || out.Action != "unchanged" || !out.Enabled {
+	if out.Tool != "claude" || out.Dir != dir || out.PluginVersion == "" || out.Action != "unchanged" || !out.Enabled ||
+		out.Permission == nil || *out.Permission != "present" || out.Settings == nil || *out.Settings != settings {
 		t.Errorf("unexpected output %+v", out)
+	}
+	if b, _ := os.ReadFile(settings); !strings.Contains(string(b), claude.PermissionRule) {
+		t.Errorf("settings:\n%s", b)
+	}
+	if _, err := os.Stat(filepath.Dir(marks)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("marks of calls left: %v", err)
+	}
+
+	// Settings that cannot be read are left as they are; the plugin is set
+	// up all the same.
+	os.WriteFile(settings, []byte(`{"permissions":`), 0o644)
+	code, stdout, _ = run("setup", "claude")
+	want := msg.Text(msg.SetupUnchanged) + "\n" + msg.Text(msg.SetupPermissionFailed) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n\n" +
+		msg.Text(msg.HintSetupPermission, claude.PermissionRule) + "\n"
+	if code != contract.ExitOK || stdout != want {
+		t.Errorf("unreadable settings: exit code %d, stdout:\n%s\nwant:\n%s", code, stdout, want)
+	}
+	if b, _ := os.ReadFile(settings); string(b) != `{"permissions":` {
+		t.Errorf("unreadable settings changed: %s", b)
+	}
+
+	// Settings that cannot be written are left as they are too: on Windows a
+	// file held open cannot be replaced, elsewhere a directory without the
+	// right to write takes no file.
+	os.WriteFile(settings, []byte(`{"permissions":{"allow":[]}}`), 0o644)
+	if runtime.GOOS == "windows" {
+		f, err := os.Open(settings)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+	} else {
+		os.Chmod(filepath.Dir(settings), 0o555)
+		defer os.Chmod(filepath.Dir(settings), 0o755)
+	}
+	code, stdout, _ = run("setup", "claude")
+	want = msg.Text(msg.SetupUnchanged) + "\n" + msg.Text(msg.SetupPermissionUnwritten) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n\n" +
+		msg.Text(msg.HintSetupPermission, claude.PermissionRule) + "\n"
+	if code != contract.ExitOK || stdout != want {
+		t.Errorf("settings that cannot be written: exit code %d, stdout:\n%s\nwant:\n%s", code, stdout, want)
+	}
+	_, stdout, _ = run("setup", "claude", "--json")
+	json.Unmarshal([]byte(stdout), &out)
+	if out.Permission == nil || *out.Permission != "unwritten" {
+		t.Errorf("settings that cannot be written in JSON: %s", stdout)
 	}
 }
 

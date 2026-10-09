@@ -36,7 +36,7 @@ func TestHelp(t *testing.T) {
 			t.Errorf("%v: unexpected stderr: %q", args, stderr)
 		}
 		for _, c := range commands() {
-			if c.hidden() {
+			if c.hidden() || c.agentOnly {
 				continue
 			}
 			if !strings.Contains(stdout, c.name) {
@@ -228,8 +228,8 @@ func TestHook(t *testing.T) {
 		code   string
 		stderr string
 	}{
-		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + "\n\n" + msg.Text(msg.HintHookEvents, "session-start, pre-tool, post-tool, stop")},
-		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + "\n\n" + msg.Text(msg.HintHookEvents, "session-start, pre-tool, post-tool, stop")},
+		{[]string{"hook"}, contract.CodeMissingArgument, msg.Text(msg.ErrHookEventMissing) + "\n\n" + msg.Text(msg.HintHookEvents, "session-start")},
+		{[]string{"hook", "foo"}, contract.CodeInvalidArgument, msg.Text(msg.ErrHookEventUnknown, "foo") + "\n\n" + msg.Text(msg.HintHookEvents, "session-start")},
 		{[]string{"hook", "session-start", "extra"}, contract.CodeUnexpectedArgs, msg.Text(msg.ErrExtraArgs, "hook", "extra")},
 	}
 	for _, tt := range tests {

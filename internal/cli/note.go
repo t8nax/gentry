@@ -38,7 +38,7 @@ func runNoteAdd(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer w.close()
-	t, n, err := task.AddNote(w.st, w.task.ID, note, source())
+	t, n, err := task.AddNote(w.st, w.task.ID, note, source(env))
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}

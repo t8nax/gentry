@@ -12,12 +12,24 @@ import (
 // Name is the name of the integration in every tool.
 const Name = "gentry"
 
+// ServerName is the name of the server of the tools of the agent in the
+// integration.
+const ServerName = "core"
+
 // Description is the neutral description of the integration.
 type Description struct {
 	Name        string
 	Description string // operator-facing, in the operator's language
 	Hooks       []Hook
 	Skills      []Skill
+	Servers     []Server
+}
+
+// Server is a tool server the agent tool starts for a session and talks to
+// over the standard input and output.
+type Server struct {
+	Name    string
+	Command []string // program and arguments
 }
 
 // Hook is a command the tool runs on a hook event.
@@ -57,13 +69,11 @@ func Gentry(exe string) Description {
 		Description: msg.Text(msg.HelpIntro),
 		Hooks: []Hook{
 			{Event: hook.SessionStart, Command: []string{exe, "hook", hook.SessionStart}},
-			{Event: hook.PreTool, Command: []string{exe, "hook", hook.PreTool}},
-			{Event: hook.PostTool, Command: []string{exe, "hook", hook.PostTool}},
-			{Event: hook.Stop, Command: []string{exe, "hook", hook.Stop}},
 		},
+		Servers: []Server{{Name: ServerName, Command: []string{exe, "mcp"}}},
 	}
 	for _, s := range skills {
-		sk := Skill{Name: s.name, Description: msg.Text(s.description), Text: agenttext.Skill(s.name, exe)}
+		sk := Skill{Name: s.name, Description: msg.Text(s.description), Text: agenttext.Skill(s.name)}
 		if s.files != nil {
 			sk.Files = s.files()
 		}

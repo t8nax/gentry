@@ -10,7 +10,6 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/agents"
-	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/paths"
@@ -165,10 +164,7 @@ func runTaskTake(args []string, env Env) int {
 	// before the task is recorded.
 	r.Close()
 
-	source := state.SourceOperator
-	if caller.ByAgent() {
-		source = state.SourceAgent
-	}
+	source := source(env)
 	t, err := task.Take(st, task.TakeRequest{
 		Project: w.Project, Worktree: w.Path, Scenario: sc,
 		Title: fields["title"], Statement: fields["statement"], Source: source, Again: again,

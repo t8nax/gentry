@@ -364,11 +364,3 @@ func stageRound(title, stage string, round int, finished bool) string {
 	}
 	return msg.Text(msg.StageRound, named(title, stage), round)
 }
-
-// progressText is the progress of a task: 4 из 5, or 2 из 4–5 ahead of a fork.
-func progressText(p task.Progress) string {
-	if p.Min == p.Max {
-		return msg.Text(msg.ProgressValue, p.Passed, p.Max)
-	}
-	return msg.Text(msg.ProgressRange, p.Passed, p.Min, p.Max)
-}

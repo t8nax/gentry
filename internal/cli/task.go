@@ -443,7 +443,7 @@ func taskShowText(p *page, out contract.TaskShowOutput, x taskShowExtra) {
 	switch {
 	case t.State == contract.TaskStateCancelled:
 		hints = append(hints, hintOf(msg.HintTaskAgain).set("task", t.Id))
-	case t.Ended == nil && t.Finished:
+	case (t.State == contract.TaskStateActive || t.State == contract.TaskStateWaiting) && t.Finished:
 		hints = append(hints, hintOf(msg.HintTaskClose))
 	}
 	p.hints(taskHints(t.Id, x.here, hints...)...)

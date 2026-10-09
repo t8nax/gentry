@@ -45,11 +45,7 @@ func runLibraryDiff(args []string, env Env) int {
 // libraryDiffText prints when the library was applied and the changes of its
 // draft.
 func libraryDiffText(p *page, out contract.LibraryDiffOutput) {
-	at := msg.Text(msg.ValueNone)
-	if out.Applied != nil {
-		at = localTime(out.Applied.Time)
-	}
-	fmt.Fprintln(p, msg.Text(msg.LibraryAppliedAt, at))
+	fmt.Fprintln(p, msg.Text(msg.LibraryAppliedAt, appliedText(out.Applied)))
 	p.WriteString("\n")
 	var lines []string
 	for _, c := range out.Changes {

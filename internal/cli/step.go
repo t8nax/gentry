@@ -57,7 +57,7 @@ func runStepAdd(args []string, env Env) int {
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}
-	return writeSteps(env, w, res, msg.Text(msg.StepsAdded, len(steps)))
+	return writeSteps(env, w, res, stepChange{})
 }
 
 func runStepDone(args []string, env Env) int {
@@ -110,30 +110,41 @@ func runStepClose(cmd string, args []string, env Env) int {
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}
-	message := msg.Text(msg.StepMarkedDropped, number)
-	if done {
-		message = msg.Text(msg.StepMarkedDone, number)
-	}
-	return writeSteps(env, w, res, message)
+	return writeSteps(env, w, res, stepChange{step: number, done: done})
 }
 
 // writeSteps prints the result of a change of the steps of the current pass:
 // the message and the numbers of the steps added, or the message and the
 // number of steps left with, once none is left, the hint to close the stage.
 // The table of steps is in task show.
-func writeSteps(env Env, w wayTask, res task.Steps, message string) int {
+func writeSteps(env Env, w wayTask, res task.Steps, change stepChange) int {
 	out := contract.StepListOutput{Task: res.Task.Key(), Node: res.Pass.Node, Round: res.Pass.Round, Steps: stepsJSON(res.Pass.Steps)}
 	if res.Added != nil {
 		out.Added = res.Added
 	}
 	hints := w.hints(hintOf(msg.HintStageExit))
-	return emit(env, out, func(p *page, out contract.StepListOutput) { stepsText(p, out, message, hints) })
+	return emit(env, out, func(p *page, out contract.StepListOutput) { stepsText(p, out, change, hints) })
 }
 
-// stepsText prints message, then the numbers of the steps added or the
+// stepChange is the step a command marked, which the contract has not: its
+// number, and whether it is done or dropped. Without a number the steps are
+// added.
+type stepChange struct {
+	step int
+	done bool
+}
+
+// stepsText prints what changed, then the numbers of the steps added or the
 // number of steps left; hints are the hints for the task.
-func stepsText(p *page, out contract.StepListOutput, message string, hints []hint) {
-	fmt.Fprintln(p, message)
+func stepsText(p *page, out contract.StepListOutput, change stepChange, hints []hint) {
+	switch {
+	case change.step == 0:
+		fmt.Fprintln(p, msg.Text(msg.StepsAdded, len(out.Added)))
+	case change.done:
+		fmt.Fprintln(p, msg.Text(msg.StepMarkedDone, change.step))
+	default:
+		fmt.Fprintln(p, msg.Text(msg.StepMarkedDropped, change.step))
+	}
 	if n := len(out.Added); n > 0 {
 		if n == 1 {
 			fmt.Fprintln(p, msg.Text(msg.StepNumber, out.Added[0]))

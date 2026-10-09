@@ -93,7 +93,7 @@ func introduce(w io.Writer, in hook.Input) error {
 		fmt.Fprintln(&b, introSteps(v))
 	}
 	if v.Flow != nil {
-		fmt.Fprintln(&b, msg.Text(msg.ProgressLine, progressText(v.Progress)))
+		fmt.Fprintln(&b, msg.Text(msg.ProgressLine, progressLine(progressJSON(v.Progress))))
 	}
 	b.WriteString("\n")
 	fmt.Fprintln(&b, introHint(hintOf(msg.HintIntroContinue, skillName(in.Tool, agenttext.WorkingOnTask))))

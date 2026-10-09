@@ -445,7 +445,7 @@ func writeText(b *strings.Builder, heading, text string) {
 
 // agentSource names where a subagent comes from.
 func agentSource(a contract.FlowAgent) string {
-	if a.Source == contract.FlowShowOutputAgentsElemSource(flowSource(true)) {
+	if a.Source == contract.FlowShowOutputAgentsElemSourceLibrary {
 		return msg.Text(msg.FlowSourceLibrary)
 	}
 	return msg.Text(msg.FlowSourceProject)
@@ -457,11 +457,7 @@ func joined(ids []string) string { return orNone(strings.Join(ids, ", ")) }
 // writeFlowApplied prints when the active flow was applied, or a dash if the
 // project has none.
 func writeFlowApplied(b *strings.Builder, applied *contract.Applied) {
-	at := msg.Text(msg.ValueNone)
-	if applied != nil {
-		at = localTime(applied.Time)
-	}
-	fmt.Fprintln(b, msg.Text(msg.FlowAppliedAt, at))
+	fmt.Fprintln(b, msg.Text(msg.FlowAppliedAt, appliedText(applied)))
 }
 
 // nodeName returns the node as the scenario text names it: the end of the

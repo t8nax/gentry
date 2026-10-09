@@ -124,11 +124,7 @@ func diffText(p *page, out contract.FlowDiffOutput, x diffExtra) {
 	fmt.Fprintln(&b, msg.Text(msg.FlowProject, out.Project))
 	writeFlowApplied(&b, out.Applied)
 	if out.Library != nil {
-		at := msg.Text(msg.ValueNone)
-		if out.Library.Applied != nil {
-			at = localTime(out.Library.Applied.Time)
-		}
-		fmt.Fprintln(&b, msg.Text(msg.LibraryAppliedAt, at))
+		fmt.Fprintln(&b, msg.Text(msg.LibraryAppliedAt, appliedText(out.Library.Applied)))
 	}
 	fmt.Fprintln(&b, msg.Text(msg.DiffReportFile, out.Report))
 	blocks = append(blocks, b.String())

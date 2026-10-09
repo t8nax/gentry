@@ -20,7 +20,7 @@ func (d diffView) report(now time.Time) string {
 	b.WriteString("\n")
 	head := []string{msg.Text(msg.FlowProject, d.project), flowAppliedLine(d.res)}
 	if res.Library != nil {
-		head = append(head, msg.Text(msg.LibraryAppliedAt, appliedText(res.Library.Applied)))
+		head = append(head, msg.Text(msg.LibraryAppliedAt, appliedText(appliedJSON(res.Library.Applied))))
 	}
 	problems := d.problems()
 	if len(problems) == 0 {
@@ -96,7 +96,7 @@ func (d diffView) report(now time.Time) string {
 
 // flowAppliedLine is the line of when the active flow was applied.
 func flowAppliedLine(res flow.DiffResult) string {
-	return msg.Text(msg.FlowAppliedAt, appliedText(res.Applied))
+	return msg.Text(msg.FlowAppliedAt, appliedText(appliedJSON(res.Applied)))
 }
 
 // writeLines prints lines as one block of markdown, each on a line of its own.

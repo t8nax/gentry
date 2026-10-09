@@ -143,8 +143,8 @@ type tool struct {
 }
 
 // newTool builds the tool of c. Its fields are the fields of --input of c, if
-// it takes it, and its flags and arguments; a field is described by the help
-// of its flag or argument.
+// it takes it, and its flags and arguments; a field is described by the
+// description of its flag or argument.
 func newTool(c command) (tool, error) {
 	t := tool{cmd: c}
 	in, err := inputSchema(c)

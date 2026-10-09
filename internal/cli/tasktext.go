@@ -117,8 +117,8 @@ func endedLine(t contract.Task) string {
 	return msg.Text(k, localTime(t.Ended.Time))
 }
 
-// current reports whether p goes on: it has no outcome yet.
-func current(p contract.TaskPass) bool { return p.Outcome == nil }
+// passCurrent reports whether p goes on: it has no outcome yet.
+func passCurrent(p contract.TaskPass) bool { return p.Outcome == nil }
 
 // writePath prints the path of task t as a table, one pass per row, and the
 // steps of its current stage.
@@ -130,13 +130,13 @@ func writePath(b *strings.Builder, t contract.Task, path []contract.TaskPass, n 
 	rows := [][]string{{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)}}
 	for _, p := range path {
 		next := msg.Text(msg.ValueNone)
-		if !current(p) {
+		if !passCurrent(p) {
 			next = nodeName(*p.To)
 		}
 		rows = append(rows, []string{passStage(p, n), strconv.Itoa(p.Round), outcomeWord(t, p), next})
 	}
 	writeTable(b, rows)
-	if last := path[len(path)-1]; current(last) {
+	if last := path[len(path)-1]; passCurrent(last) {
 		b.WriteString("\n")
 		writeStepTable(b, last.Steps)
 	}
@@ -149,7 +149,7 @@ func writePasses(b *strings.Builder, t contract.Task, path []contract.TaskPass, 
 		b.WriteString("\n")
 		fmt.Fprintln(b, msg.Text(msg.StageRound, named(n.title(p.Stage), p.Stage), p.Round))
 		fmt.Fprintln(b, msg.Text(msg.OutcomeLine, outcomeWord(t, p)))
-		if current(p) {
+		if passCurrent(p) {
 			b.WriteString("\n")
 			writeStepTable(b, p.Steps)
 			continue
@@ -182,9 +182,9 @@ func passStage(p contract.TaskPass, n names) string {
 // pass a cancelled task stopped at has no outcome.
 func outcomeWord(t contract.Task, p contract.TaskPass) string {
 	switch {
-	case current(p) && t.State == contract.TaskStateCancelled:
+	case passCurrent(p) && t.State == contract.TaskStateCancelled:
 		return msg.Text(msg.ValueNone)
-	case current(p):
+	case passCurrent(p):
 		return msg.Text(msg.OutcomeCurrent)
 	case p.Exit == nil:
 		return msg.Text(msg.OutcomeSkip)

@@ -394,7 +394,7 @@ func recordSync(s *process.Sync) {
 func localTime(t time.Time) string { return t.Local().Format("2006-01-02 15:04") }
 
 // appliedText is the time a kind was applied, or a dash if it never was.
-func appliedText(a *process.Applied) string {
+func appliedText(a *contract.Applied) string {
 	if a == nil {
 		return msg.Text(msg.ValueNone)
 	}

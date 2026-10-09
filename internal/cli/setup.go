@@ -121,8 +121,11 @@ func runSetup(args []string, env Env) int {
 			fmt.Fprintln(env.Stdout)
 		}
 		k := msg.SetupPermissionAdded
-		if permission == claude.PermissionFailed {
+		switch permission {
+		case claude.PermissionFailed:
 			k = msg.SetupPermissionFailed
+		case claude.PermissionUnwritten:
+			k = msg.SetupPermissionUnwritten
 		}
 		fmt.Fprintln(env.Stdout, msg.Text(k))
 		if settings != "" {
@@ -136,7 +139,7 @@ func runSetup(args []string, env Env) int {
 		}
 		fmt.Fprintln(env.Stdout, msg.Text(msg.SetupDisabled))
 	}
-	if permission == claude.PermissionFailed {
+	if permission == claude.PermissionFailed || permission == claude.PermissionUnwritten {
 		// The hint joins the hint block of a disabled plugin.
 		if r.Enabled {
 			fmt.Fprintln(env.Stdout)

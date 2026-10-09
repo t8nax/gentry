@@ -21,8 +21,10 @@ type SetupOutput struct {
 	Enabled bool `json:"enabled"`
 
 	// The rule that allows the tools of Gentry in the user settings of the tool:
-	// added, present (the settings had it) or failed (the settings cannot be read and
-	// are left as they are). The list is open: a client shows an unknown value as is.
+	// added, present (the settings had it), failed (the settings cannot be read) or
+	// unwritten (the settings cannot be written); with failed and unwritten the
+	// settings are left as they are. The list is open: a client shows an unknown
+	// value as is.
 	Permission *string `json:"permission,omitempty,omitzero"`
 
 	// Version of the built plugin; it changes whenever the plugin content does.

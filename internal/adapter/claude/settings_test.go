@@ -1,6 +1,8 @@
 package claude
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -88,16 +90,26 @@ func TestAllowTools(t *testing.T) {
 			}
 		})
 	}
-	t.Run("cannot write", func(t *testing.T) {
-		dir := t.TempDir()
-		p := filepath.Join(dir, "settings.json")
-		// A directory in place of the file beside it: the file cannot be
-		// replaced.
+	t.Run("directory", func(t *testing.T) {
+		// A directory in place of the file cannot be read.
+		p := filepath.Join(t.TempDir(), "settings.json")
 		if err := os.Mkdir(p, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if got := AllowTools(p); got != PermissionFailed {
 			t.Errorf("AllowTools: %q", got)
+		}
+	})
+	t.Run("cannot write", func(t *testing.T) {
+		text := `{"permissions":{"allow":[]}}`
+		p := write(t, text)
+		writeSettings = func(string, []byte, fs.FileMode) error { return errors.New("busy") }
+		t.Cleanup(func() { writeSettings = writeFile })
+		if got := AllowTools(p); got != PermissionUnwritten {
+			t.Errorf("AllowTools: %q", got)
+		}
+		if got := read(t, p); got != text {
+			t.Errorf("settings changed: %s", got)
 		}
 	})
 	if runtime.GOOS != "windows" {

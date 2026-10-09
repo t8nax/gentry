@@ -25,9 +25,10 @@ const PermissionRule = "mcp__plugin_" + integration.Name + "_" + integration.Ser
 
 // Results of AllowTools.
 const (
-	PermissionAdded   = "added"   // the rule is added to the settings
-	PermissionPresent = "present" // the settings have the rule
-	PermissionFailed  = "failed"  // the settings cannot be read or written: they are left as they are
+	PermissionAdded     = "added"     // the rule is added to the settings
+	PermissionPresent   = "present"   // the settings have the rule
+	PermissionFailed    = "failed"    // the settings cannot be read: they are left as they are
+	PermissionUnwritten = "unwritten" // the settings cannot be written: they are left as they are
 )
 
 // SettingsPath returns the file of the user settings of Claude Code.
@@ -49,7 +50,8 @@ func SettingsPath() (string, error) {
 // written anew with its keys in their order, and a file that does not exist
 // is created. A symbolic link is followed, and the file keeps its mode. A
 // file that is not a JSON object, whose permissions or allow has another
-// type, or that cannot be written is left as it is: PermissionFailed.
+// type is left as it is: PermissionFailed; a file that cannot be written,
+// PermissionUnwritten.
 func AllowTools(path string) string {
 	if real, err := filepath.EvalSymlinks(path); err == nil {
 		path = real
@@ -109,8 +111,8 @@ func AllowTools(path string) string {
 		indented.WriteByte('\n')
 		out = indented.Bytes()
 	}
-	if writeFile(path, out, mode) != nil {
-		return PermissionFailed
+	if writeSettings(path, out, mode) != nil {
+		return PermissionUnwritten
 	}
 	return PermissionAdded
 }
@@ -209,6 +211,9 @@ func seekKey(dec *json.Decoder, key string) bool {
 	}
 	return false
 }
+
+// writeSettings writes the settings; tests replace it to fail.
+var writeSettings = writeFile
 
 // writeFile replaces the file at path with data through a file beside it, so
 // that a failure midway leaves the old file whole; the file gets mode.

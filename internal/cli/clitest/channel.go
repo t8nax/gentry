@@ -22,8 +22,8 @@ import (
 var hintLine = regexp.MustCompile(`^(.*): gentry (.+)$`)
 
 // hintLabels match what to do in the hints of the catalog, such as
-// «Посмотреть попытку» or «Установить .+ и повторить». The format of a
-// hint line is no hint.
+// «Посмотреть попытку» or «Установите .+ и повторите», the hint of setup.
+// hint.line is the format of a hint line, not a hint, and is left out.
 var hintLabels = sync.OnceValue(func() []*regexp.Regexp {
 	var labels []*regexp.Regexp
 	for _, k := range msg.Keys() {

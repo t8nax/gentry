@@ -46,7 +46,7 @@ const (
 )
 
 // Capabilities a subagent may have (section 10.2).
-var Capabilities = []string{"read", "search", "edit", "run", "web"}
+var Capabilities = []string{"read", "search", "edit", "run", "web", "task", "progress"}
 
 // Fields that come with later versions of Gentry: tracker actions with stage
 // 8, procedures of the knowledge with stage 7. Until then they are refused, so

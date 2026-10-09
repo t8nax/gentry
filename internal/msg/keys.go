@@ -36,6 +36,7 @@ const (
 	SetupUpdated             Key = "setup.updated"
 	SetupUnchanged           Key = "setup.unchanged"
 	SetupDisabled            Key = "setup.disabled"
+	HintPluginEnable         Key = "hint.plugin_enable"
 	SetupPermissionAdded     Key = "setup.permission_added"
 	SetupPermissionFailed    Key = "setup.permission_failed"
 	SetupPermissionUnwritten Key = "setup.permission_unwritten"

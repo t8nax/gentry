@@ -326,7 +326,7 @@ func TestSetupSwitchKeepsDisabled(t *testing.T) {
 		t.Fatalf("%v: %s", err, out)
 	}
 	code, stdout, _ := setupFrom(t, b, "--switch")
-	want := msg.Text(msg.SetupSwitched, filepath.Join(a, "integrations", "claude")) + "\n\n" + msg.Text(msg.SetupDisabled) + "\n"
+	want := msg.Text(msg.SetupSwitched, filepath.Join(a, "integrations", "claude")) + "\n\n" + msg.Text(msg.SetupDisabled) + "\n\n" + msg.Text(msg.HintPluginEnable) + "\n"
 	if code != contract.ExitOK || stdout != want {
 		t.Errorf("exit code %d, stdout %q, want %q", code, stdout, want)
 	}

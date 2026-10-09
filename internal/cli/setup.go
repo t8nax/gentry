@@ -133,21 +133,18 @@ func setupText(p *page, out contract.SetupOutput) {
 			afterField = true
 		}
 	}
+	var hints []hint
 	if !out.Enabled {
 		if afterField {
 			fmt.Fprintln(p)
 		}
 		fmt.Fprintln(p, msg.Text(msg.SetupDisabled))
+		hints = append(hints, hintOf(msg.HintPluginEnable))
 	}
 	if permission == claude.PermissionFailed || permission == claude.PermissionUnwritten {
-		// The hint joins the hint block of a disabled plugin.
-		if !out.Enabled {
-			line, _ := hintOf(msg.HintSetupPermission, claude.PermissionRule).render(p.ch)
-			fmt.Fprintln(p, line)
-			return
-		}
-		p.hints(hintOf(msg.HintSetupPermission, claude.PermissionRule))
+		hints = append(hints, hintOf(msg.HintSetupPermission, claude.PermissionRule))
 	}
+	p.hints(hints...)
 }
 
 // removeCallMarks removes the marks of calls the hooks of an earlier Gentry

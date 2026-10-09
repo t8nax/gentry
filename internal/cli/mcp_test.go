@@ -63,7 +63,7 @@ func TestTools(t *testing.T) {
 			if !slices.Contains(fields, name) && name != "options" && name != "worktree" {
 				t.Errorf("%s: field %s is neither a flag nor an argument", tool.Name, name)
 			}
-			if p.Description == "" || strings.Contains(p.Description, "Input of") {
+			if p.Description == "" || strings.Contains(p.Description, "Input of") || strings.Contains(p.Description, "--") || strings.Contains(p.Description, "gentry ") {
 				t.Errorf("%s: field %s has no description of the help: %q", tool.Name, name, p.Description)
 			}
 		}
@@ -126,8 +126,37 @@ func TestToolCall(t *testing.T) {
 		t.Errorf("stage_exit outside a task: failed %v, %q", failed, text)
 	}
 	text, failed = CallTool("step_add", []byte(`{"steps":["Шаг"],"kind":"x"}`))
-	if !failed || !strings.Contains(text, "kind") {
-		t.Errorf("unknown field: failed %v, %q", failed, text)
+	if want := msg.Text(msg.ErrToolFields, msg.Text(msg.InputUnknownField, "kind")); !failed || text != want {
+		t.Errorf("unknown field: failed %v, %q, want %q", failed, text, want)
+	}
+	text, failed = CallTool("task_attempts", []byte(`{"attempt":"первая"}`))
+	if want := msg.Text(msg.ErrToolFields, msg.Text(msg.InputNotInteger, "attempt")); !failed || text != want {
+		t.Errorf("not an integer: failed %v, %q, want %q", failed, text, want)
+	}
+	// The fields of --input of a command are fields of the tool to the agent.
+	text, failed = CallTool("step_add", []byte(`{"steps":"Шаг"}`))
+	if !failed || strings.Contains(text, "--input") || !strings.Contains(text, msg.Text(msg.InputNotList, "steps")) {
+		t.Errorf("steps not a list: failed %v, %q", failed, text)
+	}
+	// A panic of a command fails the call, not the server.
+	runTool = func([]string, Env) int { panic("корзина") }
+	t.Cleanup(func() { runTool = nil })
+	text, failed = CallTool("stage_show", []byte(`{}`))
+	if !failed || text != msg.Text(msg.ErrInternal, "корзина") {
+		t.Errorf("panic: failed %v, %q", failed, text)
+	}
+}
+
+// TestMCPProtocolUnfiltered checks that the answers of the server pass as
+// they are, even one that looks like a hint.
+func TestMCPProtocolUnfiltered(t *testing.T) {
+	in := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"stage_show","arguments":{"x: gentry task close":1}}}` + "\n"
+	var out bytes.Buffer
+	if code := Run([]string{"mcp"}, Env{Stdin: strings.NewReader(in), Stdout: &out, Stderr: &out}); code != 0 {
+		t.Fatalf("exit code %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), `gentry task close`) || !strings.Contains(out.String(), `"isError":true`) {
+		t.Errorf("answer: %s", out.String())
 	}
 }
 
@@ -171,6 +200,9 @@ func TestToolHints(t *testing.T) {
 		"Посмотреть черновик: gentry flow show --draft":                                           "Посмотреть черновик: flow_show (draft)",
 		"Посмотреть этап: gentry stage show --task SHOP-1":                                        "Посмотреть этап: stage_show (task: SHOP-1)",
 		msg.Text(msg.HintStateNewer): msg.Text(msg.HintStateNewerAgent),
+		"Посмотреть попытку: gentry task attempts <попытка>":                  "Посмотреть попытку: task_attempts (attempt)",
+		"Посмотреть попытку: gentry task attempts SHOP-1 <попытка>":           "Посмотреть попытку: task_attempts (task: SHOP-1, attempt)",
+		msg.Text(msg.ErrInputInvalid, "поле «step» должно быть целым числом"): msg.Text(msg.ErrToolFields, "поле «step» должно быть целым числом"),
 	} {
 		if action, got := hintFor(line, true); action != replaceLine || got != want {
 			t.Errorf("%q: %v %q, want %q", line, action, got, want)
@@ -201,7 +233,10 @@ func TestHintFilter(t *testing.T) {
 		"Готово.\n\nЗакрыть задачу: gentry task close\nПосмотреть задачу: gentry task show\n": "Готово.\n\nПосмотреть задачу: gentry task show\n",
 		// A blank line at the end with nothing dropped stays.
 		"Предупреждение.\n\n": "Предупреждение.\n\n",
-		"Без конца строки":    "Без конца строки",
+		// Words of the operator and the agent pass as they are.
+		"Решено: gentry task close не вызывать до ревью\n": "Решено: gentry task close не вызывать до ревью\n",
+		"Проверка: gentry step add работает\n":             "Проверка: gentry step add работает\n",
+		"Без конца строки":                                 "Без конца строки",
 	} {
 		var b bytes.Buffer
 		f := &hintFilter{out: &b}

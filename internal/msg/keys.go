@@ -641,6 +641,7 @@ const (
 	ToolTaskTakeDesc        Key = "tool.task_take.desc"
 	ToolTaskCancelDesc      Key = "tool.task_cancel.desc"
 	ToolOperatorRecordDesc  Key = "tool.operator_record.desc"
+	ErrToolFields           Key = "err.tool_fields"
 	TaskClosed              Key = "task.closed"
 	TaskCancelled           Key = "task.cancelled"
 	WorktreeReleased        Key = "task.worktree_released"

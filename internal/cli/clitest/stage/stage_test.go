@@ -9,6 +9,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/caller"
+	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/state"
@@ -577,5 +578,32 @@ func TestNoteListEmpty(t *testing.T) {
 	_, stdout, _ := clitest.Run("task", "show", "SHOP-1")
 	if !strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show SHOP-1 --statement\nПосмотреть заметки: gentry note list --task SHOP-1\n") {
 		t.Errorf("task show from another directory:\n%s", stdout)
+	}
+}
+
+// TestStageByTools passes a stage through the tools of the agent, as a
+// session does: hints name tools, and the records are the agent's.
+func TestStageByTools(t *testing.T) {
+	_, fix := clitest.TaskShop(t)
+	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	for _, c := range []struct {
+		tool, args, want string
+		failed           bool
+	}{
+		{"stage_exit", `{"kind":"result","text":"Создана ветка"}`, "У этапа «Ветка» нет шагов.\n\nДобавить шаги: step_add (steps)", true},
+		{"step_add", `{"steps":["Создать ветку feature/shop-1"]}`, "К этапу добавлено шагов: 1.\nНомер шага: 1", false},
+		{"step_done", `{"step":1,"check":"git branch --show-current"}`, "Шаг 1 выполнен.\nОсталось шагов: 0\n\nЗакрыть этап: stage_exit (kind, text)", false},
+		{"stage_exit", `{"kind":"artifact","artifact":"plan","text":"План"}`, "Артефакт plan не сохранён.\n\nСохранить артефакт: artifact_save (name: plan, file)", true},
+		{"stage_exit", `{"kind":"result","text":"Создана ветка"}`, "Этап «Ветка» закрыт.\nВид выхода: результат\nВыход: Создана ветка\nПереход: plan\nЭтап: План фичи (plan-feature), круг 1\nПрогресс: 1 из 5\n\nПосмотреть этап: stage_show", false},
+	} {
+		text, failed := cli.CallTool(c.tool, []byte(c.args))
+		if text != c.want || failed != c.failed {
+			t.Errorf("%s %s: failed %v:\n%s\nwant failed %v:\n%s", c.tool, c.args, failed, text, c.failed, c.want)
+		}
+	}
+	_, out, _ := clitest.Run("task", "show", "--path", "--json")
+	if !strings.Contains(out, `"source":"agent"`) || strings.Contains(out, `"source":"operator","state"`) {
+		t.Errorf("task show --path --json: %s", out)
 	}
 }

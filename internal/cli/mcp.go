@@ -164,7 +164,16 @@ func newTool(c command) (tool, error) {
 			required = append(required, r.(string))
 		}
 	}
+	// A field is described by the lines of the help of its flag that do not
+	// name the command line, such as how to pass a long text with --input.
 	describe := func(name, desc string) {
+		var lines []string
+		for _, l := range strings.Split(desc, "\n") {
+			if !strings.Contains(l, "--") && !strings.Contains(l, "gentry ") {
+				lines = append(lines, l)
+			}
+		}
+		desc = strings.Join(lines, "\n")
 		p, ok := props[name].(map[string]any)
 		if !ok {
 			p = map[string]any{"type": "string"}
@@ -218,8 +227,8 @@ func (t tool) description() string {
 // never taken for a flag.
 func (t tool) commandLine(raw json.RawMessage) ([]string, []byte, error) {
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil, nil, err
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return nil, nil, fieldsError(msg.Text(msg.InputNotObject))
 	}
 	args := strings.Fields(t.cmd.name)
 	input := map[string]json.RawMessage{}
@@ -238,16 +247,16 @@ func (t tool) commandLine(raw json.RawMessage) ([]string, []byte, error) {
 		if f.value == "" {
 			var on bool
 			if err := json.Unmarshal(v, &on); err != nil {
-				return nil, nil, fmt.Errorf("field %s: %v", fieldName(f.name), err)
+				return nil, nil, fieldsError(msg.Text(msg.InputBadValue, fieldName(f.name)))
 			}
 			if on {
 				args = append(args, "--"+f.name)
 			}
 			continue
 		}
-		s, err := scalar(v)
-		if err != nil {
-			return nil, nil, fmt.Errorf("field %s: %v", fieldName(f.name), err)
+		s, ok := scalar(v, false)
+		if !ok {
+			return nil, nil, fieldsError(msg.Text(msg.InputNotString, fieldName(f.name)))
 		}
 		args = append(args, "--"+f.name+"="+s)
 	}
@@ -258,14 +267,18 @@ func (t tool) commandLine(raw json.RawMessage) ([]string, []byte, error) {
 			continue
 		}
 		delete(fields, a.field)
-		s, err := scalar(v)
-		if err != nil {
-			return nil, nil, fmt.Errorf("field %s: %v", a.field, err)
+		s, ok := scalar(v, a.number)
+		if !ok {
+			k := msg.InputNotString
+			if a.number {
+				k = msg.InputNotInteger
+			}
+			return nil, nil, fieldsError(msg.Text(k, a.field))
 		}
 		positional = append(positional, s)
 	}
 	for name := range fields {
-		return nil, nil, fmt.Errorf("unknown field %s", name)
+		return nil, nil, fieldsError(msg.Text(msg.InputUnknownField, name))
 	}
 	var stdin []byte
 	if t.input != nil {
@@ -281,34 +294,56 @@ func (t tool) commandLine(raw json.RawMessage) ([]string, []byte, error) {
 	return args, stdin, nil
 }
 
-// scalar is a string or a number of a field as a command line value.
-func scalar(v json.RawMessage) (string, error) {
+// fieldsError is a field of a tool that cannot be read: the cause in the
+// words of the catalog.
+type fieldsError string
+
+func (e fieldsError) Error() string { return string(e) }
+
+// scalar is the value of a field as a command line value: a string, or an
+// integer if number is set, given as a number or as a string of one.
+func scalar(v json.RawMessage, number bool) (string, bool) {
 	var s string
 	if json.Unmarshal(v, &s) == nil {
-		return s, nil
+		if number {
+			_, err := strconv.ParseInt(s, 10, 64)
+			return s, err == nil
+		}
+		return s, true
 	}
 	var n json.Number
-	if err := json.Unmarshal(v, &n); err != nil {
-		return "", fmt.Errorf("not a string or a number")
+	if !number || json.Unmarshal(v, &n) != nil {
+		return "", false
 	}
-	if _, err := strconv.ParseInt(n.String(), 10, 64); err != nil {
-		return "", fmt.Errorf("not an integer")
-	}
-	return n.String(), nil
+	_, err := strconv.ParseInt(n.String(), 10, 64)
+	return n.String(), err == nil
 }
 
-// call runs the command of the tool for the agent and returns its text.
-func (t tool) call(raw json.RawMessage) (string, bool) {
+// runTool runs the command of a tool in place of Run; tests set it.
+var runTool func(args []string, env Env) int
+
+// call runs the command of the tool for the agent and returns its text. A
+// panic of the command fails the call, not the server of the session.
+func (t tool) call(raw json.RawMessage) (text string, failed bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			text, failed = msg.Text(msg.ErrInternal, r), true
+		}
+	}()
 	args, stdin, err := t.commandLine(raw)
 	if err != nil {
-		return msg.Text(msg.ErrInputInvalid, err.Error()), true
+		return msg.Text(msg.ErrToolFields, err.Error()), true
 	}
 	var out bytes.Buffer
 	env := Env{Stdout: &out, Stderr: &out, agent: true}
 	if stdin != nil {
 		env.Stdin = bytes.NewReader(stdin)
 	}
-	code := Run(args, env)
+	run := runTool
+	if run == nil {
+		run = Run
+	}
+	code := run(args, env)
 	return strings.TrimRight(out.String(), "\n"), code != contract.ExitOK
 }
 

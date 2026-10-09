@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 
 	"github.com/t8nax/gentry/internal/msg"
 )
@@ -12,11 +14,48 @@ import (
 // Hints name commands: «Посмотреть этап: gentry stage show». The catalog has
 // one text per hint, for the operator; the channel of the agent names the
 // tool and its fields instead: «Посмотреть этап: stage_show», and the command
-// line has no hints of commands only the agent runs.
+// line has no hints of commands only the agent runs. A hint is a line that
+// starts as a line of a hint of the catalog: the words of the operator and the
+// agent, such as a note or a statement, pass as they are.
 
 // hintLine matches a line that ends with a command: what to do, a colon, then
 // the command.
 var hintLine = regexp.MustCompile(`^(.*: )gentry (.+)$`)
+
+// verbs are the places of values in a text of the catalog.
+var verbs = regexp.MustCompile(`%[sdvq]`)
+
+// hintLabels match what to do in the lines of the catalog that end with a
+// command, such as «Посмотреть попытку: » or «Установите .+ и повторите: ».
+var hintLabels = sync.OnceValue(func() []*regexp.Regexp {
+	seen := map[string]bool{}
+	var labels []*regexp.Regexp
+	for _, k := range msg.Keys() {
+		for _, line := range strings.Split(msg.Text(k), "\n") {
+			m := hintLine.FindStringSubmatch(line)
+			if m == nil || seen[m[1]] {
+				continue
+			}
+			seen[m[1]] = true
+			parts := verbs.Split(m[1], -1)
+			for i, p := range parts {
+				parts[i] = regexp.QuoteMeta(p)
+			}
+			labels = append(labels, regexp.MustCompile(`^`+strings.Join(parts, `.+`)+`$`))
+		}
+	}
+	return labels
+})
+
+// isHintLabel reports whether label is what to do in a hint of the catalog.
+func isHintLabel(label string) bool {
+	for _, l := range hintLabels() {
+		if l.MatchString(label) {
+			return true
+		}
+	}
+	return false
+}
 
 // hintAction is what to do with a line of output in a channel.
 type hintAction int
@@ -27,23 +66,46 @@ const (
 	replaceLine
 )
 
-// agentHintKeys are hints without a command that the agent gets in words of
-// its own: a server of the agent runs on after Gentry is updated, and only a
-// new session starts the new one.
-var agentHintKeys = map[msg.Key]msg.Key{msg.HintStateNewer: msg.HintStateNewerAgent}
+// agentTexts are texts without a command that the agent gets in words of its
+// own: a server of the agent runs on after Gentry is updated, and only a new
+// session starts the new one; the fields of a tool are no --input to the
+// agent. The values of a text pass to the text of the agent.
+var agentTexts = map[msg.Key]msg.Key{
+	msg.HintStateNewer:  msg.HintStateNewerAgent,
+	msg.ErrInputInvalid: msg.ErrToolFields,
+}
+
+// agentText returns the text of the agent for line, if line is a text of
+// agentTexts.
+func agentText(line string) (string, bool) {
+	for k, a := range agentTexts {
+		parts := verbs.Split(msg.Text(k), -1)
+		for i, p := range parts {
+			parts[i] = regexp.QuoteMeta(p)
+		}
+		m := regexp.MustCompile(`^` + strings.Join(parts, `(.+)`) + `$`).FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		args := make([]any, len(m)-1)
+		for i, v := range m[1:] {
+			args[i] = v
+		}
+		return msg.Text(a, args...), true
+	}
+	return "", false
+}
 
 // hintFor tells what to do with line in the channel of the agent, or of the
 // command line if agent is false, and the line to put instead.
 func hintFor(line string, agent bool) (hintAction, string) {
 	if agent {
-		for k, a := range agentHintKeys {
-			if line == msg.Text(k) {
-				return replaceLine, msg.Text(a)
-			}
+		if text, ok := agentText(line); ok {
+			return replaceLine, text
 		}
 	}
 	m := hintLine.FindStringSubmatch(line)
-	if m == nil {
+	if m == nil || !isHintLabel(m[1]) {
 		return keepLine, ""
 	}
 	words := commandWords(m[2])
@@ -155,6 +217,12 @@ func toolHint(c command, words []string) string {
 				value = words[i]
 			}
 			field(fieldName(name), value)
+			continue
+		}
+		// A placeholder names its argument: «<попытка>» of task attempts is
+		// the attempt, though the task comes first.
+		if i := slices.IndexFunc(c.args, func(a argSpec) bool { return msg.Text(a.name) == w }); i >= 0 {
+			field(c.args[i].field, w)
 			continue
 		}
 		if pos < len(c.args) {

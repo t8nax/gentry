@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
@@ -463,6 +464,10 @@ func (g command) actionNames() []string {
 	return names
 }
 
+// unfiltered are the commands whose output is no text for a person: the
+// protocol of the tools, the hooks and the journal of events.
+var unfiltered = []string{"mcp", "hook", "events"}
+
 // RunAgent executes the command given by args as a tool of the agent does:
 // commands only of the agent run, and hints name tools.
 func RunAgent(args []string, env Env) int {
@@ -474,13 +479,18 @@ func RunAgent(args []string, env Env) int {
 // and returns the exit code.
 func Run(args []string, env Env) int {
 	env.json = hasJSONFlag(args)
-	if !env.json {
+	if !env.json && !(len(args) > 0 && slices.Contains(unfiltered, args[0])) {
 		// Hints name tools for the agent; the command line has no hints of
-		// commands only the agent runs.
-		out, errs := &hintFilter{out: env.Stdout, agent: env.agent}, &hintFilter{out: env.Stderr, agent: env.agent}
+		// commands only the agent runs. One output gets one filter, so that
+		// blank lines keep their place between its lines.
+		out := &hintFilter{out: env.Stdout, agent: env.agent}
+		errs := out
+		if env.Stderr != env.Stdout {
+			errs = &hintFilter{out: env.Stderr, agent: env.agent}
+			defer errs.flush()
+		}
 		env.Stdout, env.Stderr = out, errs
 		defer out.flush()
-		defer errs.flush()
 	}
 	if len(args) == 0 {
 		return runHelp(nil, env)

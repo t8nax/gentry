@@ -158,3 +158,23 @@ func TestMCPProtocolUnfiltered(t *testing.T) {
 		t.Errorf("answer: %s", out.String())
 	}
 }
+
+// TestFieldDescription checks that a field of a tool is described by the
+// description of its flag, and the help of the flag adds the text about the
+// command line under it.
+func TestFieldDescription(t *testing.T) {
+	c, _ := lookup("task take")
+	tl, err := newTool(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statement, _ := tl.schema["properties"].(map[string]any)["statement"].(map[string]any)
+	if got, want := statement["description"], msg.Text(msg.FlagTaskStatement); got != want {
+		t.Errorf("field statement: %q, want %q", got, want)
+	}
+	var b bytes.Buffer
+	Run([]string{"task", "take", "--help"}, Env{Stdout: &b, Stderr: &b})
+	if !strings.Contains(b.String(), msg.Text(msg.FlagTaskStatement)) || !strings.Contains(b.String(), msg.Text(msg.FlagTaskStatementCLI)) {
+		t.Errorf("help of task take:\n%s", b.String())
+	}
+}

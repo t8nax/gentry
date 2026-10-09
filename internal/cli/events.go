@@ -28,7 +28,6 @@ type eventLine struct {
 // store is created.
 func runEvents(args []string, env Env) int {
 	f := newFlags("events")
-	f.Bool("json")
 	after := f.String("after")
 	if code, done := f.parse(args, env); done {
 		return code

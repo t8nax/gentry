@@ -371,6 +371,7 @@ const (
 	FlagTaskTitle        Key = "flag.task.title"
 	ArgText              Key = "arg.text"
 	FlagTaskStatement    Key = "flag.task.statement"
+	FlagTaskStatementCLI Key = "flag.task.statement_cli"
 	FlagTaskWorktree     Key = "flag.task.worktree"
 	ArgFile              Key = "arg.file"
 	FlagTaskInput        Key = "flag.task.input"

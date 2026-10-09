@@ -70,6 +70,19 @@ type flagSpec struct {
 	// group names flags of which at most one may be given; the call line of
 	// the help shows them as one choice. The command refuses several itself.
 	group string
+	// cli is a text under the description in the help only, about the
+	// command line, such as how to pass a long value; the field of the tool
+	// is described by desc alone.
+	cli msg.Key
+}
+
+// help returns the description of f in the help: desc, then the text of the
+// command line.
+func (f flagSpec) help() string {
+	if f.cli == "" {
+		return f.desc()
+	}
+	return f.desc() + "\n" + msg.Text(f.cli)
 }
 
 // descText returns a description that is the text of k.
@@ -209,7 +222,7 @@ func commands() []command {
 						{name: "task", value: msg.ArgTask, desc: descText(msg.FlagTaskTask)},
 						{name: "scenario", value: msg.ArgScenario, desc: descText(msg.FlagTaskScenario)},
 						{name: "title", value: msg.ArgTitle, desc: descText(msg.FlagTaskTitle)},
-						{name: "statement", value: msg.ArgText, desc: descText(msg.FlagTaskStatement)},
+						{name: "statement", value: msg.ArgText, desc: descText(msg.FlagTaskStatement), cli: msg.FlagTaskStatementCLI},
 						{name: "worktree", value: msg.ArgPath, desc: descText(msg.FlagTaskWorktree)},
 						{name: "input", value: msg.ArgFile, desc: descText(msg.FlagTaskInput)},
 						jsonFlag,

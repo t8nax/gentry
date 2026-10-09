@@ -164,16 +164,9 @@ func newTool(c command) (tool, error) {
 			required = append(required, r.(string))
 		}
 	}
-	// A field is described by the lines of the help of its flag that do not
-	// name the command line, such as how to pass a long text with --input.
+	// A field is described by the description of its flag or argument; the
+	// text of the help about the command line is not the agent's.
 	describe := func(name, desc string) {
-		var lines []string
-		for _, l := range strings.Split(desc, "\n") {
-			if !strings.Contains(l, "--") && !strings.Contains(l, "gentry ") {
-				lines = append(lines, l)
-			}
-		}
-		desc = strings.Join(lines, "\n")
 		p, ok := props[name].(map[string]any)
 		if !ok {
 			p = map[string]any{"type": "string"}

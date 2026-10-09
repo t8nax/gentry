@@ -91,9 +91,7 @@ func runSetup(args []string, env Env) int {
 	settings, err := claude.SettingsPath()
 	permission := claude.PermissionFailed
 	if err == nil {
-		if permission, err = claude.AllowTools(settings); err != nil {
-			return fail(env, ioError(settings, err))
-		}
+		permission = claude.AllowTools(settings)
 	}
 	removeCallMarks()
 

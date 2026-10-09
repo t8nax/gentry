@@ -3,6 +3,7 @@ package claude
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -26,45 +27,50 @@ func TestAllowTools(t *testing.T) {
 
 	t.Run("no file", func(t *testing.T) {
 		p := filepath.Join(t.TempDir(), "claude", "settings.json")
-		if got, err := AllowTools(p); err != nil || got != PermissionAdded {
-			t.Fatalf("AllowTools: %q, %v", got, err)
+		if got := AllowTools(p); got != PermissionAdded {
+			t.Fatalf("AllowTools: %q", got)
 		}
 		want := "{\n  \"permissions\": {\n    \"allow\": [\n      \"mcp__plugin_gentry_core\"\n    ]\n  }\n}\n"
 		if got := read(t, p); got != want {
 			t.Errorf("settings:\n%s", got)
 		}
 	})
-	t.Run("other keys kept in order", func(t *testing.T) {
-		p := write(t, "\xef\xbb\xbf"+`{"model":"opus","permissions":{"deny":["Bash(rm:*)"],"allow":["Read"]},"env":{"SHOP":"1"}}`)
-		if got, err := AllowTools(p); err != nil || got != PermissionAdded {
-			t.Fatalf("AllowTools: %q, %v", got, err)
-		}
-		want := `{
-  "model": "opus",
-  "permissions": {
-    "deny": [
-      "Bash(rm:*)"
-    ],
-    "allow": [
-      "Read",
-      "mcp__plugin_gentry_core"
-    ]
-  },
-  "env": {
-    "SHOP": "1"
-  }
-}
-`
-		if got := read(t, p); got != want {
-			t.Errorf("settings:\n%s", got)
-		}
-		if got, err := AllowTools(p); err != nil || got != PermissionPresent {
-			t.Errorf("again: %q, %v", got, err)
-		}
-		if got := read(t, p); got != want {
-			t.Errorf("settings changed by a present rule:\n%s", got)
-		}
-	})
+	// The rule goes after the last rule; the rest of the text stays as it
+	// is, the escapes of other rules too.
+	for name, c := range map[string]struct{ text, want string }{
+		"lines": {
+			"\xef\xbb\xbf{\n  \"model\": \"opus\",\n  \"permissions\": {\n    \"deny\": [\"Bash(rm:*)\"],\n    \"allow\": [\n      \"Read\",\n      \"Bash(make \\u0026\\u0026 make test)\"\n    ]\n  },\n  \"env\": {\"SHOP\": \"1\"}\n}\n",
+			"\xef\xbb\xbf{\n  \"model\": \"opus\",\n  \"permissions\": {\n    \"deny\": [\"Bash(rm:*)\"],\n    \"allow\": [\n      \"Read\",\n      \"Bash(make \\u0026\\u0026 make test)\",\n      \"mcp__plugin_gentry_core\"\n    ]\n  },\n  \"env\": {\"SHOP\": \"1\"}\n}\n",
+		},
+		"one line": {
+			`{"permissions":{"allow":["Read", "Bash(make && make test)"]}}`,
+			`{"permissions":{"allow":["Read", "Bash(make && make test)", "mcp__plugin_gentry_core"]}}`,
+		},
+		"empty allow": {
+			"{\n  \"permissions\": { \"allow\": [ ] }\n}\n",
+			"{\n  \"permissions\": { \"allow\": [\"mcp__plugin_gentry_core\" ] }\n}\n",
+		},
+		"no allow": {
+			`{"model":"opus","permissions":{"deny":["Bash(make && make test)"]}}`,
+			"{\n  \"model\": \"opus\",\n  \"permissions\": {\n    \"deny\": [\n      \"Bash(make && make test)\"\n    ],\n    \"allow\": [\n      \"mcp__plugin_gentry_core\"\n    ]\n  }\n}\n",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := write(t, c.text)
+			if got := AllowTools(p); got != PermissionAdded {
+				t.Fatalf("AllowTools: %q", got)
+			}
+			if got := read(t, p); got != c.want {
+				t.Errorf("settings:\n%s\nwant:\n%s", got, c.want)
+			}
+			if got := AllowTools(p); got != PermissionPresent {
+				t.Errorf("again: %q", got)
+			}
+			if got := read(t, p); got != c.want {
+				t.Errorf("settings changed by a present rule:\n%s", got)
+			}
+		})
+	}
 	for name, text := range map[string]string{
 		"not json":      `{"model":`,
 		"not an object": `["Read"]`,
@@ -74,11 +80,49 @@ func TestAllowTools(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			p := write(t, text)
-			if got, err := AllowTools(p); err != nil || got != PermissionFailed {
-				t.Errorf("AllowTools: %q, %v", got, err)
+			if got := AllowTools(p); got != PermissionFailed {
+				t.Errorf("AllowTools: %q", got)
 			}
 			if got := read(t, p); got != text {
 				t.Errorf("settings changed: %s", got)
+			}
+		})
+	}
+	t.Run("cannot write", func(t *testing.T) {
+		dir := t.TempDir()
+		p := filepath.Join(dir, "settings.json")
+		// A directory in place of the file beside it: the file cannot be
+		// replaced.
+		if err := os.Mkdir(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if got := AllowTools(p); got != PermissionFailed {
+			t.Errorf("AllowTools: %q", got)
+		}
+	})
+	if runtime.GOOS != "windows" {
+		t.Run("mode and link", func(t *testing.T) {
+			dir := t.TempDir()
+			real := filepath.Join(dir, "dotfiles", "settings.json")
+			os.MkdirAll(filepath.Dir(real), 0o755)
+			if err := os.WriteFile(real, []byte(`{"permissions":{"allow":[]}}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(dir, "settings.json")
+			if err := os.Symlink(real, link); err != nil {
+				t.Fatal(err)
+			}
+			if got := AllowTools(link); got != PermissionAdded {
+				t.Fatalf("AllowTools: %q", got)
+			}
+			if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+				t.Errorf("the link is replaced: %v", err)
+			}
+			if fi, err := os.Stat(real); err != nil || fi.Mode().Perm() != 0o600 {
+				t.Errorf("mode %v, %v", fi.Mode(), err)
+			}
+			if got := read(t, real); got != `{"permissions":{"allow":["mcp__plugin_gentry_core"]}}` {
+				t.Errorf("settings: %s", got)
 			}
 		})
 	}

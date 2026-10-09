@@ -8,8 +8,9 @@ import "unicode/utf8"
 
 // Output of `gentry setup <tool> --json`.
 type SetupOutput struct {
-	// What happened in the tool: installed, updated or unchanged. The list is open: a
-	// client shows an unknown value as is.
+	// What happened in the tool: installed, updated, unchanged or switched (the
+	// plugin was served from another directory, see previous_dir). The list is open:
+	// a client shows an unknown value as is.
 	Action string `json:"action"`
 
 	// Directory of the integration files built for the tool.
@@ -21,6 +22,10 @@ type SetupOutput struct {
 
 	// Version of the built plugin; it changes whenever the plugin content does.
 	PluginVersion string `json:"plugin_version"`
+
+	// Directory the tool served the plugin from before it was switched to dir; only
+	// with the action switched.
+	PreviousDir *string `json:"previous_dir,omitempty,omitzero"`
 
 	// The tool Gentry was set up for, such as claude.
 	Tool string `json:"tool"`
@@ -60,6 +65,9 @@ func (j *SetupOutput) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.PluginVersion)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "plugin_version", 1)
+	}
+	if plain.PreviousDir != nil && utf8.RuneCountInString(string(*plain.PreviousDir)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "previous_dir", 1)
 	}
 	if utf8.RuneCountInString(string(plain.Tool)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "tool", 1)

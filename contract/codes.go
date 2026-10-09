@@ -20,6 +20,7 @@ const (
 	CodeIOError              = "io_error"                // reading or writing files failed; details: path
 	CodeToolNotFound         = "tool_not_found"          // the AI tool program is not found; details: tool, program
 	CodeToolFailed           = "tool_failed"             // a command of the AI tool failed; details: tool, command, output
+	CodePluginElsewhere      = "plugin_elsewhere"        // the plugin in the AI tool is served from an existing directory of another data root; setup --switch moves it; details: tool, registered, dir
 	CodeStateNewer           = "state_newer"             // the state store was created by a newer Gentry; details: path, schema, supported
 	CodeStateUnavailable     = "state_unavailable"       // the state store cannot be opened or written, even after retries; details: path
 	CodeProjectExists        = "project_exists"          // the project is connected with another knowledge or main worktree; details: project, knowledge, main_worktree

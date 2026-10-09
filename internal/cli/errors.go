@@ -216,6 +216,16 @@ func toolFailed(tool, command, output string) failure {
 	}
 }
 
+func pluginElsewhere(tool, registered, dir string) failure {
+	return failure{
+		exit:    contract.ExitError,
+		code:    contract.CodePluginElsewhere,
+		message: msg.Text(msg.ErrPluginElsewhere, registered, dir),
+		hint:    msg.Text(msg.HintPluginElsewhere, tool),
+		details: map[string]any{"tool": tool, "registered": registered, "dir": dir},
+	}
+}
+
 func missingAction(g command) failure {
 	return missingArgument(g.name, "action", msg.Text(msg.ErrActionMissing, g.name),
 		msg.Text(msg.HintActions, g.name))

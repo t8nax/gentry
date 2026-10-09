@@ -8,6 +8,10 @@ import "fmt"
 // Output of `gentry library apply --json`: the draft of the library became active
 // with a commit of the process repository.
 type LibraryApplyOutput struct {
+	// What the layout of subagents in the free worktrees of every project did;
+	// present only when there is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// The commit that applied the library.
 	Applied Applied `json:"applied"`
 

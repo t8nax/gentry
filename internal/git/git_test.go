@@ -118,3 +118,31 @@ func TestChanged(t *testing.T) {
 		t.Errorf("Changed = %q, %v; want %q", files, err, want)
 	}
 }
+
+func TestTrackedAndExcludeFile(t *testing.T) {
+	root, _ := paths.Canonical(t.TempDir())
+	shop := gittest.Repo(t, filepath.Join(root, "shop"))
+	fix := gittest.Worktree(t, shop, filepath.Join(root, "shop-fix"), "fix")
+	agents := filepath.Join(fix, ".claude", "agents")
+	os.MkdirAll(agents, 0o755)
+	os.WriteFile(filepath.Join(agents, "reviewer.md"), []byte("tracked"), 0o644)
+	os.WriteFile(filepath.Join(agents, "tester.md"), []byte("untracked"), 0o644)
+	gittest.Run(t, fix, "add", ".claude/agents/reviewer.md")
+	gittest.Run(t, fix, "commit", "--quiet", "-m", "reviewer")
+
+	got, err := Tracked(filepath.Join(fix, ".claude"), []string{".claude/agents/reviewer.md", ".claude/agents/tester.md", ".claude/agents/none.md"})
+	if err != nil || len(got) != 1 || !got[".claude/agents/reviewer.md"] {
+		t.Errorf("Tracked = %v, %v; want reviewer.md alone", got, err)
+	}
+
+	main, err := ExcludeFile(shop)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(shop, ".git", "info", "exclude"); !paths.Same(main, want) {
+		t.Errorf("ExcludeFile(main) = %q, want %q", main, want)
+	}
+	if linked, err := ExcludeFile(fix); err != nil || !paths.Same(linked, main) {
+		t.Errorf("ExcludeFile(linked) = %q, %v; want the shared %q", linked, err, main)
+	}
+}

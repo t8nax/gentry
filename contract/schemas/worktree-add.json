@@ -23,6 +23,10 @@
       "description": "What happened: added or unchanged. The list is open: a client shows an unknown value as is.",
       "type": "string",
       "minLength": 1
+    },
+    "agents": {
+      "description": "What the layout of subagents in the worktree added did; present only when there is something to tell.",
+      "$ref": "./agents-layout.json"
     }
   },
   "required": ["path", "project", "main", "action"]

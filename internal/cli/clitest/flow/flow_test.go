@@ -172,7 +172,8 @@ func TestFlowDraftText(t *testing.T) {
 	if stdout != want {
 		t.Errorf("show --draft:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := clitest.Run("flow", "apply"); clitest.Masked(stdout) != "Изменения флоу применены.\nПроект: shop\nФлоу применён: <время>\n" {
+	if _, stdout, _ := clitest.Run("flow", "apply"); clitest.Masked(stdout) != "Изменения флоу применены.\nПроект: shop\nФлоу применён: <время>\n\n"+
+		"Субагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n" {
 		t.Errorf("apply:\n%s", stdout)
 	}
 	process := filepath.Dir(p.Library)

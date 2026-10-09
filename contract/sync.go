@@ -5,6 +5,10 @@ package contract
 // What the synchronization with the remote repository of the process did inside a
 // command. Only the fields with something to tell are present.
 type Sync struct {
+	// What the layout of subagents in the free worktrees of the projects whose flow
+	// or library was received did; present only when there is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// Kinds changed on both machines that could not be brought together: the variant
 	// of the other machine is active, the changes of this machine are a draft.
 	Conflicts []ProcessItem `json:"conflicts,omitempty,omitzero"`

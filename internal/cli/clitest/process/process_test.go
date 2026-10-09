@@ -138,7 +138,8 @@ func TestProcessSyncText(t *testing.T) {
 	if clitest.Masked(stdout) != want {
 		t.Errorf("library diff:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := clitest.Run("library", "apply"); clitest.Masked(stdout) != "Изменения библиотеки применены.\nБиблиотека применена: <время>\n" {
+	if _, stdout, _ := clitest.Run("library", "apply"); clitest.Masked(stdout) != "Изменения библиотеки применены.\nБиблиотека применена: <время>\n\n"+
+		"Субагенты разложены в свободные рабочие копии.\nИзменения вступят в силу со следующей сессии агента.\n" {
 		t.Errorf("library apply:\n%s", stdout)
 	}
 	m.onB()
@@ -389,4 +390,67 @@ func TestLibraryBreaksFlow(t *testing.T) {
 	clitest.WriteDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания ревью записаны и разобраны\nexecutor: orchestrator\ninclude: [review-checklist]\n"})
 	clitest.MustRun(t, "flow", "apply")
 	clitest.MustRun(t, "library", "apply")
+}
+
+func TestSyncLaysOutFreeWorktrees(t *testing.T) {
+	m := twoMachines(t)
+	shop := clitest.MustWd(t)
+	file := filepath.Join(shop, ".claude", "agents", "reviewer.md")
+
+	m.onA()
+	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
+	clitest.MustRun(t, "library", "apply")
+	os.Remove(file)
+
+	m.onB()
+	_, stdout, _ := clitest.Run("process", "sync")
+	want := "Процесс синхронизирован.\n\nПолучено:\n  библиотека субагентов\n\n" +
+		"Субагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n"
+	if stdout != want {
+		t.Errorf("process sync:\n%s\nwant:\n%s", stdout, want)
+	}
+	b, err := os.ReadFile(file)
+	if err != nil || !strings.Contains(string(b), "Проверить изменения и тексты.") {
+		t.Errorf("reviewer after the sync: %q, %v", b, err)
+	}
+}
+
+func TestImplicitSyncLaysOut(t *testing.T) {
+	m := twoMachines(t)
+	shop := clitest.MustWd(t)
+	file := filepath.Join(shop, ".claude", "agents", "reviewer.md")
+
+	m.onA()
+	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
+	clitest.MustRun(t, "library", "apply")
+	os.Remove(file)
+
+	// flow show takes the library on its way: the block goes with the
+	// messages of the synchronization, before the output.
+	m.onB()
+	_, _, stderr := clitest.Run("flow", "show")
+	if !strings.Contains(stderr, "\nСубагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n") {
+		t.Errorf("flow show, stderr:\n%s", stderr)
+	}
+	if !clitest.FileExists(file) {
+		t.Error("reviewer is not laid out")
+	}
+}
+
+func TestProjectAddWithFlow(t *testing.T) {
+	m := twoMachines(t)
+	shop := clitest.MustWd(t)
+	file := filepath.Join(shop, ".claude", "agents", "reviewer.md")
+	os.Remove(file)
+
+	// A third machine takes the process first, then connects the shop.
+	t.Setenv(home.EnvVar, filepath.Join(filepath.Dir(m.a), "home-c"))
+	clitest.MustRun(t, "process", "remote", m.remote)
+	_, stdout, _ := clitest.Run("project", "add", "--knowledge", "../shop-knowledge")
+	if !strings.Contains(stdout, "\n\nСубагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n") {
+		t.Errorf("project add:\n%s", stdout)
+	}
+	if !clitest.FileExists(file) {
+		t.Error("reviewer is not laid out")
+	}
 }

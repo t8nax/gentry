@@ -9,6 +9,10 @@ import "unicode/utf8"
 // Output of `gentry task close --json`: the task is closed and its worktree is
 // free.
 type TaskCloseOutput struct {
+	// What the layout of subagents in the worktree the task released did; present
+	// only when there is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// The task closed.
 	Task Task `json:"task"`
 

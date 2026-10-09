@@ -176,7 +176,9 @@ func open(path string, readOnly bool) (*Store, error) {
 	if err != nil {
 		return nil, &UnavailableError{Path: path, Err: err}
 	}
-	// One connection per process: transactions of one gentry run never overlap.
+	// One connection per store: its transactions never overlap. A command may
+	// open a second store for reading beside it, as the layout of subagents
+	// does; in WAL a reader and a writer do not block each other.
 	db.SetMaxOpenConns(1)
 	return &Store{db: db, path: path}, nil
 }

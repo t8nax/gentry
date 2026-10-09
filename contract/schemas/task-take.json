@@ -12,6 +12,10 @@
     "sync": {
       "description": "What the synchronization of the command did; present only when there is something to tell.",
       "$ref": "./sync.json"
+    },
+    "agents": {
+      "description": "What the layout of subagents in the worktree of the task did; present only when there is something to tell.",
+      "$ref": "./agents-layout.json"
     }
   },
   "required": ["task"]

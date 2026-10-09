@@ -20,6 +20,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 
+	"github.com/t8nax/gentry/internal/filelock"
 	"github.com/t8nax/gentry/internal/git"
 	"github.com/t8nax/gentry/internal/paths"
 )
@@ -140,7 +141,7 @@ func Open(dir string) (*Repo, error) {
 // Close releases the repository.
 func (r *Repo) Close() {
 	if r.lock != nil {
-		unlock(r.lock)
+		filelock.Unlock(r.lock)
 		r.lock.Close()
 		r.lock = nil
 	}
@@ -153,7 +154,7 @@ func (r *Repo) takeLock(dotGit string) error {
 	}
 	deadline := time.Now().Add(LockWait)
 	for {
-		ok, err := tryLock(f)
+		ok, err := filelock.TryLock(f)
 		if err != nil {
 			f.Close()
 			return err

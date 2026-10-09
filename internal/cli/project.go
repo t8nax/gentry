@@ -70,6 +70,7 @@ func runProjectAdd(args []string, env Env) int {
 	}
 
 	p := res.Project
+	layout, laidPool := layoutAdded(st, r, p.ID, res.Added)
 	if *asJSON {
 		out := contract.ProjectAddOutput{
 			Project:          p.ID,
@@ -79,6 +80,7 @@ func runProjectAdd(args []string, env Env) int {
 			MainWorktree:     p.MainWorktree,
 			Worktrees:        append([]string{}, res.Added...),
 			Action:           actionAdded,
+			Agents:           layout.json(laidPool),
 		}
 		if res.Unchanged {
 			out.Action = actionUnchanged
@@ -104,6 +106,7 @@ func runProjectAdd(args []string, env Env) int {
 			fmt.Fprintln(&b, msg.Text(msg.ProjectWorktreeAdded, w))
 		}
 	}
+	writeLayout(&b, layout, false, p.ID)
 	// Other worktrees of the repository are not added on their own: the
 	// operator decides where Gentry may work.
 	if len(res.Unpooled) > 0 {

@@ -62,7 +62,8 @@ jobs:
       - name: go test
         run: go test -short $(go list ./... | grep -v '/cmd/gentry$')
 
-      # The tests short mode skips: startup time, hook budget and concurrent
+      # All the tests of cmd/gentry, the only place of CI they run in, with
+      # those short mode skips: startup time, hook budget and concurrent
       # processes, all on one build of gentry.
       - name: binary tests
         run: go test -count=1 -v ./cmd/gentry

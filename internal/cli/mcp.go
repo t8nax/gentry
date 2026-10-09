@@ -335,7 +335,7 @@ func (t tool) call(raw json.RawMessage) (text string, failed bool) {
 		return msg.Text(msg.ErrToolFields, err.Error()), true
 	}
 	var out bytes.Buffer
-	env := Env{Stdout: &out, Stderr: &out, agent: true, oneOutput: true}
+	env := Env{Stdout: &out, Stderr: &out, agent: true}
 	if stdin != nil {
 		env.Stdin = bytes.NewReader(stdin)
 	}
@@ -395,3 +395,6 @@ func runMCP(args []string, env Env) int {
 	}
 	return contract.ExitOK
 }
+
+// isService reports whether c is a service command: it is no tool.
+func isService(c command) bool { return slices.Contains(serviceCommands, c.name) }

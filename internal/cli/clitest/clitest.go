@@ -75,12 +75,6 @@ func byAgent(args []string) bool {
 	return len(args) > 1 && slices.Contains(agentOnly, args[0]+" "+args[1])
 }
 
-// InChannel states text as the command of args prints it in its channel: the
-// hints of the help name tools for a command only the agent runs.
-func InChannel(text string, args []string) string {
-	return cli.Hints(text, byAgent(args))
-}
-
 // run runs a command of the operator, or of the agent for a command of
 // agentOnly.
 func run(args []string, env cli.Env) int {

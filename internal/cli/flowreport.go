@@ -34,7 +34,8 @@ func (d diffView) report(now time.Time) string {
 			fmt.Fprintf(&b, "- %s\n", p.Message)
 		}
 	}
-	if hints := d.hints(); len(hints) > 0 {
+	// The file is for the operator: its hints name commands.
+	if hints := renderHints(d.hints(), cliChannel); len(hints) > 0 {
 		b.WriteString("\n")
 		writeLines(&b, hints)
 	}

@@ -69,7 +69,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	var b strings.Builder
 	if in.Tool == claude.Tool && pluginStale() {
 		fmt.Fprintln(&b, msg.Text(msg.IntroPluginStale))
-		fmt.Fprintln(&b, msg.Text(msg.HintIntroPluginStale))
+		fmt.Fprintln(&b, introHint(hintOf(msg.HintIntroPluginStale).set("tool", claude.Tool)))
 		b.WriteString("\n")
 	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskProject, wt.Project))
@@ -77,7 +77,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	if !taken {
 		fmt.Fprintln(&b, msg.Text(msg.IntroNoTask))
 		b.WriteString("\n")
-		fmt.Fprintln(&b, msg.Text(msg.HintIntroTake, skillName(in.Tool, agenttext.WorkingOnTask)))
+		fmt.Fprintln(&b, introHint(hintOf(msg.HintIntroTake, skillName(in.Tool, agenttext.WorkingOnTask))))
 		_, err := io.WriteString(w, b.String())
 		return err
 	}
@@ -96,9 +96,15 @@ func introduce(w io.Writer, in hook.Input) error {
 		fmt.Fprintln(&b, msg.Text(msg.ProgressLine, progressText(v.Progress)))
 	}
 	b.WriteString("\n")
-	fmt.Fprintln(&b, msg.Text(msg.HintIntroContinue, skillName(in.Tool, agenttext.WorkingOnTask)))
+	fmt.Fprintln(&b, introHint(hintOf(msg.HintIntroContinue, skillName(in.Tool, agenttext.WorkingOnTask))))
 	_, err = io.WriteString(w, b.String())
 	return err
+}
+
+// introHint is h for the agent: the introduction is the agent's.
+func introHint(h hint) string {
+	line, _ := h.render(agentChannel)
+	return line
 }
 
 // skillRefs name skills the way of each tool.

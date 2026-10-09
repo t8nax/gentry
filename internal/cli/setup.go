@@ -32,16 +32,15 @@ var setupMessages = map[string]msg.Key{
 func runSetup(args []string, env Env) int {
 	f := newFlags("setup")
 	switchFlag := f.Bool("switch")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
 	switch {
 	case len(f.args) == 0:
-		return fail(env, missingArgument("setup", "tool", msg.Text(msg.ErrSetupToolMissing), msg.Text(msg.HintCommandHelp, "setup")))
+		return fail(env, missingArgument("setup", "tool", msg.Text(msg.ErrSetupToolMissing), helpHint(msg.HintCommandHelp, "setup")))
 	case !slices.Contains(tools, f.args[0]):
 		t := f.args[0]
-		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), msg.Text(msg.HintCommandHelp, "setup")))
+		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), helpHint(msg.HintCommandHelp, "setup")))
 	}
 
 	dir, err := home.Integration(claude.Tool)
@@ -102,23 +101,24 @@ func runSetup(args []string, env Env) int {
 	if previous != "" {
 		out.Action, out.PreviousDir = setupSwitched, &previous
 	}
-	if *asJSON {
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	if previous != "" {
-		fmt.Fprintln(env.Stdout, msg.Text(msg.SetupSwitched, previous))
+	return emit(env, out, setupText)
+}
+
+// setupText prints what setup did with the plugin, the rule of permission
+// in the settings of the user and whether the plugin is enabled.
+func setupText(p *page, out contract.SetupOutput) {
+	if out.PreviousDir != nil {
+		fmt.Fprintln(p, msg.Text(msg.SetupSwitched, *out.PreviousDir))
 	} else {
-		fmt.Fprintln(env.Stdout, msg.Text(setupMessages[r.Action]))
+		fmt.Fprintln(p, msg.Text(setupMessages[out.Action]))
 	}
 	// A message after a field line, such as the previous directory of a
 	// switch, is kept apart from it by a blank line.
-	afterField := previous != ""
+	afterField := out.PreviousDir != nil
+	permission := *out.Permission
 	if permission != claude.PermissionPresent {
 		if afterField {
-			fmt.Fprintln(env.Stdout)
+			fmt.Fprintln(p)
 		}
 		k := msg.SetupPermissionAdded
 		switch permission {
@@ -127,26 +127,27 @@ func runSetup(args []string, env Env) int {
 		case claude.PermissionUnwritten:
 			k = msg.SetupPermissionUnwritten
 		}
-		fmt.Fprintln(env.Stdout, msg.Text(k))
-		if settings != "" {
-			fmt.Fprintln(env.Stdout, msg.Text(msg.SetupSettings, settings))
+		fmt.Fprintln(p, msg.Text(k))
+		if out.Settings != nil {
+			fmt.Fprintln(p, msg.Text(msg.SetupSettings, *out.Settings))
 			afterField = true
 		}
 	}
-	if !r.Enabled {
+	if !out.Enabled {
 		if afterField {
-			fmt.Fprintln(env.Stdout)
+			fmt.Fprintln(p)
 		}
-		fmt.Fprintln(env.Stdout, msg.Text(msg.SetupDisabled))
+		fmt.Fprintln(p, msg.Text(msg.SetupDisabled))
 	}
 	if permission == claude.PermissionFailed || permission == claude.PermissionUnwritten {
 		// The hint joins the hint block of a disabled plugin.
-		if r.Enabled {
-			fmt.Fprintln(env.Stdout)
+		if !out.Enabled {
+			line, _ := hintOf(msg.HintSetupPermission, claude.PermissionRule).render(p.ch)
+			fmt.Fprintln(p, line)
+			return
 		}
-		fmt.Fprintln(env.Stdout, msg.Text(msg.HintSetupPermission, claude.PermissionRule))
+		p.hints(hintOf(msg.HintSetupPermission, claude.PermissionRule))
 	}
-	return contract.ExitOK
 }
 
 // removeCallMarks removes the marks of calls the hooks of an earlier Gentry

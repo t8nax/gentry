@@ -115,7 +115,7 @@ func TestSetupToolErrors(t *testing.T) {
 		t.Errorf("missing claude: exit code %d, output %s", code, stdout)
 	}
 	_, _, stderr := run("setup", "claude")
-	want := msg.Text(msg.ErrToolNotFound, "claude") + "\n\n" + msg.Text(msg.HintToolNotFound, "Claude Code", "claude") + "\n"
+	want := msg.Text(msg.ErrToolNotFound, "claude") + "\n\n" + HintFor(msg.HintToolNotFound, "tool", "claude", "Claude Code") + "\n"
 	if stderr != want {
 		t.Errorf("stderr %q, want %q", stderr, want)
 	}
@@ -242,7 +242,7 @@ func TestSetupPluginElsewhere(t *testing.T) {
 
 	before := readFake(t).Log
 	code, stdout, stderr := setupFrom(t, b)
-	want := msg.Text(msg.ErrPluginElsewhere, from, to) + "\n\n" + msg.Text(msg.HintPluginElsewhere, "claude") + "\n"
+	want := msg.Text(msg.ErrPluginElsewhere, from, to) + "\n\n" + HintFor(msg.HintPluginElsewhere, "tool", "claude") + "\n"
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("exit code %d, stdout %q, stderr %q; want %q", code, stdout, stderr, want)
 	}

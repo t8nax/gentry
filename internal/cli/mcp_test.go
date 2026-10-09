@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -157,110 +156,5 @@ func TestMCPProtocolUnfiltered(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `gentry task close`) || !strings.Contains(out.String(), `"isError":true`) {
 		t.Errorf("answer: %s", out.String())
-	}
-}
-
-// placeholders of a text of the catalog, filled to check its lines.
-var placeholders = regexp.MustCompile(`%[sdv]`)
-
-// TestHintsOfCatalog checks every text of the catalog that ends a line with a
-// command: the agent gets a tool or nothing, the command line gets no command
-// only the agent runs.
-func TestHintsOfCatalog(t *testing.T) {
-	for _, k := range msg.Keys() {
-		text := placeholders.ReplaceAllString(msg.Text(k), "SHOP-1")
-		for _, line := range strings.Split(text, "\n") {
-			m := hintLine.FindStringSubmatch(line)
-			if m == nil {
-				continue
-			}
-			action, got := hintFor(line, true)
-			if action == keepLine {
-				t.Errorf("%s: the agent gets a command: %q", k, line)
-			}
-			if action == replaceLine && (strings.Contains(got, "gentry ") || strings.Contains(got, "--") || strings.Contains(got, "<")) {
-				t.Errorf("%s: %q becomes %q", k, line, got)
-			}
-			action, _ = hintFor(line, false)
-			words := commandWords(m[2])
-			if c, ok := lookup(strings.Join(words[:min(2, len(words))], " ")); ok && c.agentOnly && action != dropLine {
-				t.Errorf("%s: the command line keeps %q", k, line)
-			}
-		}
-	}
-}
-
-func TestToolHints(t *testing.T) {
-	for line, want := range map[string]string{
-		"Закрыть этап: gentry stage exit --kind <вид> --text <текст>":                             "Закрыть этап: stage_exit (kind, text)",
-		"Посмотреть задачу: gentry task show SHOP-1":                                              "Посмотреть задачу: task_show (task: SHOP-1)",
-		"Снять шаг: gentry step drop <номер> --reason <обоснование>":                              "Снять шаг: step_drop (step, reason)",
-		"Отметить шаг выполненным: gentry step done <как проверено>":                              "Отметить шаг выполненным: step_done (step)",
-		"Записать разрешение оператора: gentry operator record --answer <ответ> --allow-return x": "Записать разрешение оператора: operator_record (answer, allow_return: x)",
-		"Посмотреть черновик: gentry flow show --draft":                                           "Посмотреть черновик: flow_show (draft)",
-		"Посмотреть этап: gentry stage show --task SHOP-1":                                        "Посмотреть этап: stage_show (task: SHOP-1)",
-		msg.Text(msg.HintStateNewer): msg.Text(msg.HintStateNewerAgent),
-		"Посмотреть попытку: gentry task attempts <попытка>":                  "Посмотреть попытку: task_attempts (attempt)",
-		"Посмотреть попытку: gentry task attempts SHOP-1 <попытка>":           "Посмотреть попытку: task_attempts (task: SHOP-1, attempt)",
-		msg.Text(msg.ErrInputInvalid, "поле «step» должно быть целым числом"): msg.Text(msg.ErrToolFields, "поле «step» должно быть целым числом"),
-	} {
-		if action, got := hintFor(line, true); action != replaceLine || got != want {
-			t.Errorf("%q: %v %q, want %q", line, action, got, want)
-		}
-	}
-	for _, line := range []string{"Посмотреть описание команды: gentry step add --help", "Посмотреть перечень команд: gentry --help", "Посмотреть перечень действий: gentry task --help"} {
-		if action, _ := hintFor(line, true); action != dropLine {
-			t.Errorf("%q is not dropped for the agent", line)
-		}
-	}
-	for line, want := range map[string]hintAction{
-		"Закрыть задачу: gentry task close":     dropLine,
-		"Посмотреть задачу: gentry task show":   keepLine,
-		"Подключить проект: gentry project add": keepLine,
-		"Путь: C:\\gentry tools":                keepLine,
-	} {
-		if action, _ := hintFor(line, false); action != want {
-			t.Errorf("command line: %q: %v, want %v", line, action, want)
-		}
-	}
-}
-
-func TestHintFilter(t *testing.T) {
-	for text, want := range map[string]string{
-		// A hint block dropped at the end leaves no blank line.
-		"Сценарий пройден.\n\nЗакрыть задачу: gentry task close\n": "Сценарий пройден.\n",
-		// A blank line before a kept hint stays.
-		"Готово.\n\nЗакрыть задачу: gentry task close\nПосмотреть задачу: gentry task show\n": "Готово.\n\nПосмотреть задачу: gentry task show\n",
-		// A blank line at the end with nothing dropped stays.
-		"Предупреждение.\n\n": "Предупреждение.\n\n",
-		// Words of the operator and the agent pass as they are.
-		"Решено: gentry task close не вызывать до ревью\n": "Решено: gentry task close не вызывать до ревью\n",
-		"Проверка: gentry step add работает\n":             "Проверка: gentry step add работает\n",
-		"Без конца строки":                                 "Без конца строки",
-	} {
-		var b bytes.Buffer
-		f := &hintFilter{out: &b}
-		// Written in pieces, as a command prints.
-		for _, piece := range strings.SplitAfter(text, " ") {
-			f.Write([]byte(piece))
-		}
-		f.flush()
-		if b.String() != want {
-			t.Errorf("%q: %q, want %q", text, b.String(), want)
-		}
-	}
-}
-
-// TestAgentTexts checks that the texts the agent gets in its own words take
-// their values as strings.
-func TestAgentTexts(t *testing.T) {
-	for k, a := range agentTexts {
-		for _, key := range []msg.Key{k, a} {
-			for _, v := range verbs.FindAllString(msg.Text(key), -1) {
-				if v != "%s" {
-					t.Errorf("%s has %s", key, v)
-				}
-			}
-		}
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"slices"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
@@ -25,9 +24,6 @@ type Env struct {
 	// agent is set for the commands gentry mcp runs for the agent: commands
 	// only of the agent run, and hints name tools.
 	agent bool
-	// oneOutput tells that Stdout and Stderr are one output, as the answer
-	// of a tool is.
-	oneOutput bool
 }
 
 // command is a gentry command. Its arguments and flags are declared here and
@@ -467,10 +463,6 @@ func (g command) actionNames() []string {
 	return names
 }
 
-// unfiltered are the commands whose output is no text for a person: the
-// protocol of the tools, the hooks and the journal of events.
-var unfiltered = []string{"mcp", "hook", "events"}
-
 // RunAgent executes the command given by args as a tool of the agent does:
 // commands only of the agent run, and hints name tools.
 func RunAgent(args []string, env Env) int {
@@ -482,19 +474,6 @@ func RunAgent(args []string, env Env) int {
 // and returns the exit code.
 func Run(args []string, env Env) int {
 	env.json = hasJSONFlag(args)
-	if !env.json && !(len(args) > 0 && slices.Contains(unfiltered, args[0])) {
-		// Hints name tools for the agent; the command line has no hints of
-		// commands only the agent runs. One output gets one filter, so that
-		// blank lines keep their place between its lines.
-		out := &hintFilter{out: env.Stdout, agent: env.agent}
-		errs := out
-		if !env.oneOutput {
-			errs = &hintFilter{out: env.Stderr, agent: env.agent}
-			defer errs.flush()
-		}
-		env.Stdout, env.Stderr = out, errs
-		defer out.flush()
-	}
 	if len(args) == 0 {
 		return runHelp(nil, env)
 	}
@@ -555,7 +534,6 @@ func hasJSONFlag(args []string) bool {
 
 func runVersion(args []string, env Env) int {
 	f := newFlags("version")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -565,15 +543,11 @@ func runVersion(args []string, env Env) int {
 		StateSchema:     state.SchemaVersion(),
 		KnowledgeFormat: project.KnowledgeFormat,
 	}
-	if *asJSON {
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	// The contract and format versions are for programs: only --json has them.
-	fmt.Fprintln(env.Stdout, msg.Text(msg.VersionGentry, out.Gentry))
-	return contract.ExitOK
+	return emit(env, out, func(p *page, out contract.VersionOutput) {
+		// The contract and format versions are for programs: only --json has
+		// them.
+		fmt.Fprintln(p, msg.Text(msg.VersionGentry, out.Gentry))
+	})
 }
 
 // writeJSON prints v as the single JSON object of a --json command.

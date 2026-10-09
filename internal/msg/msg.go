@@ -40,6 +40,21 @@ func Keys() []Key {
 	return keys
 }
 
+// Override replaces the text for k in the language in use and returns the
+// function that puts the text back. Tests use it to check that a change of
+// the words reaches every channel; the program never changes a text.
+func Override(k Key, text string) (restore func()) {
+	old, ok := current.texts[k]
+	current.texts[k] = text
+	return func() {
+		if ok {
+			current.texts[k] = old
+		} else {
+			delete(current.texts, k)
+		}
+	}
+}
+
 // Count returns the text for k in the plural form matching n, formatted with
 // n followed by args.
 func Count(k Key, n int, args ...any) string {

@@ -15,7 +15,6 @@ import (
 
 func runLibraryDiff(args []string, env Env) int {
 	f := newFlags("library diff")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -36,32 +35,32 @@ func runLibraryDiff(args []string, env Env) int {
 	if err != nil {
 		return fail(env, libraryFailure(err))
 	}
-	if *asJSON {
-		out := contract.LibraryDiffOutput{Dir: r.KindDir(process.Library), Applied: appliedJSON(res.Applied), Changes: []contract.LibraryChange{}, Sync: syncJSON(s, synced)}
-		for _, c := range res.Changes {
-			out.Changes = append(out.Changes, contract.LibraryChange{Id: c.ID, Change: contract.LibraryDiffOutputChangesElemChange(c.Change)})
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.LibraryAppliedAt, appliedText(res.Applied)))
-	b.WriteString("\n")
-	var lines []string
+	out := contract.LibraryDiffOutput{Dir: r.KindDir(process.Library), Applied: appliedJSON(res.Applied), Changes: []contract.LibraryChange{}, Sync: syncJSON(s, synced)}
 	for _, c := range res.Changes {
-		lines = append(lines, msg.Text(msg.FlowChange, msg.Text(msg.FlowObjAgent, c.ID), changeWord(flow.Change{Object: flow.ObjectAgent, Change: c.Change})))
+		out.Changes = append(out.Changes, contract.LibraryChange{Id: c.ID, Change: contract.LibraryDiffOutputChangesElemChange(c.Change)})
 	}
-	writeList(&b, msg.Text(msg.FlowChanges), lines)
-	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintLibraryApply))
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
+	return emit(env, out, libraryDiffText)
+}
+
+// libraryDiffText prints when the library was applied and the changes of its
+// draft.
+func libraryDiffText(p *page, out contract.LibraryDiffOutput) {
+	at := msg.Text(msg.ValueNone)
+	if out.Applied != nil {
+		at = localTime(out.Applied.Time)
+	}
+	fmt.Fprintln(p, msg.Text(msg.LibraryAppliedAt, at))
+	p.WriteString("\n")
+	var lines []string
+	for _, c := range out.Changes {
+		lines = append(lines, msg.Text(msg.FlowChange, msg.Text(msg.FlowObjAgent, c.Id), changeWord(flow.Change{Object: flow.ObjectAgent, Change: string(c.Change)})))
+	}
+	writeList(&p.Builder, msg.Text(msg.FlowChanges), lines)
+	p.hints(hintOf(msg.HintLibraryApply))
 }
 
 func runLibraryApply(args []string, env Env) int {
 	f := newFlags("library apply")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -90,22 +89,16 @@ func runLibraryApply(args []string, env Env) int {
 	synced := syncDone(env, r, s, true)
 	layout, laidPool := layoutFree(r, libraryProjects(r))
 	sent := s.Remote && !s.Unavailable
-	if *asJSON {
-		out := contract.LibraryApplyOutput{Applied: *appliedJSON(&applied), Sent: sent, Sync: syncJSON(s, synced), Agents: layout.json(laidPool)}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	fmt.Fprintln(env.Stdout, msg.Text(msg.LibraryApplied))
-	fmt.Fprintln(env.Stdout, msg.Text(msg.LibraryAppliedAt, localTime(applied.Time)))
-	writeLayout(env.Stdout, layout, false, "")
-	return contract.ExitOK
+	out := contract.LibraryApplyOutput{Applied: *appliedJSON(&applied), Sent: sent, Sync: syncJSON(s, synced), Agents: layout.json(laidPool)}
+	return emit(env, out, func(p *page, out contract.LibraryApplyOutput) {
+		fmt.Fprintln(p, msg.Text(msg.LibraryApplied))
+		fmt.Fprintln(p, msg.Text(msg.LibraryAppliedAt, localTime(out.Applied.Time)))
+		writeLayout(p, out.Agents, false, "")
+	})
 }
 
 func runLibraryDiscard(args []string, env Env) int {
 	f := newFlags("library discard")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -118,14 +111,9 @@ func runLibraryDiscard(args []string, env Env) int {
 		return fail(env, libraryFailure(err))
 	}
 	record(event{typ: flow.EventLibraryDraftDiscarded})
-	if *asJSON {
-		if err := writeJSON(env, contract.LibraryDiscardOutput{Dir: r.KindDir(process.Library)}); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	fmt.Fprintln(env.Stdout, msg.Text(msg.LibraryDiscarded))
-	return contract.ExitOK
+	return emit(env, contract.LibraryDiscardOutput{Dir: r.KindDir(process.Library)}, func(p *page, out contract.LibraryDiscardOutput) {
+		fmt.Fprintln(p, msg.Text(msg.LibraryDiscarded))
+	})
 }
 
 // libraryFailure turns an error of a library command into a failure.

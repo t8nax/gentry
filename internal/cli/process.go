@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"slices"
 	"strings"
@@ -72,80 +71,117 @@ func syncDone(env Env, r *process.Repo, s *process.Sync, apply bool) *contract.A
 		return nil
 	}
 	recordSync(s)
-	if !env.json {
-		writeSync(env.Stderr, r, s, syncText{apply: apply, received: true, conflicts: true})
-	}
-	o, p := layoutFree(r, syncProjects(r, s))
-	if !env.json {
-		writeFreeLayout(env.Stderr, o, p)
-	}
-	return o.json(p)
+	cs, x := syncJSON(s, nil), syncExtraOf(r, s, apply)
+	warn(env, func(p *page) { writeSync(p, cs, x, syncText{received: true, conflicts: true}) })
+	o, pool := layoutFree(r, syncProjects(r, s))
+	l, projects := o.json(pool), projectsOf(pool)
+	warn(env, func(p *page) { writeFreeLayout(p, l, projects) })
+	return l
 }
 
 // syncText selects what writeSync prints.
 type syncText struct {
-	apply     bool // a command that commits: the sending is deferred
 	received  bool // what was received
 	conflicts bool // the conflicts
 }
 
-// writeSync prints what the synchronization did as blocks, each followed by
-// an empty line.
-func writeSync(w io.Writer, r *process.Repo, s *process.Sync, what syncText) {
-	var b strings.Builder
-	block := func() { b.WriteString("\n") }
-	if s.Unavailable {
-		if what.apply {
-			fmt.Fprintln(&b, msg.Text(msg.SyncDeferred))
+// syncExtra is what the text of a synchronization has apart from the
+// contract: whether the command commits, for which the sending is deferred,
+// the folder and the objects of each conflict and the problems of each draft
+// restored, in the order of the contract.
+type syncExtra struct {
+	apply     bool
+	conflicts []conflictExtra
+	restored  [][]string
+}
+
+// conflictExtra is the folder of the variants of the other machine and the
+// objects both machines changed.
+type conflictExtra struct {
+	dir     string
+	objects []string
+}
+
+// syncExtraOf returns the text of s that the contract has not.
+func syncExtraOf(r *process.Repo, s *process.Sync, apply bool) syncExtra {
+	x := syncExtra{apply: apply}
+	for _, c := range s.Conflicts {
+		x.conflicts = append(x.conflicts, conflictExtraOf(r, c))
+	}
+	for _, rs := range s.Restored {
+		x.restored = append(x.restored, rs.Problems)
+	}
+	return x
+}
+
+// conflictExtraOf returns the folder and the objects of conflict c.
+func conflictExtraOf(r *process.Repo, c process.Conflict) conflictExtra {
+	x := conflictExtra{dir: r.ConflictDir(c.Kind)}
+	for _, o := range flow.ObjectsOf(c.Kind, c.Paths) {
+		x.objects = append(x.objects, changeObject(o))
+	}
+	return x
+}
+
+// writeSync prints what the synchronization s did as blocks, each followed
+// by an empty line; nil did nothing.
+func writeSync(p *page, s *contract.Sync, x syncExtra, what syncText) {
+	if s == nil {
+		return
+	}
+	block := func() { p.WriteString("\n") }
+	if s.Unavailable != nil && *s.Unavailable {
+		if x.apply {
+			fmt.Fprintln(p, msg.Text(msg.SyncDeferred))
 		} else {
-			fmt.Fprintln(&b, msg.Text(msg.SyncSkipped))
+			fmt.Fprintln(p, msg.Text(msg.SyncSkipped))
 		}
 		block()
 	}
 	// A kind in conflict is told by its conflict.
-	var received []process.Kind
+	var received []contract.ProcessItem
 	for _, k := range s.Received {
-		if !slices.ContainsFunc(s.Conflicts, func(c process.Conflict) bool { return c.Kind == k }) {
+		if !slices.ContainsFunc(s.Conflicts, func(c contract.ProcessItem) bool { return sameItem(c, k) }) {
 			received = append(received, k)
 		}
 	}
 	if what.received && len(received) > 0 {
-		writeList(&b, msg.Text(msg.SyncReceived), kindNames(received))
+		writeList(&p.Builder, msg.Text(msg.SyncReceived), itemNames(received))
 		block()
 	}
-	for _, c := range s.Conflicts {
+	for i, c := range s.Conflicts {
 		if !what.conflicts {
 			break
 		}
-		if c.Kind.IsLibrary() {
-			fmt.Fprintln(&b, msg.Text(msg.SyncLibraryConflict))
+		if c.Project == nil {
+			fmt.Fprintln(p, msg.Text(msg.SyncLibraryConflict))
 		} else {
-			fmt.Fprintln(&b, msg.Text(msg.SyncFlowConflict, c.Kind.Project))
+			fmt.Fprintln(p, msg.Text(msg.SyncFlowConflict, *c.Project))
 		}
-		fmt.Fprintln(&b, msg.Text(msg.SyncConflictDir, r.ConflictDir(c.Kind)))
-		var objects []string
-		for _, o := range flow.ObjectsOf(c.Kind, c.Paths) {
-			objects = append(objects, changeObject(o))
+		fmt.Fprintln(p, msg.Text(msg.SyncConflictDir, x.conflicts[i].dir))
+		if objects := x.conflicts[i].objects; len(objects) > 0 {
+			p.WriteString("\n")
+			writeList(&p.Builder, msg.Text(msg.SyncBothChanged), objects)
 		}
-		if len(objects) > 0 {
-			b.WriteString("\n")
-			writeList(&b, msg.Text(msg.SyncBothChanged), objects)
-		}
-		fmt.Fprintf(&b, "\n%s\n", diffHint(c.Kind))
+		p.hints(diffHint(c))
 		block()
 	}
-	for _, rs := range s.Restored {
-		if rs.Kind.IsLibrary() {
-			fmt.Fprintln(&b, msg.Text(msg.SyncLibraryRestored))
+	for i, rs := range s.Restored {
+		if rs.Project == nil {
+			fmt.Fprintln(p, msg.Text(msg.SyncLibraryRestored))
 		} else {
-			fmt.Fprintln(&b, msg.Text(msg.SyncFlowRestored, rs.Kind.Project))
+			fmt.Fprintln(p, msg.Text(msg.SyncFlowRestored, *rs.Project))
 		}
-		b.WriteString("\n")
-		writeList(&b, msg.Text(msg.FlowProblems), rs.Problems)
-		fmt.Fprintf(&b, "\n%s\n", diffHint(rs.Kind))
+		p.WriteString("\n")
+		writeList(&p.Builder, msg.Text(msg.FlowProblems), x.restored[i])
+		p.hints(diffHint(rs))
 		block()
 	}
-	io.WriteString(w, b.String())
+}
+
+// sameItem reports whether a and b are the same flow or the library.
+func sameItem(a, b contract.ProcessItem) bool {
+	return a.Kind == b.Kind && (a.Project == nil) == (b.Project == nil) && (a.Project == nil || *a.Project == *b.Project)
 }
 
 // takeConflict removes the conflict of kind k from s and returns it; ok is
@@ -165,24 +201,20 @@ func takeConflict(s *process.Sync, k process.Kind) (c process.Conflict, ok bool)
 // found the kind changed on another machine: the draft stays, with the
 // variants of the other machine to compare.
 func conflictFailure(r *process.Repo, c process.Conflict) failure {
-	dir := r.ConflictDir(c.Kind)
+	x := conflictExtraOf(r, c)
 	var more strings.Builder
-	fmt.Fprintln(&more, msg.Text(msg.SyncConflictDir, dir))
-	var objects []string
-	for _, o := range flow.ObjectsOf(c.Kind, c.Paths) {
-		objects = append(objects, changeObject(o))
-	}
-	if len(objects) > 0 {
+	fmt.Fprintln(&more, msg.Text(msg.SyncConflictDir, x.dir))
+	if len(x.objects) > 0 {
 		more.WriteString("\n")
-		writeList(&more, msg.Text(msg.SyncBothChanged), objects)
+		writeList(&more, msg.Text(msg.SyncBothChanged), x.objects)
 	}
 	f := failure{
 		exit:    contract.ExitError,
 		code:    contract.CodeLibraryConflict,
 		message: msg.Text(msg.SyncLibraryConflict),
 		more:    more.String(),
-		hint:    diffHint(c.Kind),
-		details: map[string]any{"conflict_dir": dir},
+		hints:   []hint{diffHint(items([]process.Kind{c.Kind})[0])},
+		details: map[string]any{"conflict_dir": x.dir},
 	}
 	if !c.Kind.IsLibrary() {
 		f.code, f.message = contract.CodeFlowConflict, msg.Text(msg.SyncFlowConflict, c.Kind.Project)
@@ -206,39 +238,38 @@ func refuseOnConflict(env Env, r *process.Repo, s *process.Sync, k process.Kind)
 		layoutRefused(env, r, s)
 		return fail(env, *bad), true
 	}
-	if !env.json {
-		rest := *s
-		rest.Conflicts = s.Conflicts[:len(s.Conflicts)-1]
-		rest.Received = slices.DeleteFunc(slices.Clone(s.Received), func(x process.Kind) bool { return x == k })
-		writeSync(env.Stderr, r, &rest, syncText{received: true, conflicts: true})
-	}
+	rest := *s
+	rest.Conflicts = s.Conflicts[:len(s.Conflicts)-1]
+	rest.Received = slices.DeleteFunc(slices.Clone(s.Received), func(x process.Kind) bool { return x == k })
+	cs, x := syncJSON(&rest, nil), syncExtraOf(r, &rest, false)
+	warn(env, func(p *page) { writeSync(p, cs, x, syncText{received: true, conflicts: true}) })
 	// The variant of the other machine is active: the free worktrees get it.
 	layoutRefused(env, r, s)
 	s.Conflicts = s.Conflicts[:len(s.Conflicts)-1]
 	return fail(env, conflictFailure(r, c)), true
 }
 
-// diffHint is the hint to compare the draft of kind k with its active
-// variant.
-func diffHint(k process.Kind) string {
-	if k.IsLibrary() {
-		return msg.Text(msg.HintLibraryDiff)
+// diffHint is the hint to compare the draft of the flow or the library k
+// with its active variant.
+func diffHint(k contract.ProcessItem) hint {
+	if k.Project == nil {
+		return hintOf(msg.HintLibraryDiff)
 	}
-	return msg.Text(msg.HintFlowDiffProject, k.Project)
+	return hintOf(msg.HintFlowDiffProject).set("project", *k.Project)
 }
 
-// kindName names kind k for the operator.
-func kindName(k process.Kind) string {
-	if k.IsLibrary() {
+// itemName names the flow or the library k for the operator.
+func itemName(k contract.ProcessItem) string {
+	if k.Project == nil {
 		return msg.Text(msg.KindLibrary)
 	}
-	return msg.Text(msg.KindFlow, k.Project)
+	return msg.Text(msg.KindFlow, *k.Project)
 }
 
-func kindNames(kinds []process.Kind) []string {
+func itemNames(kinds []contract.ProcessItem) []string {
 	out := make([]string, len(kinds))
 	for i, k := range kinds {
-		out[i] = kindName(k)
+		out[i] = itemName(k)
 	}
 	return out
 }
@@ -388,7 +419,7 @@ func gitFailure(err error) (failure, bool) {
 			exit:    contract.ExitError,
 			code:    contract.CodeGitNotFound,
 			message: msg.Text(msg.ErrToolNotFound, "git"),
-			hint:    msg.Text(msg.HintGitNotFound),
+			hints:   []hint{hintOf(msg.HintGitNotFound)},
 		}, true
 	case errors.As(err, &ce):
 		return failure{
@@ -447,7 +478,7 @@ func processFailure(err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeProcessRemoteNotSet,
 			message: msg.Text(msg.ErrProcessRemoteNotSet),
-			hint:    msg.Text(msg.HintProcessRemote),
+			hints:   []hint{hintOf(msg.HintProcessRemote)},
 		}
 	case errors.As(err, &pathErr):
 		return ioError(pathErr.Path, pathErr.Err)
@@ -463,19 +494,18 @@ func remoteUnavailable(remote, output string) failure {
 		exit:    contract.ExitError,
 		code:    contract.CodeRemoteUnavailable,
 		message: msg.Text(msg.ErrRemoteUnavailable, remote),
-		hint:    msg.Text(msg.HintRemoteAccess, remote),
+		hints:   []hint{hintOf(msg.HintRemoteAccess, remote)},
 		details: map[string]any{"remote": remote, "output": output},
 	}
 }
 
 func runProcessRemote(args []string, env Env) int {
 	f := newFlags("process remote")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
 	if len(f.args) == 0 || f.args[0] == "" {
-		return fail(env, missingArgument("process remote", "remote", msg.Text(msg.ErrRemoteMissing), msg.Text(msg.HintCommandHelp, "process remote")))
+		return fail(env, missingArgument("process remote", "remote", msg.Text(msg.ErrRemoteMissing), helpHint(msg.HintCommandHelp, "process remote")))
 	}
 	url := f.args[0]
 	r, bad := openProcess()
@@ -493,33 +523,32 @@ func runProcessRemote(args []string, env Env) int {
 	}
 	record(events...)
 	drafts := conflictKinds(s.Conflicts)
-	if *asJSON {
-		out := contract.ProcessRemoteOutput{Remote: url, Result: contract.ProcessRemoteOutputResult(result), Drafts: items(drafts)}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	writeSync(env.Stderr, r, s, syncText{})
-	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.ProcessRemoteSet, url))
-	k := map[string]msg.Key{
+	// The drafts restored and an unavailable remote repository are told in
+	// text only.
+	cs, x := syncJSON(s, nil), syncExtraOf(r, s, false)
+	warn(env, func(p *page) { writeSync(p, cs, x, syncText{}) })
+	out := contract.ProcessRemoteOutput{Remote: url, Result: contract.ProcessRemoteOutputResult(result), Drafts: items(drafts)}
+	return emit(env, out, processRemoteText)
+}
+
+// processRemoteText prints the remote repository connected, what the first
+// synchronization did and the drafts left of the conflicts.
+func processRemoteText(p *page, out contract.ProcessRemoteOutput) {
+	fmt.Fprintln(p, msg.Text(msg.ProcessRemoteSet, out.Remote))
+	k := map[contract.ProcessRemoteOutputResult]msg.Key{
 		process.RemoteSent: msg.ProcessResultSent, process.RemoteReceived: msg.ProcessResultReceived,
 		process.RemoteMerged: msg.ProcessResultMerged, process.RemoteUnchanged: msg.ProcessResultUnchanged,
-	}[result]
-	fmt.Fprintln(&b, msg.Text(k))
-	if len(drafts) > 0 {
-		b.WriteString("\n")
-		writeList(&b, msg.Text(msg.ProcessDrafts), kindNames(drafts))
-		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintProcessStatus))
+	}[out.Result]
+	fmt.Fprintln(p, msg.Text(k))
+	if len(out.Drafts) > 0 {
+		p.WriteString("\n")
+		writeList(&p.Builder, msg.Text(msg.ProcessDrafts), itemNames(out.Drafts))
+		p.hints(hintOf(msg.HintProcessStatus))
 	}
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
 }
 
 func runProcessSync(args []string, env Env) int {
 	f := newFlags("process sync")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -542,44 +571,45 @@ func runProcessSync(args []string, env Env) int {
 	}
 	recordSync(s)
 	layout, laidPool := layoutFree(r, syncProjects(r, s))
+	l, projects := layout.json(laidPool), projectsOf(laidPool)
 	if s.Unavailable {
 		url, _ := r.RemoteURL()
-		if !env.json {
-			writeSync(env.Stderr, r, &process.Sync{Conflicts: s.Conflicts, Restored: s.Restored}, syncText{conflicts: true})
-			writeFreeLayout(env.Stderr, layout, laidPool)
-		}
+		rest := &process.Sync{Conflicts: s.Conflicts, Restored: s.Restored}
+		cs, x := syncJSON(rest, nil), syncExtraOf(r, rest, false)
+		warn(env, func(p *page) {
+			writeSync(p, cs, x, syncText{conflicts: true})
+			writeFreeLayout(p, l, projects)
+		})
 		return fail(env, remoteUnavailable(url, s.Output))
 	}
-	if *asJSON {
-		out := contract.ProcessSyncOutput{
-			Received: items(s.Received), Sent: items(s.Sent),
-			Conflicts: items(conflictKinds(s.Conflicts)), Restored: items(restoredKinds(s.Restored)),
-			Agents: layout.json(laidPool),
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
+	cs, x := syncJSON(s, nil), syncExtraOf(r, s, false)
+	warn(env, func(p *page) { writeSync(p, cs, x, syncText{conflicts: true}) })
+	out := contract.ProcessSyncOutput{
+		Received: items(s.Received), Sent: items(s.Sent),
+		Conflicts: items(conflictKinds(s.Conflicts)), Restored: items(restoredKinds(s.Restored)),
+		Agents: l,
 	}
-	writeSync(env.Stderr, r, s, syncText{conflicts: true})
-	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.ProcessSynced))
-	if len(s.Received) > 0 {
-		b.WriteString("\n")
-		writeList(&b, msg.Text(msg.ProcessReceived), kindNames(s.Received))
+	return emit(env, out, func(p *page, out contract.ProcessSyncOutput) { processSyncText(p, out, projects) })
+}
+
+// processSyncText prints what the synchronization received and sent and
+// the layout of the free worktrees it changed; projects names the project
+// of each worktree of the pool.
+func processSyncText(p *page, out contract.ProcessSyncOutput, projects map[string]string) {
+	fmt.Fprintln(p, msg.Text(msg.ProcessSynced))
+	if len(out.Received) > 0 {
+		p.WriteString("\n")
+		writeList(&p.Builder, msg.Text(msg.ProcessReceived), itemNames(out.Received))
 	}
-	if len(s.Sent) > 0 {
-		b.WriteString("\n")
-		writeList(&b, msg.Text(msg.ProcessSent), kindNames(s.Sent))
+	if len(out.Sent) > 0 {
+		p.WriteString("\n")
+		writeList(&p.Builder, msg.Text(msg.ProcessSent), itemNames(out.Sent))
 	}
-	fmt.Fprint(env.Stdout, b.String())
-	writeFreeLayout(env.Stdout, layout, laidPool)
-	return contract.ExitOK
+	writeFreeLayout(p, out.Agents, projects)
 }
 
 func runProcessStatus(args []string, env Env) int {
 	f := newFlags("process status")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -592,42 +622,39 @@ func runProcessStatus(args []string, env Env) int {
 	if err != nil {
 		return fail(env, processFailure(err))
 	}
-	if *asJSON {
-		out := contract.ProcessStatusOutput{Drafts: items(st.Drafts), Unsent: items(st.Unsent), Conflicts: items(st.Conflicts), Synced: st.Synced}
-		if st.Remote != "" {
-			out.Remote = &st.Remote
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
+	out := contract.ProcessStatusOutput{Drafts: items(st.Drafts), Unsent: items(st.Unsent), Conflicts: items(st.Conflicts), Synced: st.Synced}
+	if st.Remote != "" {
+		out.Remote = &st.Remote
 	}
-	var b strings.Builder
-	if st.Remote == "" {
-		fmt.Fprintln(&b, msg.Text(msg.ProcessNoRemote))
+	return emit(env, out, processStatusText)
+}
+
+// processStatusText prints the remote repository and when it was last
+// synchronized, the drafts, what is not sent and the conflicts.
+func processStatusText(p *page, out contract.ProcessStatusOutput) {
+	if out.Remote == nil {
+		fmt.Fprintln(p, msg.Text(msg.ProcessNoRemote))
 	} else {
-		fmt.Fprintln(&b, msg.Text(msg.ProcessRemote, st.Remote))
+		fmt.Fprintln(p, msg.Text(msg.ProcessRemote, *out.Remote))
 		synced := msg.Text(msg.ValueNone)
-		if st.Synced != nil {
-			synced = localTime(*st.Synced)
+		if out.Synced != nil {
+			synced = localTime(*out.Synced)
 		}
-		fmt.Fprintln(&b, msg.Text(msg.ProcessSyncedAt, synced))
+		fmt.Fprintln(p, msg.Text(msg.ProcessSyncedAt, synced))
 	}
 	for _, l := range []struct {
 		heading msg.Key
-		kinds   []process.Kind
-	}{{msg.ProcessDrafts, st.Drafts}, {msg.ProcessUnsent, st.Unsent}, {msg.ProcessConflicts, st.Conflicts}} {
+		kinds   []contract.ProcessItem
+	}{{msg.ProcessDrafts, out.Drafts}, {msg.ProcessUnsent, out.Unsent}, {msg.ProcessConflicts, out.Conflicts}} {
 		if len(l.kinds) > 0 {
-			b.WriteString("\n")
-			writeList(&b, msg.Text(l.heading), kindNames(l.kinds))
+			p.WriteString("\n")
+			writeList(&p.Builder, msg.Text(l.heading), itemNames(l.kinds))
 		}
 	}
 	switch {
-	case st.Remote == "":
-		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintProcessRemote))
-	case len(st.Unsent) > 0:
-		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintProcessSync))
+	case out.Remote == nil:
+		p.hints(hintOf(msg.HintProcessRemote))
+	case len(out.Unsent) > 0:
+		p.hints(hintOf(msg.HintProcessSync))
 	}
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
 }

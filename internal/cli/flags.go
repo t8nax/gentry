@@ -29,7 +29,13 @@ func newFlags(cmd string) *flags {
 	if !ok {
 		panic("cli: no spec for command " + cmd)
 	}
-	return &flags{cmd: c, bools: map[string]*bool{}, strings: map[string]*stringFlag{}}
+	f := &flags{cmd: c, bools: map[string]*bool{}, strings: map[string]*stringFlag{}}
+	// --json is no flag of the command itself: it chooses the form of the
+	// output, which emit and fail print (Env.json).
+	if c.acceptsJSON() {
+		f.bools["json"] = new(bool)
+	}
+	return f
 }
 
 // Bool defines the boolean flag --name declared in the command spec.

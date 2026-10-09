@@ -24,7 +24,6 @@ var exitKinds = []string{state.ExitArtifact, state.ExitResult, state.ExitNegativ
 func runStageShow(args []string, env Env) int {
 	f := newFlags("stage show")
 	key := f.String("task")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -51,67 +50,72 @@ func runStageShow(args []string, env Env) int {
 		return w.fail(env, wayFailure("stage show", err))
 	}
 
-	if *asJSON {
-		out := contract.StageShowOutput{
-			Task: v.Key(), Node: sv.Node.ID, Round: v.Round,
-			Stage: contract.StageShowStage{
-				Id: sv.Stage.ID, Title: sv.Stage.Title, Executor: sv.Stage.Executor, Exit: sv.Stage.Exit,
-				Instruction: sv.Stage.Instruction, Parts: []contract.StageShowPart{},
-			},
-			Transitions: []contract.StageShowTransition{},
-		}
-		for _, p := range sv.Parts {
-			out.Stage.Parts = append(out.Stage.Parts, contract.StageShowPart{Id: p.ID, Text: p.Text})
-		}
-		for _, t := range sv.Transitions {
-			ct := contract.StageShowTransition{To: t.To}
-			if t.To != flow.Finish {
-				id, title := t.Stage.ID, t.Stage.Title
-				ct.Stage, ct.Title = &id, &title
-			}
-			if t.If != "" {
-				cond := t.If
-				ct.If = &cond
-			}
-			if t.Return {
-				limit, returns, allowed := t.Limit, t.Returns, t.Allowed
-				ct.MaxReturns, ct.Returns, ct.AllowedReturns = &limit, &returns, &allowed
-			}
-			out.Transitions = append(out.Transitions, ct)
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
+	out := contract.StageShowOutput{
+		Task: v.Key(), Node: sv.Node.ID, Round: v.Round,
+		Stage: contract.StageShowStage{
+			Id: sv.Stage.ID, Title: sv.Stage.Title, Executor: sv.Stage.Executor, Exit: sv.Stage.Exit,
+			Instruction: sv.Stage.Instruction, Parts: []contract.StageShowPart{},
+		},
+		Transitions: []contract.StageShowTransition{},
 	}
-	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.FlowStage, stageRound(sv.Stage.Title, sv.Stage.ID, v.Round, false)))
-	fmt.Fprintln(&b, msg.Text(msg.StageTask, v.Key()))
-	fmt.Fprintln(&b, msg.Text(msg.FlowExecutor, sv.Stage.Executor))
-	fmt.Fprintln(&b, msg.Text(msg.FlowExit, orNone(oneLine(sv.Stage.Exit))))
-	fmt.Fprintln(&b, msg.Text(msg.FlowParts, joined(sv.Stage.Include)))
+	for _, p := range sv.Parts {
+		out.Stage.Parts = append(out.Stage.Parts, contract.StageShowPart{Id: p.ID, Text: p.Text})
+	}
+	for _, t := range sv.Transitions {
+		ct := contract.StageShowTransition{To: t.To}
+		if t.To != flow.Finish {
+			id, title := t.Stage.ID, t.Stage.Title
+			ct.Stage, ct.Title = &id, &title
+		}
+		if t.If != "" {
+			cond := t.If
+			ct.If = &cond
+		}
+		if t.Return {
+			limit, returns, allowed := t.Limit, t.Returns, t.Allowed
+			ct.MaxReturns, ct.Returns, ct.AllowedReturns = &limit, &returns, &allowed
+		}
+		out.Transitions = append(out.Transitions, ct)
+	}
+	// The line of parts names every part the stage includes, as its file does.
+	include := sv.Stage.Include
+	return emit(env, out, func(p *page, out contract.StageShowOutput) { stageShowText(p, out, include) })
+}
+
+// stageShowText prints the current stage of a task: its fields, the
+// transitions, the instruction and the texts of its parts; include names the
+// parts the stage includes.
+func stageShowText(p *page, out contract.StageShowOutput, include []string) {
+	b := &p.Builder
+	st := out.Stage
+	fmt.Fprintln(b, msg.Text(msg.FlowStage, stageRound(st.Title, st.Id, out.Round, false)))
+	fmt.Fprintln(b, msg.Text(msg.StageTask, out.Task))
+	fmt.Fprintln(b, msg.Text(msg.FlowExecutor, st.Executor))
+	fmt.Fprintln(b, msg.Text(msg.FlowExit, orNone(oneLine(st.Exit))))
+	fmt.Fprintln(b, msg.Text(msg.FlowParts, joined(include)))
 	b.WriteString("\n")
 	rows := [][]string{{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)}}
-	for _, t := range sv.Transitions {
+	for _, t := range out.Transitions {
 		title := msg.Text(msg.FlowEnd)
-		if t.To != flow.Finish {
-			title = stageName(t.Stage)
+		if t.Stage != nil {
+			title = stageName(flow.Stage{ID: *t.Stage, Title: *t.Title})
 		}
-		returns := msg.Text(msg.ValueNone)
-		if t.Return {
-			returns = msg.Text(msg.StageReturns, t.Returns, t.Limit)
+		cond, returns := "", msg.Text(msg.ValueNone)
+		if t.If != nil {
+			cond = *t.If
 		}
-		rows = append(rows, []string{t.To, title, orNone(oneLine(t.If)), returns})
+		if t.MaxReturns != nil {
+			returns = msg.Text(msg.StageReturns, *t.Returns, *t.MaxReturns)
+		}
+		rows = append(rows, []string{t.To, title, orNone(oneLine(cond)), returns})
 	}
-	writeTable(&b, rows)
+	writeTable(b, rows)
 	b.WriteString("\n")
-	writeText(&b, msg.Text(msg.FlowInstruction), sv.Stage.Instruction)
-	for _, p := range sv.Parts {
+	writeText(b, msg.Text(msg.FlowInstruction), st.Instruction)
+	for _, part := range st.Parts {
 		b.WriteString("\n")
-		writeText(&b, msg.Text(msg.StagePartText, p.ID), p.Text)
+		writeText(b, msg.Text(msg.StagePartText, part.Id), part.Text)
 	}
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
 }
 
 func runStageExit(args []string, env Env) int {
@@ -137,7 +141,6 @@ func runStageClose(cmd string, args []string, env Env) int {
 	}
 	key := f.String("task")
 	input := f.String("input")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -168,38 +171,46 @@ func runStageClose(cmd string, args []string, env Env) int {
 		return w.fail(env, *bad)
 	}
 
-	if *asJSON {
-		if err := writeJSON(env, contract.StageCloseOutput{Task: taskJSON(v), Closed: passJSON(res.Pass)}); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	p := res.Pass
-	var b strings.Builder
-	title := stageName(flow.Stage{ID: p.Stage, Title: v.StageTitleOf(p.Stage)})
-	if skip {
-		fmt.Fprintln(&b, msg.Text(msg.StageSkipped, title))
-	} else {
-		fmt.Fprintln(&b, msg.Text(msg.StageExited, title))
-		fmt.Fprintln(&b, msg.Text(msg.ExitKindLine, exitKindWord(p.ExitKind, p.Artifact)))
-		fmt.Fprintln(&b, msg.Text(msg.ExitTextLine, oneLine(p.ExitText)))
-	}
-	if skip {
-		fmt.Fprintln(&b, msg.Text(msg.ReasonLine, oneLine(p.Reason)))
-	}
-	fmt.Fprintln(&b, msg.Text(msg.TransitionLine, nodeName(p.Next)))
-	if !skip && p.Reason != "" {
-		fmt.Fprintln(&b, msg.Text(msg.ReasonLine, oneLine(p.Reason)))
-	}
-	fmt.Fprintln(&b, msg.Text(msg.TaskStage, stageRound(v.StageTitle, v.Stage, v.Round, v.Finished)))
-	fmt.Fprintln(&b, msg.Text(msg.ProgressLine, progressText(v.Progress)))
-	hint := msg.Text(msg.HintStageShow)
+	out := contract.StageCloseOutput{Task: taskJSON(v), Closed: passJSON(res.Pass)}
+	x := stageCloseExtra{title: v.StageTitleOf(res.Pass.Stage), hints: w.hints(hintOf(msg.HintStageShow))}
 	if v.Finished {
-		hint = msg.Text(msg.HintTaskClose)
+		x.hints = w.hints(hintOf(msg.HintTaskClose))
 	}
-	fmt.Fprintf(&b, "\n%s\n", w.hint(hint))
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
+	return emit(env, out, func(p *page, out contract.StageCloseOutput) { stageCloseText(p, out, x) })
+}
+
+// stageCloseExtra is what the text of stage exit and stage skip has apart
+// from the contract: the title of the stage closed, by the snapshot, and the
+// hints for the task.
+type stageCloseExtra struct {
+	title string
+	hints []hint
+}
+
+// stageCloseText prints the stage closed: by its exit or its skip, the
+// transition, the stage the task is at now and its progress.
+func stageCloseText(p *page, out contract.StageCloseOutput, x stageCloseExtra) {
+	c := out.Closed
+	title := stageName(flow.Stage{ID: c.Stage, Title: x.title})
+	reason := ""
+	if c.Reason != nil {
+		reason = *c.Reason
+	}
+	if c.Exit == nil {
+		fmt.Fprintln(p, msg.Text(msg.StageSkipped, title))
+		fmt.Fprintln(p, msg.Text(msg.ReasonLine, oneLine(reason)))
+	} else {
+		fmt.Fprintln(p, msg.Text(msg.StageExited, title))
+		fmt.Fprintln(p, msg.Text(msg.ExitKindLine, exitWord(*c.Exit)))
+		fmt.Fprintln(p, msg.Text(msg.ExitTextLine, oneLine(c.Exit.Text)))
+	}
+	fmt.Fprintln(p, msg.Text(msg.TransitionLine, nodeName(*c.To)))
+	if c.Exit != nil && reason != "" {
+		fmt.Fprintln(p, msg.Text(msg.ReasonLine, oneLine(reason)))
+	}
+	fmt.Fprintln(p, msg.Text(msg.TaskStage, stageLine(out.Task)))
+	fmt.Fprintln(p, msg.Text(msg.ProgressLine, progressLine(out.Task.Progress)))
+	p.hints(x.hints...)
 }
 
 // checkClose refuses the fields of stage exit or stage skip that are missing
@@ -207,7 +218,7 @@ func runStageClose(cmd string, args []string, env Env) int {
 // fork are checked with the stage.
 func checkClose(cmd string, req task.Close, fromInput bool) *failure {
 	refuse := func(f failure) *failure { return &f }
-	help := msg.Text(msg.HintCommandHelp, cmd)
+	help := helpHint(msg.HintCommandHelp, cmd)
 	if req.Skip {
 		if strings.TrimSpace(req.Reason) == "" {
 			return refuse(missingField(cmd, "reason", msg.Text(msg.ErrSkipReasonMissing), help))
@@ -219,11 +230,12 @@ func checkClose(cmd string, req task.Close, fromInput bool) *failure {
 		return refuse(missingField(cmd, "kind", msg.Text(msg.ErrExitKindMissing), help))
 	case !slices.Contains(exitKinds, req.Kind) && fromInput:
 		return refuse(failure{
-			exit:    contract.ExitUsage,
-			code:    contract.CodeInputInvalid,
-			message: msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputBadValue, "kind")),
-			hint:    help,
-			details: map[string]any{"field": "kind"},
+			exit:         contract.ExitUsage,
+			code:         contract.CodeInputInvalid,
+			message:      msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputBadValue, "kind")),
+			agentMessage: msg.Text(msg.ErrToolFields, msg.Text(msg.InputBadValue, "kind")),
+			hints:        []hint{help},
+			details:      map[string]any{"field": "kind"},
 		})
 	case !slices.Contains(exitKinds, req.Kind):
 		return refuse(flagValueInvalid("--kind", req.Kind, msg.Text(msg.ErrFlagValueInvalid, "--kind", req.Kind), help))
@@ -236,7 +248,7 @@ func checkClose(cmd string, req task.Close, fromInput bool) *failure {
 			exit:    contract.ExitUsage,
 			code:    contract.CodeConflictingFlags,
 			message: msg.Text(msg.ErrArtifactForKind),
-			hint:    help,
+			hints:   []hint{help},
 			details: map[string]any{"command": cmd, "flags": []string{"--kind", "--artifact"}},
 		})
 	}

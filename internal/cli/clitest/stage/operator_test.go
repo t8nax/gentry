@@ -9,6 +9,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/caller"
+	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/msg"
 )
@@ -126,7 +127,7 @@ func TestOperatorRecordRefusals(t *testing.T) {
 	_, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
-	help := msg.Text(msg.HintCommandHelp, "operator record")
+	help := cli.HintText(msg.HintCommandHelp, "operator record")
 
 	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines("Не указан ответ оператора.", "", help),
 		"operator", "record", "--question", "Делать для СБП?")
@@ -168,7 +169,7 @@ func TestOperatorRecordRefusals(t *testing.T) {
 		t.Errorf("--allow-return without a value: exit code %d, code %s", code, c)
 	}
 	// The branch has no returns at all.
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ветка» нет возврата к узлу plan.", "", msg.Text(msg.HintStageTransitions)),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ветка» нет возврата к узлу plan.", "", cli.HintText(msg.HintStageTransitions)),
 		"operator", "record", "--answer", "Да", "--allow-return", "plan")
 	_, out, _ := clitest.Run("operator", "record", "--answer", "Да", "--allow-return", "plan", "--json")
 	if !strings.Contains(out, `"code":"return_not_found"`) || !strings.Contains(out, `"returns":[]`) {
@@ -207,9 +208,9 @@ func TestOperatorAllowReturn(t *testing.T) {
 	), exit...)
 
 	// Only a return of the current stage can be allowed.
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ревью» нет возврата к узлу merge.", "", msg.Text(msg.HintStageTransitions)),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ревью» нет возврата к узлу merge.", "", cli.HintText(msg.HintStageTransitions)),
 		"operator", "record", "--answer", "Да", "--allow-return", "merge")
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ревью» нет возврата к узлу plan.", "", msg.Text(msg.HintStageTransitions)),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ревью» нет возврата к узлу plan.", "", cli.HintText(msg.HintStageTransitions)),
 		"operator", "record", "--answer", "Да", "--allow-return", "plan")
 	_, out, _ := clitest.Run("operator", "record", "--answer", "Да", "--allow-return", "merge", "--json")
 	if !strings.Contains(out, `"details":{"node":"review","returns":["implementation"],"to":"merge"}`) {

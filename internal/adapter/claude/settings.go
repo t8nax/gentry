@@ -44,14 +44,20 @@ func SettingsPath() (string, error) {
 	return filepath.Join(dir, "settings.json"), nil
 }
 
+// rule is PermissionRule as a JSON string.
+const rule = `"` + PermissionRule + `"`
+
+// newSettings are the settings written where there were none.
+const newSettings = "{\n  \"permissions\": {\n    \"allow\": [\n      " + rule + "\n    ]\n  }\n}\n"
+
 // AllowTools adds PermissionRule to permissions.allow of the settings at
-// path. The rule is put into the text of the file after the last rule, so
-// the rest of the text stays as it is; a file without permissions.allow is
-// written anew with its keys in their order, and a file that does not exist
-// is created. A symbolic link is followed, and the file keeps its mode. A
-// file that is not a JSON object, whose permissions or allow has another
-// type is left as it is: PermissionFailed; a file that cannot be written,
-// PermissionUnwritten.
+// path. The rule goes into the text of the file: after the last rule, or
+// with the allow or the permissions it needs after the last key of the object
+// it goes in, so the rest of the text stays as it is. A file that does not
+// exist is created. A symbolic link is followed, and the file keeps its
+// mode. A file that is not a JSON object, or whose permissions or allow has
+// another type, is left as it is: PermissionFailed; a file that cannot be
+// written, PermissionUnwritten.
 func AllowTools(path string) string {
 	if real, err := filepath.EvalSymlinks(path); err == nil {
 		path = real
@@ -60,7 +66,6 @@ func AllowTools(path string) string {
 	data, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		data = nil
 	case err != nil:
 		return PermissionFailed
 	default:
@@ -70,46 +75,37 @@ func AllowTools(path string) string {
 	}
 	text := bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	if len(bytes.TrimSpace(text)) == 0 {
-		text = []byte("{}")
+		if writeSettings(path, []byte(newSettings), mode) != nil {
+			return PermissionUnwritten
+		}
+		return PermissionAdded
 	}
 	settings, ok := readObject(text)
 	if !ok {
 		return PermissionFailed
 	}
-	permissions := &object{}
-	if raw, ok := settings.get("permissions"); ok {
-		if permissions, ok = readObject(raw); !ok {
-			return PermissionFailed
-		}
-	}
-	var allow []json.RawMessage
-	raw, hasAllow := permissions.get("allow")
-	if hasAllow && (json.Unmarshal(raw, &allow) != nil || allow == nil) {
-		return PermissionFailed
-	}
-	for _, r := range allow {
-		var s string
-		if json.Unmarshal(r, &s) == nil && s == PermissionRule {
-			return PermissionPresent
-		}
-	}
 	var out []byte
-	if hasAllow {
-		out, ok = insertRule(data)
-		if !ok {
-			return PermissionFailed
-		}
+	if raw, has := settings["permissions"]; !has {
+		out, ok = insertItem(data, `"permissions": {"allow": [`+rule+`]}`)
+	} else if permissions, isObject := readObject(raw); !isObject {
+		return PermissionFailed
+	} else if raw, has := permissions["allow"]; !has {
+		out, ok = insertItem(data, `"allow": [`+rule+`]`, "permissions")
 	} else {
-		permissions.set("allow", []byte(`["`+PermissionRule+`"]`))
-		b, _ := permissions.MarshalJSON()
-		settings.set("permissions", b)
-		b, _ = settings.MarshalJSON()
-		var indented bytes.Buffer
-		if json.Indent(&indented, b, "", "  ") != nil {
+		var allow []json.RawMessage
+		if json.Unmarshal(raw, &allow) != nil || allow == nil {
 			return PermissionFailed
 		}
-		indented.WriteByte('\n')
-		out = indented.Bytes()
+		for _, r := range allow {
+			var s string
+			if json.Unmarshal(r, &s) == nil && s == PermissionRule {
+				return PermissionPresent
+			}
+		}
+		out, ok = insertItem(data, rule, "permissions", "allow")
+	}
+	if !ok {
+		return PermissionFailed
 	}
 	if writeSettings(path, out, mode) != nil {
 		return PermissionUnwritten
@@ -117,33 +113,93 @@ func AllowTools(path string) string {
 	return PermissionAdded
 }
 
-// insertRule puts PermissionRule into the text of the settings after the
-// last rule of permissions.allow, in the layout of the array: on a line of
-// its own with the indent of the last rule, or after a comma on the same
-// line.
-func insertRule(data []byte) ([]byte, bool) {
-	start, end, last, ok := allowArray(data)
+// container is an object or an array in the text of the settings: the
+// offsets of its brackets and of the start and the end of its last element,
+// or key with its value; -1 if it is empty.
+type container struct {
+	open, close, lastStart, lastEnd int
+}
+
+// locate finds the object or the array at the keys in the text of the
+// settings, from the root object. The offsets are of data, with a byte order
+// mark if it has one.
+func locate(data []byte, keys ...string) (container, bool) {
+	text := bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
+	bom := len(data) - len(text)
+	dec := json.NewDecoder(bytes.NewReader(text))
+	t, err := dec.Token()
+	if err != nil || t != json.Delim('{') {
+		return container{}, false
+	}
+	for _, k := range keys {
+		if !seekKey(dec, k) {
+			return container{}, false
+		}
+		if t, err = dec.Token(); err != nil || (t != json.Delim('{') && t != json.Delim('[')) {
+			return container{}, false
+		}
+	}
+	c := container{open: int(dec.InputOffset()) - 1, lastStart: -1, lastEnd: -1}
+	object := t == json.Delim('{')
+	for dec.More() {
+		before := int(dec.InputOffset())
+		if object {
+			if _, err := dec.Token(); err != nil {
+				return container{}, false
+			}
+		}
+		var v json.RawMessage
+		if err := dec.Decode(&v); err != nil {
+			return container{}, false
+		}
+		// The element, or the key, starts after the comma and the spaces
+		// before it.
+		c.lastStart = before + bytes.IndexAny(text[before:], `"{[-0123456789tfn`)
+		c.lastEnd = int(dec.InputOffset())
+	}
+	if _, err := dec.Token(); err != nil {
+		return container{}, false
+	}
+	c.close = int(dec.InputOffset()) - 1
+	c.open, c.close = c.open+bom, c.close+bom
+	if c.lastStart >= 0 {
+		c.lastStart, c.lastEnd = c.lastStart+bom, c.lastEnd+bom
+	}
+	return c, true
+}
+
+// insertItem puts item into the object or the array at the keys in the text
+// of the settings, in its layout: after the last element, on a line of its
+// own with its indent or after a comma on the same line; in an empty
+// container written over lines, on a line of its own before the closing
+// bracket. The line ends of the file are kept.
+func insertItem(data []byte, item string, keys ...string) ([]byte, bool) {
+	c, ok := locate(data, keys...)
 	if !ok {
 		return nil, false
 	}
-	rule := `"` + PermissionRule + `"`
+	nl := "\n"
+	if bytes.Contains(data, []byte("\r\n")) {
+		nl = "\r\n"
+	}
+	lineEnd := bytes.LastIndexByte(data[:c.close], '\n')
+	overLines := lineEnd > c.open
 	var insert string
-	at := start + 1
+	var at int
 	switch {
-	case last < 0:
-		insert = rule
-	case bytes.IndexByte(data[start:end], '\n') >= 0:
-		lineStart := bytes.LastIndexByte(data[:last], '\n') + 1
-		indent := data[lineStart:last]
-		for i, b := range indent {
-			if b != ' ' && b != '\t' {
-				indent = indent[:i]
-				break
-			}
+	case c.lastStart < 0 && overLines:
+		// Before the line end of the line of the closing bracket.
+		at = lineEnd
+		if data[at-1] == '\r' {
+			at--
 		}
-		insert, at = ",\n"+string(indent)+rule, lastEnd(data, last, end)
+		insert = nl + indentOf(data, c.close) + "  " + item
+	case c.lastStart < 0:
+		insert, at = item, c.open+1
+	case overLines:
+		insert, at = ","+nl+indentOf(data, c.lastStart)+item, c.lastEnd
 	default:
-		insert, at = ", "+rule, lastEnd(data, last, end)
+		insert, at = ", "+item, c.lastEnd
 	}
 	out := make([]byte, 0, len(data)+len(insert))
 	out = append(out, data[:at]...)
@@ -151,46 +207,14 @@ func insertRule(data []byte) ([]byte, bool) {
 	return append(out, data[at:]...), true
 }
 
-// lastEnd is the end of the last rule that starts at last, in an array that
-// ends at end: before the spaces and line ends that follow it.
-func lastEnd(data []byte, last, end int) int {
-	i := end
-	for i > last && bytes.IndexByte([]byte(" \t\r\n"), data[i-1]) >= 0 {
-		i--
+// indentOf is the spaces and tabs at the start of the line of offset.
+func indentOf(data []byte, offset int) string {
+	start := bytes.LastIndexByte(data[:offset], '\n') + 1
+	end := start
+	for end < offset && (data[end] == ' ' || data[end] == '\t') {
+		end++
 	}
-	return i
-}
-
-// allowArray finds permissions.allow in the text of the settings: the
-// offsets of its brackets and of the start of its last element, -1 if it is
-// empty. The offsets are of data, with a byte order mark if it has one.
-func allowArray(data []byte) (start, end, last int, ok bool) {
-	text := bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
-	bom := len(data) - len(text)
-	dec := json.NewDecoder(bytes.NewReader(text))
-	if t, err := dec.Token(); err != nil || t != json.Delim('{') || !seekKey(dec, "permissions") {
-		return 0, 0, 0, false
-	}
-	if t, err := dec.Token(); err != nil || t != json.Delim('{') || !seekKey(dec, "allow") {
-		return 0, 0, 0, false
-	}
-	if t, err := dec.Token(); err != nil || t != json.Delim('[') {
-		return 0, 0, 0, false
-	}
-	start, last = int(dec.InputOffset())-1, -1
-	for dec.More() {
-		before := int(dec.InputOffset())
-		var v json.RawMessage
-		if err := dec.Decode(&v); err != nil {
-			return 0, 0, 0, false
-		}
-		// The element starts after the comma and the spaces before it.
-		last = before + bytes.Index(text[before:], v) + bom
-	}
-	if t, err := dec.Token(); err != nil || t != json.Delim(']') {
-		return 0, 0, 0, false
-	}
-	return start + bom, int(dec.InputOffset()) - 1 + bom, last, true
+	return string(data[start:end])
 }
 
 // seekKey reads the keys of the object the decoder is in, skipping their
@@ -239,72 +263,16 @@ func writeFile(path string, data []byte, mode fs.FileMode) error {
 	return nil
 }
 
-// object is a JSON object that keeps the order of its keys.
-type object struct {
-	keys   []string
-	values map[string]json.RawMessage
-}
-
-// readObject reads a JSON object; false if data is not one.
-func readObject(data []byte) (*object, bool) {
+// readObject reads a JSON object into its values by key; false if data is
+// not one.
+func readObject(data []byte) (map[string]json.RawMessage, bool) {
 	dec := json.NewDecoder(bytes.NewReader(data))
-	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
-		return nil, false
-	}
-	o := &object{values: map[string]json.RawMessage{}}
-	for dec.More() {
-		t, err := dec.Token()
-		if err != nil {
-			return nil, false
-		}
-		key := t.(string)
-		var v json.RawMessage
-		if err := dec.Decode(&v); err != nil {
-			return nil, false
-		}
-		o.set(key, v)
-	}
-	if _, err := dec.Token(); err != nil {
+	var o map[string]json.RawMessage
+	if err := dec.Decode(&o); err != nil || o == nil {
 		return nil, false
 	}
 	if _, err := dec.Token(); err != io.EOF {
 		return nil, false
 	}
 	return o, true
-}
-
-func (o *object) get(key string) (json.RawMessage, bool) {
-	v, ok := o.values[key]
-	return v, ok
-}
-
-func (o *object) set(key string, v json.RawMessage) {
-	if o.values == nil {
-		o.values = map[string]json.RawMessage{}
-	}
-	if _, ok := o.values[key]; !ok {
-		o.keys = append(o.keys, key)
-	}
-	o.values[key] = v
-}
-
-// MarshalJSON writes the object with its keys in their order and its values
-// as they are, without escaping them again.
-func (o *object) MarshalJSON() ([]byte, error) {
-	var b bytes.Buffer
-	b.WriteByte('{')
-	for i, k := range o.keys {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		key, err := json.Marshal(k)
-		if err != nil {
-			return nil, err
-		}
-		b.Write(key)
-		b.WriteByte(':')
-		b.Write(o.values[k])
-	}
-	b.WriteByte('}')
-	return b.Bytes(), nil
 }

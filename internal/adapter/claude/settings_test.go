@@ -52,9 +52,25 @@ func TestAllowTools(t *testing.T) {
 			"{\n  \"permissions\": { \"allow\": [ ] }\n}\n",
 			"{\n  \"permissions\": { \"allow\": [\"mcp__plugin_gentry_core\" ] }\n}\n",
 		},
+		"empty allow over lines": {
+			"{\n  \"permissions\": {\n    \"allow\": [\n    ]\n  }\n}\n",
+			"{\n  \"permissions\": {\n    \"allow\": [\n      \"mcp__plugin_gentry_core\"\n    ]\n  }\n}\n",
+		},
+		"line ends of Windows": {
+			"{\r\n  \"permissions\": {\r\n    \"allow\": [\r\n      \"Read\"\r\n    ]\r\n  }\r\n}\r\n",
+			"{\r\n  \"permissions\": {\r\n    \"allow\": [\r\n      \"Read\",\r\n      \"mcp__plugin_gentry_core\"\r\n    ]\r\n  }\r\n}\r\n",
+		},
 		"no allow": {
 			`{"model":"opus","permissions":{"deny":["Bash(make && make test)"]}}`,
-			"{\n  \"model\": \"opus\",\n  \"permissions\": {\n    \"deny\": [\n      \"Bash(make && make test)\"\n    ],\n    \"allow\": [\n      \"mcp__plugin_gentry_core\"\n    ]\n  }\n}\n",
+			`{"model":"opus","permissions":{"deny":["Bash(make && make test)"], "allow": ["mcp__plugin_gentry_core"]}}`,
+		},
+		"no permissions": {
+			"{\n    \"model\": \"opus\",\n    \"env\": {\"A\": \"<b>\"}\n}\n",
+			"{\n    \"model\": \"opus\",\n    \"env\": {\"A\": \"<b>\"},\n    \"permissions\": {\"allow\": [\"mcp__plugin_gentry_core\"]}\n}\n",
+		},
+		"empty": {
+			"{}",
+			`{"permissions": {"allow": ["mcp__plugin_gentry_core"]}}`,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

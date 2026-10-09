@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -75,6 +76,32 @@ func TestSetupClaude(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(settings); string(b) != `{"permissions":` {
 		t.Errorf("unreadable settings changed: %s", b)
+	}
+
+	// Settings that cannot be written are left as they are too: on Windows a
+	// file held open cannot be replaced, elsewhere a directory without the
+	// right to write takes no file.
+	os.WriteFile(settings, []byte(`{"permissions":{"allow":[]}}`), 0o644)
+	if runtime.GOOS == "windows" {
+		f, err := os.Open(settings)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+	} else {
+		os.Chmod(filepath.Dir(settings), 0o555)
+		defer os.Chmod(filepath.Dir(settings), 0o755)
+	}
+	code, stdout, _ = run("setup", "claude")
+	want = msg.Text(msg.SetupUnchanged) + "\n" + msg.Text(msg.SetupPermissionUnwritten) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n\n" +
+		msg.Text(msg.HintSetupPermission, claude.PermissionRule) + "\n"
+	if code != contract.ExitOK || stdout != want {
+		t.Errorf("settings that cannot be written: exit code %d, stdout:\n%s\nwant:\n%s", code, stdout, want)
+	}
+	_, stdout, _ = run("setup", "claude", "--json")
+	json.Unmarshal([]byte(stdout), &out)
+	if out.Permission == nil || *out.Permission != "unwritten" {
+		t.Errorf("settings that cannot be written in JSON: %s", stdout)
 	}
 }
 

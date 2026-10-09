@@ -8,6 +8,10 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
+// line is a hint as a channel prints it: what to do from the catalog, then
+// the command or the tool.
+func line(k msg.Key, command string) string { return msg.Text(k) + ": " + command }
+
 // TestHintChannels checks a hint in the channel of the command line and of
 // the agent: a placeholder, a value, the task by its argument or by --task,
 // a hint of the help and a command only the agent runs.
@@ -16,27 +20,27 @@ func TestHintChannels(t *testing.T) {
 		h          hint
 		cli, agent string // empty if the channel has no such hint
 	}{
-		{hintOf(msg.HintStageExit), "", "Закрыть этап: stage_exit (kind, text)"},
+		{hintOf(msg.HintStageExit), "", line(msg.HintStageExit, "stage_exit (kind, text)")},
 		{hintOf(msg.HintTaskShow).forTask("SHOP-1"),
-			"Посмотреть задачу: gentry task show SHOP-1", "Посмотреть задачу: task_show (task: SHOP-1)"},
+			line(msg.HintTaskShow, "gentry task show SHOP-1"), line(msg.HintTaskShow, "task_show (task: SHOP-1)")},
 		{hintOf(msg.HintStageShow).forTask("SHOP-1"),
-			"Посмотреть этап: gentry stage show --task SHOP-1", "Посмотреть этап: stage_show (task: SHOP-1)"},
+			line(msg.HintStageShow, "gentry stage show --task SHOP-1"), line(msg.HintStageShow, "stage_show (task: SHOP-1)")},
 		{hintOf(msg.HintStatement).forTask("SHOP-1"),
-			"Посмотреть постановку: gentry task show SHOP-1 --statement", "Посмотреть постановку: task_show (task: SHOP-1, statement)"},
+			line(msg.HintStatement, "gentry task show SHOP-1 --statement"), line(msg.HintStatement, "task_show (task: SHOP-1, statement)")},
 		{hintOf(msg.HintAttempt),
-			"Посмотреть попытку: gentry task attempts <попытка>", "Посмотреть попытку: task_attempts (attempt)"},
+			line(msg.HintAttempt, "gentry task attempts <попытка>"), line(msg.HintAttempt, "task_attempts (attempt)")},
 		{hintOf(msg.HintAttempt).forTask("SHOP-1"),
-			"Посмотреть попытку: gentry task attempts SHOP-1 <попытка>", "Посмотреть попытку: task_attempts (task: SHOP-1, attempt)"},
-		{hintOf(msg.HintStepDrop), "", "Снять шаг: step_drop (step, reason)"},
+			line(msg.HintAttempt, "gentry task attempts SHOP-1 <попытка>"), line(msg.HintAttempt, "task_attempts (task: SHOP-1, attempt)")},
+		{hintOf(msg.HintStepDrop), "", line(msg.HintStepDrop, "step_drop (step, reason)")},
 		{hintOf(msg.HintAllowReturn).set("allow_return", "plan"),
-			"Записать разрешение оператора: gentry operator record --answer <ответ> --allow-return plan",
-			"Записать разрешение оператора: operator_record (answer, allow_return: plan)"},
-		{hintOf(msg.HintFlowShowDraft), "Посмотреть черновик: gentry flow show --draft", "Посмотреть черновик: flow_show (draft)"},
-		{hintOf(msg.HintTaskClose), "", "Закрыть задачу: task_close"},
-		{hintOf(msg.HintTaskClose).forTask("SHOP-1"), "", "Закрыть задачу: task_close (task: SHOP-1)"},
-		{helpHint(msg.HintCommandHelp, "step add"), "Посмотреть описание команды: gentry step add --help", ""},
-		{helpHint(msg.HintActions, "task"), "Посмотреть перечень действий: gentry task --help", ""},
-		{helpHint(msg.HintUnknownCommand, ""), "Посмотреть перечень команд: gentry --help", ""},
+			line(msg.HintAllowReturn, "gentry operator record --answer <ответ> --allow-return plan"),
+			line(msg.HintAllowReturn, "operator_record (answer, allow_return: plan)")},
+		{hintOf(msg.HintFlowShowDraft), line(msg.HintFlowShowDraft, "gentry flow show --draft"), line(msg.HintFlowShowDraft, "flow_show (draft)")},
+		{hintOf(msg.HintTaskClose), "", line(msg.HintTaskClose, "task_close")},
+		{hintOf(msg.HintTaskClose).forTask("SHOP-1"), "", line(msg.HintTaskClose, "task_close (task: SHOP-1)")},
+		{helpHint(msg.HintCommandHelp, "step add"), line(msg.HintCommandHelp, "gentry step add --help"), ""},
+		{helpHint(msg.HintActions, "task"), line(msg.HintActions, "gentry task --help"), ""},
+		{helpHint(msg.HintUnknownCommand, ""), line(msg.HintUnknownCommand, "gentry --help"), ""},
 		{hintOf(msg.HintStateNewer), msg.Text(msg.HintStateNewer), msg.Text(msg.HintStateNewerAgent)},
 		{hintOf(msg.HintTitle), msg.Text(msg.HintTitle), msg.Text(msg.HintTitle)},
 	} {
@@ -56,7 +60,7 @@ func TestHintChannels(t *testing.T) {
 // types it, a command only the agent runs too.
 func TestHintJSON(t *testing.T) {
 	got := renderHints([]hint{hintOf(msg.HintStageExit), helpHint(msg.HintCommandHelp, "task close")}, jsonChannel)
-	want := []string{"Закрыть этап: gentry stage exit --kind <вид> --text <текст>", "Посмотреть описание команды: gentry task close --help"}
+	want := []string{line(msg.HintStageExit, "gentry stage exit --kind <вид> --text <текст>"), line(msg.HintCommandHelp, "gentry task close --help")}
 	if !slices.Equal(got, want) {
 		t.Errorf("%q, want %q", got, want)
 	}
@@ -95,8 +99,19 @@ func TestHintSpecs(t *testing.T) {
 				t.Errorf("%s: %s has no field %s", k, h.cmd, p.field)
 			}
 		}
-		if text := msg.Text(k); strings.Contains(text, "gentry") || strings.Contains(text, ":") {
+		if text := msg.Text(k); strings.Contains(text, ":") {
 			t.Errorf("%s: what to do names the command: %q", k, text)
+		}
+	}
+}
+
+// TestHintsOfCatalog checks every hint of the catalog: none names a command
+// of gentry in its text, which the agent would get as it is. A command is
+// data of hintSpecs.
+func TestHintsOfCatalog(t *testing.T) {
+	for _, k := range msg.Keys() {
+		if strings.HasPrefix(string(k), "hint.") && strings.Contains(msg.Text(k), "gentry ") {
+			t.Errorf("%s names a command: %q", k, msg.Text(k))
 		}
 	}
 }
@@ -113,7 +128,7 @@ func TestHintsLast(t *testing.T) {
 	p = &page{ch: cliChannel}
 	p.WriteString("Готово.\n")
 	p.hints(hintOf(msg.HintTaskClose), hintOf(msg.HintTaskShow))
-	if got, want := p.String(), "Готово.\n\nПосмотреть задачу: gentry task show\n"; got != want {
+	if got, want := p.String(), "Готово.\n\n"+line(msg.HintTaskShow, "gentry task show")+"\n"; got != want {
 		t.Errorf("%q, want %q", got, want)
 	}
 }

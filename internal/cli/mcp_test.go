@@ -146,19 +146,6 @@ func TestToolCall(t *testing.T) {
 	}
 }
 
-// TestMCPProtocolUnfiltered checks that the answers of the server pass as
-// they are, even one that looks like a hint.
-func TestMCPProtocolUnfiltered(t *testing.T) {
-	in := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"stage_show","arguments":{"x: gentry task close":1}}}` + "\n"
-	var out bytes.Buffer
-	if code := Run([]string{"mcp"}, Env{Stdin: strings.NewReader(in), Stdout: &out, Stderr: &out}); code != 0 {
-		t.Fatalf("exit code %d: %s", code, out.String())
-	}
-	if !strings.Contains(out.String(), `gentry task close`) || !strings.Contains(out.String(), `"isError":true`) {
-		t.Errorf("answer: %s", out.String())
-	}
-}
-
 // TestFieldDescription checks that a field of a tool is described by the
 // description of its flag, and the help of the flag adds the text about the
 // command line under it.

@@ -546,7 +546,7 @@ func TestArtifactFile(t *testing.T) {
 	if err := os.WriteFile(big, make([]byte, 10<<20+1), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrArtifactFileTooLarge, "big.bin"), "", cli.HintText(msg.HintArtifactLink)+" --task SHOP-1"),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrArtifactFileTooLarge, "big.bin"), "", cli.HintFor(msg.HintArtifactLink, "task", "SHOP-1")),
 		"artifact", "save", "big", "--file", "big.bin", "--task", "SHOP-1")
 }
 

@@ -6,9 +6,14 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+// jsonReaders are the functions that read Env.json: Run sets it, the others
+// print the output in its form.
+var jsonReaders = []string{"Run", "emit", "warn", "fail"}
 
 // TestOneOutput checks the sources of the package: JSON is printed only by
 // emit and fail, and no command reads --json itself, so that no command
@@ -37,6 +42,13 @@ func TestOneOutput(t *testing.T) {
 				continue
 			}
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				// The form of the output is chosen by Run, and printed by emit,
+				// warn and fail.
+				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "json" {
+					if x, ok := sel.X.(*ast.Ident); ok && x.Name == "env" && !slices.Contains(jsonReaders, fn.Name.Name) {
+						t.Errorf("%s: %s reads env.json", fset.Position(sel.Pos()), fn.Name.Name)
+					}
+				}
 				call, ok := n.(*ast.CallExpr)
 				if !ok {
 					return true

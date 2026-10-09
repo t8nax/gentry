@@ -22,11 +22,12 @@ import (
 var hintLine = regexp.MustCompile(`^(.*): gentry (.+)$`)
 
 // hintLabels match what to do in the hints of the catalog, such as
-// «Посмотреть попытку» or «Установите .+ и повторите».
+// «Посмотреть попытку» or «Установить .+ и повторить». The format of a
+// hint line is no hint.
 var hintLabels = sync.OnceValue(func() []*regexp.Regexp {
 	var labels []*regexp.Regexp
 	for _, k := range msg.Keys() {
-		if !strings.HasPrefix(string(k), "hint.") {
+		if !strings.HasPrefix(string(k), "hint.") || k == msg.HintLine {
 			continue
 		}
 		labels = append(labels, pattern(msg.Text(k), `.+`))

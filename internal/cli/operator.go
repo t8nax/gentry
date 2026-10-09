@@ -72,22 +72,26 @@ func runOperatorRecord(args []string, env Env) int {
 	}
 	defer w.close()
 	req.Task = w.task.ID
+	// The node a return goes to is named by the stage of the snapshot. The
+	// snapshot is read before the decision is recorded: once it is, the
+	// command does not fail, or a repeated call would record it twice.
+	var n names
+	if req.AllowReturn != "" {
+		v, bad := w.view()
+		if bad != nil {
+			return w.fail(env, *bad)
+		}
+		n = namesOf(v)
+	}
 	res, err := task.RecordDecision(w.st, req)
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}
 
 	out := contract.OperatorRecordOutput{Task: res.Task.Key(), Decision: decisionJSON(res.Decision)}
-	// The node the return goes to is named by the stage of the snapshot.
-	var n names
 	if r := res.Return; r != nil {
 		out.Return = &contract.OperatorRecordOutputReturn{Node: r.Node, To: r.To, Returns: r.Returns,
 			MaxReturns: r.Limit, AllowedReturns: r.Allowed}
-		v, bad := w.view()
-		if bad != nil {
-			return w.fail(env, *bad)
-		}
-		n = namesOf(v)
 	}
 	return emit(env, out, func(p *page, out contract.OperatorRecordOutput) {
 		fmt.Fprintln(p, msg.Text(msg.DecisionRecorded))

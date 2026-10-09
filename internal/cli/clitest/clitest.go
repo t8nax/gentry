@@ -3,6 +3,12 @@
 // so that go test runs the groups at once: each test changes the environment
 // and the current directory of its process, so the tests of one package
 // cannot run in parallel.
+//
+// On the operator's machine smaller packages do not make the run shorter: it
+// is bound by the total work — the runs of git and their checks by the
+// antivirus — and each package builds the shop anew, so more packages mean
+// more work. Split into 28 packages, the tests did a third more work and the
+// run took longer (issue #55).
 package clitest
 
 import (

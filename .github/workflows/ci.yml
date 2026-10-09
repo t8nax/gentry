@@ -57,11 +57,14 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # cmd/gentry is left to the binary tests, which run it in full: here it
+      # would build gentry and run its short tests a second time.
       - name: go test
-        run: go test -short ./...
+        run: go test -short $(go list ./... | grep -v '/cmd/gentry$')
 
-      # The tests short mode skips: startup time, hook budget and concurrent
-      # processes, all on one build of gentry.
+      # Runs all the tests of cmd/gentry, including those short mode skips
+      # (startup time, hook budget and concurrent processes), on one build of
+      # gentry; CI runs them nowhere else.
       - name: binary tests
         run: go test -count=1 -v ./cmd/gentry
 

@@ -21,7 +21,12 @@
       "minLength": 1
     },
     "action": {
-      "description": "What happened in the tool: installed, updated or unchanged. The list is open: a client shows an unknown value as is.",
+      "description": "What happened in the tool: installed, updated, unchanged or switched (the plugin was served from another directory, see previous_dir). The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    },
+    "previous_dir": {
+      "description": "Directory the tool served the plugin from before it was switched to dir; only with the action switched.",
       "type": "string",
       "minLength": 1
     },

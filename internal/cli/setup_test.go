@@ -2,8 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,19 +70,26 @@ func TestSetupToolErrors(t *testing.T) {
 }
 
 func TestSetupToolFailed(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv(home.EnvVar, root)
-	t.Setenv("FAKECLAUDE_STATE", filepath.Join(root, "fakeclaude-state.json"))
-	t.Setenv("FAKECLAUDE_FAIL", "install")
-	code, stdout, _ := run("setup", "claude", "--json")
-	validate(t, "schemas/error.json", stdout)
-	var e contract.ErrorOutput
-	json.Unmarshal([]byte(stdout), &e)
-	if code != contract.ExitError || e.Error.Code != contract.CodeToolFailed {
-		t.Fatalf("exit code %d, output %s", code, stdout)
+	tests := []struct{ fail, command string }{
+		{"install", "claude plugin install gentry@gentry --scope user --json"},
+		// The check of the plugin served before anything is written.
+		{"marketplace-list", "claude plugin marketplace list --json"},
 	}
-	if e.Error.Details["command"] != "claude plugin install gentry@gentry --scope user --json" || e.Error.Details["output"] != "simulated failure" {
-		t.Errorf("unexpected details %v", e.Error.Details)
+	for _, tt := range tests {
+		root := t.TempDir()
+		t.Setenv(home.EnvVar, root)
+		t.Setenv("FAKECLAUDE_STATE", filepath.Join(root, "fakeclaude-state.json"))
+		t.Setenv("FAKECLAUDE_FAIL", tt.fail)
+		code, stdout, _ := run("setup", "claude", "--json")
+		validate(t, "schemas/error.json", stdout)
+		var e contract.ErrorOutput
+		json.Unmarshal([]byte(stdout), &e)
+		if code != contract.ExitError || e.Error.Code != contract.CodeToolFailed {
+			t.Fatalf("%s: exit code %d, output %s", tt.fail, code, stdout)
+		}
+		if e.Error.Details["command"] != tt.command || e.Error.Details["output"] != "simulated failure" {
+			t.Errorf("%s: unexpected details %v", tt.fail, e.Error.Details)
+		}
 	}
 }
 
@@ -117,5 +128,179 @@ func TestSetupHomeUnknown(t *testing.T) {
 	json.Unmarshal([]byte(stdout), &e)
 	if code != contract.ExitError || e.Error.Code != contract.CodeHomeUnknown {
 		t.Errorf("exit code %d, output %s; want %d and %s", code, stdout, contract.ExitError, contract.CodeHomeUnknown)
+	}
+}
+
+// fakeState is what the fake claude records in its state file.
+type fakeState struct {
+	Marketplaces []struct{ Name, Path string }
+	Plugins      []struct {
+		ID      string
+		Enabled bool
+	}
+	Log []string // commands run, one line each
+}
+
+func readFake(t *testing.T) fakeState {
+	t.Helper()
+	var s fakeState
+	b, err := os.ReadFile(os.Getenv("FAKECLAUDE_STATE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(b, &s)
+	return s
+}
+
+// fakeMarketplace returns the directory the fake claude serves the plugin of
+// Gentry from.
+func fakeMarketplace(t *testing.T) string {
+	t.Helper()
+	for _, m := range readFake(t).Marketplaces {
+		if m.Name == "gentry" {
+			return m.Path
+		}
+	}
+	return ""
+}
+
+// setupFrom runs `gentry setup claude` with args and root as the data root.
+func setupFrom(t *testing.T, root string, args ...string) (int, string, string) {
+	t.Helper()
+	t.Setenv(home.EnvVar, root)
+	return run(append([]string{"setup", "claude"}, args...)...)
+}
+
+// twoRoots gives two data roots and a fake claude serving the plugin from
+// the first.
+func twoRoots(t *testing.T) (a, b string) {
+	t.Helper()
+	base := t.TempDir()
+	t.Setenv("FAKECLAUDE_STATE", filepath.Join(base, "fakeclaude-state.json"))
+	a, b = filepath.Join(base, "a"), filepath.Join(base, "b")
+	if code, _, stderr := setupFrom(t, a); code != contract.ExitOK {
+		t.Fatalf("setup from a: exit code %d, stderr %q", code, stderr)
+	}
+	return a, b
+}
+
+func TestSetupPluginElsewhere(t *testing.T) {
+	a, b := twoRoots(t)
+	from, to := filepath.Join(a, "integrations", "claude"), filepath.Join(b, "integrations", "claude")
+
+	before := readFake(t).Log
+	code, stdout, stderr := setupFrom(t, b)
+	want := msg.Text(msg.ErrPluginElsewhere, from, to) + "\n\n" + msg.Text(msg.HintPluginElsewhere, "claude") + "\n"
+	if code != contract.ExitError || stdout != "" || stderr != want {
+		t.Errorf("exit code %d, stdout %q, stderr %q; want %q", code, stdout, stderr, want)
+	}
+	if got := readFake(t).Log[len(before):]; !slices.Equal(got, []string{"plugin marketplace list --json"}) {
+		t.Errorf("the refused setup ran %q; want only the marketplace list", got)
+	}
+	if got := fakeMarketplace(t); got != from {
+		t.Errorf("the plugin is served from %q, want it kept at %q", got, from)
+	}
+	if _, err := os.Stat(b); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the refused setup wrote into its data root: %v", err)
+	}
+
+	code, stdout, _ = setupFrom(t, b, "--json")
+	validate(t, "schemas/error.json", stdout)
+	var e contract.ErrorOutput
+	json.Unmarshal([]byte(stdout), &e)
+	if code != contract.ExitError || e.Error.Code != contract.CodePluginElsewhere ||
+		e.Error.Details["tool"] != "claude" || e.Error.Details["registered"] != from || e.Error.Details["dir"] != to {
+		t.Errorf("--json: exit code %d, output %s", code, stdout)
+	}
+
+	if code, stdout, _ := setupFrom(t, a); code != contract.ExitOK || stdout != msg.Text(msg.SetupUnchanged)+"\n" {
+		t.Errorf("setup from the data root of the plugin: exit code %d, stdout %q", code, stdout)
+	}
+}
+
+func TestSetupSwitch(t *testing.T) {
+	a, b := twoRoots(t)
+	from, to := filepath.Join(a, "integrations", "claude"), filepath.Join(b, "integrations", "claude")
+
+	code, stdout, stderr := setupFrom(t, b, "--switch")
+	if code != contract.ExitOK || stdout != msg.Text(msg.SetupSwitched, from)+"\n" {
+		t.Errorf("exit code %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if got := fakeMarketplace(t); got != to {
+		t.Errorf("the plugin is served from %q, want %q", got, to)
+	}
+	if _, err := os.Stat(from); err != nil {
+		t.Errorf("the plugin of the other data root must stay: %v", err)
+	}
+
+	if code, stdout, _ := setupFrom(t, b, "--switch"); code != contract.ExitOK || stdout != msg.Text(msg.SetupUnchanged)+"\n" {
+		t.Errorf("--switch with nothing to switch: exit code %d, stdout %q", code, stdout)
+	}
+	code, stdout, _ = setupFrom(t, a, "--switch", "--json")
+	validate(t, "schemas/setup.json", stdout)
+	var out contract.SetupOutput
+	json.Unmarshal([]byte(stdout), &out)
+	if code != contract.ExitOK || out.Action != "switched" || out.PreviousDir == nil || *out.PreviousDir != to || out.Dir != from || !out.Enabled {
+		t.Errorf("switch back --json: exit code %d, output %s", code, stdout)
+	}
+}
+
+func TestSetupSwitchFromMissing(t *testing.T) {
+	a, b := twoRoots(t)
+	from := filepath.Join(a, "integrations", "claude")
+	if err := os.RemoveAll(a); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := setupFrom(t, b)
+	if code != contract.ExitOK || stdout != msg.Text(msg.SetupSwitched, from)+"\n" {
+		t.Errorf("exit code %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if got, want := fakeMarketplace(t), filepath.Join(b, "integrations", "claude"); got != want {
+		t.Errorf("the plugin is served from %q, want %q", got, want)
+	}
+}
+
+func TestSetupSwitchFirst(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("FAKECLAUDE_STATE", filepath.Join(root, "fakeclaude-state.json"))
+	if code, stdout, _ := setupFrom(t, root, "--switch"); code != contract.ExitOK || stdout != msg.Text(msg.SetupInstalled)+"\n" {
+		t.Errorf("--switch on the first setup: exit code %d, stdout %q", code, stdout)
+	}
+}
+
+func TestSetupSwitchKeepsDisabled(t *testing.T) {
+	a, b := twoRoots(t)
+	if out, err := exec.Command(os.Getenv(claude.ProgramEnv), "plugin", "disable", "gentry@gentry").CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	code, stdout, _ := setupFrom(t, b, "--switch")
+	want := msg.Text(msg.SetupSwitched, filepath.Join(a, "integrations", "claude")) + "\n\n" + msg.Text(msg.SetupDisabled) + "\n"
+	if code != contract.ExitOK || stdout != want {
+		t.Errorf("exit code %d, stdout %q, want %q", code, stdout, want)
+	}
+	if p := readFake(t).Plugins; len(p) != 1 || p[0].Enabled {
+		t.Errorf("the plugin the operator disabled must stay disabled after the switch: %+v", p)
+	}
+}
+
+// A plugin registered through a link to the data root of this command, not
+// yet written, is the same directory once written: nothing is switched.
+func TestSetupSameThroughLink(t *testing.T) {
+	base := t.TempDir()
+	b := filepath.Join(base, "b")
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(b, link); err != nil {
+		t.Skipf("symbolic links are not available: %v", err)
+	}
+	state := filepath.Join(base, "fakeclaude-state.json")
+	t.Setenv("FAKECLAUDE_STATE", state)
+	seed, _ := json.Marshal(map[string]any{"marketplaces": []any{map[string]string{
+		"name": "gentry", "source": "directory", "path": filepath.Join(link, "integrations", "claude"),
+	}}})
+	if err := os.WriteFile(state, seed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, stdout, stderr := setupFrom(t, b); code != contract.ExitOK || stdout != msg.Text(msg.SetupInstalled)+"\n" {
+		t.Errorf("exit code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }

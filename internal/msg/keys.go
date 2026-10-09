@@ -54,6 +54,7 @@ const (
 	ErrEventsAfter          Key = "err.events_after"
 	ErrStateNewer           Key = "err.state_newer"
 	HintStateNewer          Key = "hint.state_newer"
+	HintStateNewerAgent     Key = "hint.state_newer_agent"
 	ErrStateUnavailable     Key = "err.state_unavailable"
 	HintStateUnavail        Key = "hint.state_unavailable"
 	HelpSectionProjects     Key = "help.section.projects"

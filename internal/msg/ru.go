@@ -58,6 +58,7 @@ var ru = catalog{
 		ErrEventsAfter:          "Недопустимое значение флага --after: «%s».",
 		ErrStateNewer:           "Хранилище состояния создано более новой версией Gentry: схема %d, поддерживается до %d.",
 		HintStateNewer:          "Обновите Gentry.",
+		HintStateNewerAgent:     "Сообщить оператору и попросить перезапустить сессию.",
 		ErrStateUnavailable:     "Хранилище состояния недоступно: %v",
 		HintStateUnavail:        "Повторите команду; если ошибка повторится, проверьте доступ к файлу: %s",
 		HelpSectionProjects:     "Проекты и рабочие копии:",

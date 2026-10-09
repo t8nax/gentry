@@ -5,6 +5,8 @@ import (
 	"io"
 	"regexp"
 	"strings"
+
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // Hints name commands: «Посмотреть этап: gentry stage show». The catalog has
@@ -25,9 +27,21 @@ const (
 	replaceLine
 )
 
+// agentHintKeys are hints without a command that the agent gets in words of
+// its own: a server of the agent runs on after Gentry is updated, and only a
+// new session starts the new one.
+var agentHintKeys = map[msg.Key]msg.Key{msg.HintStateNewer: msg.HintStateNewerAgent}
+
 // hintFor tells what to do with line in the channel of the agent, or of the
 // command line if agent is false, and the line to put instead.
 func hintFor(line string, agent bool) (hintAction, string) {
+	if agent {
+		for k, a := range agentHintKeys {
+			if line == msg.Text(k) {
+				return replaceLine, msg.Text(a)
+			}
+		}
+	}
 	m := hintLine.FindStringSubmatch(line)
 	if m == nil {
 		return keepLine, ""

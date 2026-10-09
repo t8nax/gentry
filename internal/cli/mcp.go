@@ -335,7 +335,7 @@ func (t tool) call(raw json.RawMessage) (text string, failed bool) {
 		return msg.Text(msg.ErrToolFields, err.Error()), true
 	}
 	var out bytes.Buffer
-	env := Env{Stdout: &out, Stderr: &out, agent: true}
+	env := Env{Stdout: &out, Stderr: &out, agent: true, oneOutput: true}
 	if stdin != nil {
 		env.Stdin = bytes.NewReader(stdin)
 	}

@@ -250,3 +250,17 @@ func TestHintFilter(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentTexts checks that the texts the agent gets in its own words take
+// their values as strings.
+func TestAgentTexts(t *testing.T) {
+	for k, a := range agentTexts {
+		for _, key := range []msg.Key{k, a} {
+			for _, v := range verbs.FindAllString(msg.Text(key), -1) {
+				if v != "%s" {
+					t.Errorf("%s has %s", key, v)
+				}
+			}
+		}
+	}
+}

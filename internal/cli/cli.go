@@ -25,6 +25,9 @@ type Env struct {
 	// agent is set for the commands gentry mcp runs for the agent: commands
 	// only of the agent run, and hints name tools.
 	agent bool
+	// oneOutput tells that Stdout and Stderr are one output, as the answer
+	// of a tool is.
+	oneOutput bool
 }
 
 // command is a gentry command. Its arguments and flags are declared here and
@@ -485,7 +488,7 @@ func Run(args []string, env Env) int {
 		// blank lines keep their place between its lines.
 		out := &hintFilter{out: env.Stdout, agent: env.agent}
 		errs := out
-		if env.Stderr != env.Stdout {
+		if !env.oneOutput {
 			errs = &hintFilter{out: env.Stderr, agent: env.agent}
 			defer errs.flush()
 		}

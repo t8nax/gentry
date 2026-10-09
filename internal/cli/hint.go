@@ -75,15 +75,25 @@ var agentTexts = map[msg.Key]msg.Key{
 	msg.ErrInputInvalid: msg.ErrToolFields,
 }
 
-// agentText returns the text of the agent for line, if line is a text of
-// agentTexts.
-func agentText(line string) (string, bool) {
-	for k, a := range agentTexts {
+// agentPatterns match the texts of agentTexts, their values as groups.
+var agentPatterns = sync.OnceValue(func() map[msg.Key]*regexp.Regexp {
+	patterns := map[msg.Key]*regexp.Regexp{}
+	for k := range agentTexts {
 		parts := verbs.Split(msg.Text(k), -1)
 		for i, p := range parts {
 			parts[i] = regexp.QuoteMeta(p)
 		}
-		m := regexp.MustCompile(`^` + strings.Join(parts, `(.+)`) + `$`).FindStringSubmatch(line)
+		patterns[k] = regexp.MustCompile(`^` + strings.Join(parts, `(.+)`) + `$`)
+	}
+	return patterns
+})
+
+// agentText returns the text of the agent for line, if line is a text of
+// agentTexts. The values pass as strings: the texts of agentTexts have only
+// %s.
+func agentText(line string) (string, bool) {
+	for k, a := range agentTexts {
+		m := agentPatterns()[k].FindStringSubmatch(line)
 		if m == nil {
 			continue
 		}

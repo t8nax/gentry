@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/agents"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/paths"
@@ -128,7 +129,7 @@ func runTaskTake(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer r.Close()
-	s, bad := syncFlow(env, r)
+	s, synced, bad := syncFlow(env, r)
 	if bad != nil {
 		return fail(env, *bad)
 	}
@@ -150,6 +151,15 @@ func runTaskTake(args []string, env Env) int {
 	if err != nil {
 		return fail(env, processFailure(err))
 	}
+	// A file of the name of a subagent that Gentry did not lay out refuses
+	// the task: a stage of the subagent would run that file.
+	conflicts, err := agents.Check(agentsLayout, []agents.Target{{Path: w.Path, Agents: res.Flow.Agents}})
+	if err != nil {
+		return fail(env, layoutFailure(err))
+	}
+	if len(conflicts) > 0 {
+		return fail(env, agentsConflict(conflicts))
+	}
 	// The flow is read: the process repository is free for other commands
 	// before the task is recorded.
 	r.Close()
@@ -168,9 +178,17 @@ func runTaskTake(args []string, env Env) int {
 		return fail(env, stateFailure(err))
 	}
 	v := views[0]
+	// The task is taken: a layout that fails is told, and agents sync
+	// repeats it.
+	worktrees, err := st.Worktrees()
+	if err != nil {
+		return fail(env, stateFailure(err))
+	}
+	laidPool := &layoutPool{worktrees: worktrees, held: map[string]state.Task{w.Path: t}}
+	layout := layoutWorktree(laidPool, w.Path, res.Flow.Agents)
 
 	if *asJSON {
-		if err := writeJSON(env, contract.TaskTakeOutput{Task: taskJSON(v), Sync: syncJSON(s)}); err != nil {
+		if err := writeJSON(env, contract.TaskTakeOutput{Task: taskJSON(v), Sync: syncJSON(s, synced), Agents: layout.json(laidPool)}); err != nil {
 			return fail(env, internal(err))
 		}
 		return contract.ExitOK
@@ -192,6 +210,7 @@ func runTaskTake(args []string, env Env) int {
 	if d, err := paths.Canonical(wd); err == nil && paths.Within(d, t.Worktree) {
 		hint = msg.Text(msg.HintTaskShow)
 	}
+	writeLayout(&b, layout, true, "")
 	fmt.Fprintf(&b, "\n%s\n", hint)
 	fmt.Fprint(env.Stdout, b.String())
 	return contract.ExitOK

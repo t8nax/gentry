@@ -125,6 +125,19 @@ func commands() []command {
 			},
 		},
 		{
+			name: "agents", section: msg.HelpSectionProjects, summary: msg.CmdAgentsSummary, desc: msg.CmdAgentsDesc,
+			actions: []command{
+				{
+					name: "agents sync", summary: msg.CmdAgentsSyncSummary, desc: msg.CmdAgentsSyncDesc,
+					flags: []flagSpec{
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagAgentsSyncProject)},
+						jsonFlag,
+					},
+					run: runAgentsSync,
+				},
+			},
+		},
+		{
 			name: "flow", section: msg.HelpSectionProcess, summary: msg.CmdFlowSummary, desc: msg.CmdFlowDesc,
 			actions: []command{
 				{

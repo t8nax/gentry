@@ -12,6 +12,10 @@ type ProjectAddOutput struct {
 	// value as is.
 	Action string `json:"action"`
 
+	// What the layout of subagents in the worktrees added did; present only when
+	// there is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// Absolute path of the project knowledge repository.
 	Knowledge string `json:"knowledge"`
 

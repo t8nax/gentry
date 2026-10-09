@@ -7,6 +7,10 @@ import "fmt"
 
 // Output of `gentry task take --json`: the task is taken in the worktree.
 type TaskTakeOutput struct {
+	// What the layout of subagents in the worktree of the task did; present only when
+	// there is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// What the synchronization of the command did; present only when there is
 	// something to tell.
 	Sync *Sync `json:"sync,omitempty,omitzero"`

@@ -13,6 +13,10 @@
       "description": "Absolute path of the worktree the task released.",
       "type": "string",
       "minLength": 1
+    },
+    "agents": {
+      "description": "What the layout of subagents in the worktree the task released did; present only when there is something to tell.",
+      "$ref": "./agents-layout.json"
     }
   },
   "required": ["task", "worktree"]

@@ -94,16 +94,19 @@ func openFlow(flag string) (*process.Repo, flow.Places, *failure) {
 // syncFlow synchronizes the process inside a flow or library command that
 // does not commit: it takes the changes of the remote repository and sends
 // those of this machine.
-func syncFlow(env Env, r *process.Repo) (*process.Sync, *failure) {
+func syncFlow(env Env, r *process.Repo) (*process.Sync, *contract.AgentsLayout, *failure) {
 	s, bad := pull(r)
 	if bad == nil {
 		bad = push(r, s)
+		if bad != nil {
+			// What the pull took is active all the same.
+			layoutRefused(env, r, s)
+		}
 	}
 	if bad != nil {
-		return nil, bad
+		return nil, nil, bad
 	}
-	syncDone(env, r, s, false)
-	return s, nil
+	return s, syncDone(env, r, s, false), nil
 }
 
 // runFlowShow prints the active flow of a project or its draft, as a whole
@@ -145,7 +148,7 @@ func runFlowShow(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	defer r.Close()
-	s, bad := syncFlow(env, r)
+	s, synced, bad := syncFlow(env, r)
 	if bad != nil {
 		return fail(env, *bad)
 	}
@@ -156,7 +159,7 @@ func runFlowShow(args []string, env Env) int {
 	}
 
 	var fl *flow.Flow
-	out := contract.FlowShowOutput{Project: places.Project, Dir: places.Dir, Sync: syncJSON(s)}
+	out := contract.FlowShowOutput{Project: places.Project, Dir: places.Dir, Sync: syncJSON(s, synced)}
 	if a, ok, err := r.Applied(k); err != nil {
 		return fail(env, flowFailure(err, places))
 	} else if ok {
@@ -545,12 +548,14 @@ func runFlowApply(args []string, env Env) int {
 		return fail(env, flowFailure(err, places))
 	}
 	if bad := push(r, s); bad != nil {
+		layoutRefused(env, r, s, places.Project)
 		return fail(env, *bad)
 	}
 	record(event{typ: flow.EventApplied, project: places.Project, data: contract.FlowAppliedData{Commit: applied.Commit}})
-	syncDone(env, r, s, true)
+	synced := syncDone(env, r, s, true)
+	layout, laidPool := layoutFree(r, map[string]bool{places.Project: true})
 	if *asJSON {
-		out := contract.FlowApplyOutput{Project: places.Project, Applied: *appliedJSON(&applied), Sent: s.Remote && !s.Unavailable, Sync: syncJSON(s)}
+		out := contract.FlowApplyOutput{Project: places.Project, Applied: *appliedJSON(&applied), Sent: s.Remote && !s.Unavailable, Sync: syncJSON(s, synced), Agents: layout.json(laidPool)}
 		if err := writeJSON(env, out); err != nil {
 			return fail(env, internal(err))
 		}
@@ -559,6 +564,7 @@ func runFlowApply(args []string, env Env) int {
 	fmt.Fprintln(env.Stdout, msg.Text(msg.FlowApplied))
 	fmt.Fprintln(env.Stdout, msg.Text(msg.FlowProject, places.Project))
 	fmt.Fprintln(env.Stdout, msg.Text(msg.FlowAppliedAt, localTime(applied.Time)))
+	writeLayout(env.Stdout, layout, false, places.Project)
 	return contract.ExitOK
 }
 

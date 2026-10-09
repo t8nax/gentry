@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/agents-layout.json",
+  "title": "AgentsLayout",
+  "description": "What the layout of subagents inside a command did; present only when it changed a worktree, met a conflict or failed. The command itself is done either way.",
+  "type": "object",
+  "properties": {
+    "worktrees": {
+      "description": "The worktrees the layout changed.",
+      "type": "array",
+      "items": { "$ref": "./agents-worktree.json" }
+    },
+    "conflicts": {
+      "description": "Subagents not laid out: a file of their name is there already.",
+      "type": "array",
+      "items": { "$ref": "./agents-conflict.json" }
+    },
+    "error": {
+      "description": "Present if the layout failed, with what went wrong; gentry agents sync repeats it.",
+      "type": "string"
+    }
+  },
+  "required": ["worktrees", "conflicts"]
+}

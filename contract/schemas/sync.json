@@ -28,6 +28,10 @@
     "unavailable": {
       "description": "Present and true if the remote repository did not answer: the command worked with what the machine has.",
       "type": "boolean"
+    },
+    "agents": {
+      "description": "What the layout of subagents in the free worktrees of the projects whose flow or library was received did; present only when there is something to tell.",
+      "$ref": "./agents-layout.json"
     }
   }
 }

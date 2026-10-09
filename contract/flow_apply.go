@@ -9,6 +9,10 @@ import "unicode/utf8"
 // Output of `gentry flow apply --json`: the draft became the active flow with a
 // commit of the process repository.
 type FlowApplyOutput struct {
+	// What the layout of subagents in the free worktrees of the project did; present
+	// only when there is something to tell.
+	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
+
 	// The commit that applied the flow.
 	Applied Applied `json:"applied"`
 

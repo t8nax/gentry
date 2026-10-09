@@ -201,6 +201,39 @@ func Changed(dir string) ([]string, error) {
 	return files, nil
 }
 
+// Tracked returns which of files, relative to the root of the worktree of
+// dir with forward slashes, git tracks there.
+func Tracked(dir string, files []string) (map[string]bool, error) {
+	tracked := map[string]bool{}
+	if len(files) == 0 {
+		return tracked, nil
+	}
+	args := []string{"ls-files", "-z", "--full-name", "--"}
+	for _, f := range files {
+		args = append(args, ":(top,literal)"+f)
+	}
+	out, err := run(dir, args...)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range strings.Split(out, "\x00") {
+		if f != "" {
+			tracked[f] = true
+		}
+	}
+	return tracked, nil
+}
+
+// ExcludeFile returns the file of the patterns the repository of dir ignores
+// on this machine alone, info/exclude. Worktrees of one repository share it.
+func ExcludeFile(dir string) (string, error) {
+	out, err := run(dir, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	if err != nil {
+		return "", err
+	}
+	return paths.Canonical(strings.TrimSpace(out))
+}
+
 // Init creates a repository in dir, creating dir if needed.
 func Init(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/agents-conflict.json",
+  "title": "AgentsConflict",
+  "description": "A subagent that cannot be laid out: a file of its name is in the worktree and Gentry did not lay it out.",
+  "type": "object",
+  "properties": {
+    "worktree": {
+      "description": "Absolute path of the worktree.",
+      "type": "string",
+      "minLength": 1
+    },
+    "agent": {
+      "description": "Identifier of the subagent.",
+      "type": "string",
+      "minLength": 1
+    },
+    "file": {
+      "description": "The file, relative to the worktree root with forward slashes.",
+      "type": "string",
+      "minLength": 1
+    },
+    "reason": {
+      "description": "tracked: git of the project tracks the file; foreign: the file is not tracked and Gentry did not lay it out. The list is open.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["worktree", "agent", "file", "reason"]
+}

@@ -170,6 +170,7 @@ func TestToolHints(t *testing.T) {
 		"Записать разрешение оператора: gentry operator record --answer <ответ> --allow-return x": "Записать разрешение оператора: operator_record (answer, allow_return: x)",
 		"Посмотреть черновик: gentry flow show --draft":                                           "Посмотреть черновик: flow_show (draft)",
 		"Посмотреть этап: gentry stage show --task SHOP-1":                                        "Посмотреть этап: stage_show (task: SHOP-1)",
+		msg.Text(msg.HintStateNewer): msg.Text(msg.HintStateNewerAgent),
 	} {
 		if action, got := hintFor(line, true); action != replaceLine || got != want {
 			t.Errorf("%q: %v %q, want %q", line, action, got, want)

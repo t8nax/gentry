@@ -52,7 +52,7 @@ var ru = catalog{
 		ErrPluginElsewhere:       "Плагин Gentry в Claude Code подключён из другой папки данных.\nПапка плагина: %s\nПапка плагина этой команды: %s",
 		HintPluginElsewhere:      "Переключить плагин всех сессий Claude Code на папку данных этой команды",
 		ErrToolNotFound:          "Программа %s не найдена.",
-		HintToolNotFound:         "Установить %s и повторить",
+		HintToolNotFound:         "Установите %s и повторите",
 		ErrToolFailed:            "Не удалось подключить плагин, команда «%s» завершилась ошибкой: %s",
 		ErrHomeUnknown:           "Не удалось определить папку данных Gentry: нет ни GENTRY_HOME, ни домашней папки пользователя.",
 		HintHomeUnknown:          "Задайте папку данных переменной окружения GENTRY_HOME.",
@@ -155,7 +155,7 @@ var ru = catalog{
 		ColState:                 "СОСТОЯНИЕ",
 		HintEventsAfter:          "Укажите номер события — целое число не меньше 0.",
 		HintKnowledgeFlag:        "Укажите папку знания: --knowledge <путь>",
-		HintProjectIDMissing:     "Указать идентификатор",
+		HintProjectIDMissing:     "Укажите идентификатор",
 		HintProjectIDInvalid:     "Укажите 2–32 строчные латинские буквы, цифры и дефисы, первая — буква.",
 		HintPrefixInvalid:        "Укажите от 2 до 10 заглавных латинских букв.",
 

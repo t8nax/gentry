@@ -93,13 +93,17 @@ func runOperatorRecord(args []string, env Env) int {
 		out.Return = &contract.OperatorRecordOutputReturn{Node: r.Node, To: r.To, Returns: r.Returns,
 			MaxReturns: r.Limit, AllowedReturns: r.Allowed}
 	}
-	return emit(env, out, func(p *page, out contract.OperatorRecordOutput) {
-		fmt.Fprintln(p, msg.Text(msg.DecisionRecorded))
-		if r := out.Return; r != nil {
-			fmt.Fprintln(p, msg.Text(msg.AllowedReturnLine, named(n.nodeTitle(r.To), r.To)))
-			fmt.Fprintln(p, msg.Text(msg.ReturnsLine, r.Returns, r.MaxReturns))
-		}
-	})
+	return emit(env, out, func(p *page, out contract.OperatorRecordOutput) { operatorRecordText(p, out, n) })
+}
+
+// operatorRecordText prints the decision recorded and the return it allows,
+// the node of the return named by n, the names of the snapshot of the task.
+func operatorRecordText(p *page, out contract.OperatorRecordOutput, n names) {
+	fmt.Fprintln(p, msg.Text(msg.DecisionRecorded))
+	if r := out.Return; r != nil {
+		fmt.Fprintln(p, msg.Text(msg.AllowedReturnLine, named(n.nodeTitle(r.To), r.To)))
+		fmt.Fprintln(p, msg.Text(msg.ReturnsLine, r.Returns, r.MaxReturns))
+	}
 }
 
 // readOptions reads the options of an answer given by --input: an array of

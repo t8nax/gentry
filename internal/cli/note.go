@@ -83,11 +83,15 @@ func runNoteList(args []string, env Env) int {
 		}
 		n = namesOf(v)
 	}
-	return emit(env, out, func(p *page, out contract.NoteListOutput) {
-		if len(out.Notes) == 0 {
-			fmt.Fprintln(p, msg.Text(msg.NotesNone))
-			return
-		}
-		writeNotes(&p.Builder, out.Notes, n, "")
-	})
+	return emit(env, out, func(p *page, out contract.NoteListOutput) { noteListText(p, out, n) })
+}
+
+// noteListText prints the notes of the task, their stages named by n, the
+// names of its snapshot.
+func noteListText(p *page, out contract.NoteListOutput, n names) {
+	if len(out.Notes) == 0 {
+		fmt.Fprintln(p, msg.Text(msg.NotesNone))
+		return
+	}
+	writeNotes(&p.Builder, out.Notes, n, "")
 }

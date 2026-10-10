@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
@@ -134,12 +135,13 @@ func TestProcessSyncText(t *testing.T) {
 	a := clitest.ShopPlaces()
 	clitest.WriteFiles(t, a.Library, map[string]string{"reviewer.md": "Проверить изменения задачи и тексты.\n"})
 	_, stdout, _ = clitest.Run("library", "diff")
-	want := "Библиотека применена: <время>\n\nИзменения:\n  Субагент reviewer: изменён\n\nПрименить изменения: gentry library apply\n"
+	want := clitest.Lines(msg.Text(msg.LibraryAppliedAt, "<время>"), "", msg.Text(msg.FlowChanges),
+		"  "+msg.Text(msg.FlowChange, msg.Text(msg.FlowObjAgent, "reviewer"), msg.Text(msg.FlowChangeModified)), "", cli.HintText(msg.HintLibraryApply))
 	if clitest.Masked(stdout) != want {
 		t.Errorf("library diff:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := clitest.Run("library", "apply"); clitest.Masked(stdout) != "Изменения библиотеки применены.\nБиблиотека применена: <время>\n\n"+
-		"Субагенты разложены в свободные рабочие копии.\nИзменения вступят в силу со следующей сессии агента.\n" {
+	if _, stdout, _ := clitest.Run("library", "apply"); clitest.Masked(stdout) != clitest.Lines(msg.Text(msg.LibraryApplied),
+		msg.Text(msg.LibraryAppliedAt, "<время>"), "", msg.Text(msg.AgentsFreeSyncedAll), msg.Text(msg.AgentsNextSession)) {
 		t.Errorf("library apply:\n%s", stdout)
 	}
 	m.onB()
@@ -151,7 +153,7 @@ func TestProcessSyncText(t *testing.T) {
 	}
 	clitest.MustRun(t, "flow", "discard")
 	clitest.WriteFiles(t, b.Library, map[string]string{"reviewer.md": "Черновик.\n"})
-	if _, stdout, _ := clitest.Run("library", "discard"); stdout != "Изменения библиотеки отменены.\n" {
+	if _, stdout, _ := clitest.Run("library", "discard"); stdout != msg.Text(msg.LibraryDiscarded)+"\n" {
 		t.Errorf("library discard:\n%s", stdout)
 	}
 	if b, _ := os.ReadFile(filepath.Join(b.Library, "reviewer.md")); string(b) != "Проверить изменения задачи и тексты.\n" {
@@ -252,14 +254,15 @@ func TestLibraryRefusals(t *testing.T) {
 	clitest.ConnectedShop(t)
 	p := clitest.ShopPlaces()
 	code, _, stderr := clitest.Run("library", "diff")
-	if want := "У библиотеки субагентов нет черновика.\nПапка библиотеки: " + p.Library + "\n"; code != contract.ExitError || stderr != want {
+	if want := clitest.Lines(msg.Text(msg.ErrLibraryDraftNotFound), msg.Text(msg.LibraryDir, p.Library)); code != contract.ExitError || stderr != want {
 		t.Errorf("no draft: exit code %d, stderr:\n%s", code, stderr)
 	}
 	clitest.WriteFiles(t, p.Library, map[string]string{"tester.yaml": "capabilities: [read]\n", "notes.txt": "x\n"})
 	code, _, stderr = clitest.Run("library", "apply")
-	want := "В изменениях библиотеки есть ошибки.\nПапка библиотеки: " + p.Library + "\n\nОшибки:\n" +
-		"  Субагент tester: не заполнено поле «purpose».\n  Субагент tester: нет инструкции.\n" +
-		"  Файл не относится к библиотеке субагентов: notes.txt\n"
+	tester := msg.Text(msg.FlowObjAgent, "tester")
+	want := clitest.Lines(msg.Text(msg.ErrLibraryDraftInvalid), msg.Text(msg.LibraryDir, p.Library), "", msg.Text(msg.FlowProblems),
+		"  "+msg.Text(msg.ProblemMissingField, tester, "purpose"), "  "+msg.Text(msg.ProblemMissingInstruction, tester),
+		"  "+msg.Text(msg.ProblemLibraryExtraFile, "notes.txt"))
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("invalid: exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)
 	}
@@ -366,8 +369,9 @@ func TestLibraryBreaksFlow(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
 	code, stdout, stderr := clitest.Run("library", "apply")
-	want := "Изменения библиотеки вносят ошибки во флоу проектов.\nПапка библиотеки: " + p.Library + "\n\n" +
-		"Ошибки флоу проекта shop:\n  Этап review: субагент reviewer не найден.\n"
+	noReviewer := msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer")
+	want := clitest.Lines(msg.Text(msg.ErrLibraryBreaksFlows), msg.Text(msg.LibraryDir, p.Library), "",
+		msg.Text(msg.LibraryFlowProblems, "shop"), "  "+noReviewer)
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)
 	}
@@ -382,7 +386,7 @@ func TestLibraryBreaksFlow(t *testing.T) {
 	}
 	clitest.Validate(t, "schemas/library-draft-invalid.json", string(out.Error.Details))
 	if want := `{"dir":` + clitest.JSONString(p.Library) + `,"flows":[{"problems":[{"code":"unknown_executor","file":"stages/review.yaml","line":3,` +
-		`"message":"Этап review: субагент reviewer не найден."}],"project":"shop"}],"problems":[]}`; string(out.Error.Details) != want {
+		`"message":` + clitest.JSONString(noReviewer) + `}],"project":"shop"}],"problems":[]}`; string(out.Error.Details) != want {
 		t.Errorf("details:\n%s\nwant:\n%s", out.Error.Details, want)
 	}
 

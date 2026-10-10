@@ -162,7 +162,7 @@ func TestDiffText(t *testing.T) {
 			h += msg.Text(msg.FlowAppliedAt, "—") + "\n"
 		}
 		if library {
-			h += "Библиотека применена: 2026-10-09 12:30\n"
+			h += msg.Text(msg.LibraryAppliedAt, "2026-10-09 12:30") + "\n"
 		}
 		return h + "Файл изменений: /work/process/shop/changes.md\n\n"
 	}

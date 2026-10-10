@@ -455,6 +455,15 @@ func TestWayFailureText(t *testing.T) {
 			hintLineOf(msg.HintOtherTransitions, "stage_show"),
 			hintLineOf(msg.HintAllowReturn, "operator_record (answer, allow_return: implementation)"),
 		)},
+		{"no return", "operator record", &task.ReturnNotFoundError{Node: "branch", To: "plan", Stage: flow.Stage{ID: "branch", Title: "Ветка"}, Returns: []string{}}, true, lines(
+			"У этапа «Ветка» нет возврата к узлу plan.",
+			"",
+			hintLineOf(msg.HintStageTransitions, "gentry stage show"),
+		), lines(
+			"У этапа «Ветка» нет возврата к узлу plan.",
+			"",
+			hintLineOf(msg.HintStageTransitions, "stage_show"),
+		)},
 		{"no steps", "stage exit", &task.StepsEmptyError{Node: "branch", Stage: flow.Stage{ID: "branch", Title: "Ветка"}}, true, lines(
 			"У этапа «Ветка» нет шагов.",
 		), lines(

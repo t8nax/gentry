@@ -327,10 +327,56 @@ func TestTaskShowText(t *testing.T) {
 			"",
 			msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceOperator)),
 		), ""},
+		{"statement with decisions", contract.TaskShowOutput{Task: shopTask(), OperatorDecisions: decisions},
+			taskShowExtra{names: shopNames(), statement: true}, lines(
+				msg.Text(msg.StatementHeading, "SHOP-1"),
+				"  Клиент возвращает часть заказа.",
+				"",
+				msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceOperator)),
+				"",
+				"Решения оператора:",
+				"  1. Ветка (branch), круг 1, записано оператором:",
+				"     Вопрос: Делать частичный возврат и для СБП?",
+				"     Варианты:",
+				"       1. Только карта (рекомендован): СБП требует другого API банка.",
+				"       2. Карта и СБП:",
+				"            Задача вырастет примерно вдвое.",
+				"            Сроки сдвинутся.",
+				"       3. Отложить",
+				"     Ответ: Давай первый.",
+				"",
+				"  2. План фичи (plan-feature), круг 1, записано "+msg.Text(msg.TaskSourceAgent)+":",
+				"     Ответ:",
+				"       Сумму возврата писать в лог.",
+				"       Уровень — info.",
+				"",
+				"  3. Ревью (review), круг 2, записано оператором:",
+				"     Ответ: Да.",
+				"     "+msg.Text(msg.AllowedReturnLine, "Реализация (implementation)"),
+			), ""},
+		{"hint to the decisions", contract.TaskShowOutput{Task: shopTask(), Path: []contract.TaskPass{currentPass()}, OperatorDecisions: decisions},
+			taskShowExtra{names: shopNames(), here: true},
+			current + lines(hintLineOf(msg.HintStatementDecisions, "gentry task show --statement")),
+			current + lines(hintLineOf(msg.HintStatementDecisions, "task_show (statement)"))},
 	}
 	for _, tt := range tests {
 		wantText(t, tt.name, func(p *page) { taskShowText(p, tt.out, tt.x) }, tt.cli, tt.agent)
 	}
+}
+
+// decisions are decisions of the operator: with a question and options, of
+// several lines recorded by the agent, and one that allows a return.
+var decisions = []contract.OperatorDecision{
+	{Number: 1, Node: "branch", Stage: "branch", Round: 1, Source: contract.OperatorDecisionSourceOperator, Recorded: shopTime,
+		Question: ptr("Делать частичный возврат и для СБП?"), Answer: "Давай первый.", Options: []contract.QuestionOption{
+			{Label: "Только карта", Description: ptr("СБП требует другого API банка."), Recommended: ptr(true)},
+			{Label: "Карта и СБП", Description: ptr("Задача вырастет примерно вдвое.\nСроки сдвинутся.")},
+			{Label: "Отложить"},
+		}},
+	{Number: 2, Node: "plan", Stage: "plan-feature", Round: 1, Source: contract.OperatorDecisionSourceAgent, Recorded: shopTime,
+		Answer: "Сумму возврата писать в лог.\nУровень — info."},
+	{Number: 3, Node: "review", Stage: "review", Round: 2, Source: contract.OperatorDecisionSourceOperator, Recorded: shopTime,
+		Answer: "Да.", AllowReturn: ptr("implementation")},
 }
 
 func TestTaskListText(t *testing.T) {

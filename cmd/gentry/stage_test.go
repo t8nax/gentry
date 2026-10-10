@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // atOnce starts a process of the binary in dir for each command line at once
@@ -66,7 +68,7 @@ func TestCloseStageAtOnce(t *testing.T) {
 		switch {
 		case !r.failed:
 			closed++
-		case !strings.Contains(r.text, "нет шагов"):
+		case !strings.Contains(r.text, msg.Text(msg.ErrStepsEmpty, "План фичи")):
 			t.Errorf("%s; want no steps", r.text)
 		}
 	}

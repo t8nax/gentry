@@ -8,6 +8,7 @@ import (
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/state"
 	"github.com/t8nax/gentry/internal/task"
 )
 
@@ -183,12 +184,133 @@ func TestTaskShowText(t *testing.T) {
 		"У этапа нет шагов.",
 		"",
 	)
+	// The scenario passed: a pass of each outcome, closed by the agent but the
+	// last, the stage of the operator closed by the operator; the third has
+	// steps, the fourth a reason.
+	pass := func(node, stage, to string, exit *contract.TaskPassExit, src contract.TaskPassSource, steps ...contract.TaskStep) contract.TaskPass {
+		outcome := contract.TaskPassOutcome(state.OutcomeExit)
+		if exit == nil {
+			outcome = contract.TaskPassOutcome(state.OutcomeSkip)
+		}
+		if steps == nil {
+			steps = []contract.TaskStep{}
+		}
+		return contract.TaskPass{Node: node, Stage: stage, Round: 1, Entered: shopTime, Steps: steps,
+			Outcome: &outcome, Source: &src, To: ptr(to), Closed: &shopTime, Exit: exit}
+	}
+	result := func(text string) *contract.TaskPassExit {
+		return &contract.TaskPassExit{Kind: contract.TaskPassExitKindResult, Text: text}
+	}
+	agent := contract.TaskPassSourceAgent
+	resultWord := msg.Text(msg.ExitKindResult)
+	review := pass("review", "review", "merge", result("Замечаний нет"), agent)
+	review.Reason = ptr("Существенных замечаний нет")
+	path := []contract.TaskPass{
+		pass("branch", "branch", "plan", nil, agent),
+		pass("plan", "plan-feature", "implementation", &contract.TaskPassExit{Kind: contract.TaskPassExitKindArtifact, Artifact: ptr("plan"), Text: "План согласован"}, agent),
+		pass("implementation", "implementation", "review", result("Изменения сделаны, тесты проходят"), agent,
+			contract.TaskStep{Number: 1, Title: "Добавить расчёт суммы", State: contract.TaskStepStateDone, Check: ptr("go test ./backend/payments/...")},
+			contract.TaskStep{Number: 2, Title: "Покрыть расчёт тестами", State: contract.TaskStepStateDropped, Reason: ptr("Тесты уже есть в шаге 1")}),
+		review,
+		pass("merge", "merge", flow.Finish, result("Ветка влита в main"), contract.TaskPassSourceOperator),
+	}
+	path[4].Source = ptr(agent)
+	passed := shopTask()
+	passed.Stage, passed.Finished, passed.Progress.Passed = nil, true, 5
+	artifacts := []contract.TaskArtifact{{Name: "plan", Kind: contract.TaskArtifactKindLink, Url: ptr("https://claude.ai/code/artifact/plan"),
+		Source: contract.TaskArtifactSourceAgent, Saved: shopTime}}
+	notes := []contract.TaskNote{{Number: 1, Node: "implementation", Stage: "implementation", Round: 1, Text: "Проверить СБП", Added: shopTime}}
+	passedFields := lines(
+		msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
+		"",
+		msg.Text(msg.TaskProject, "shop"),
+		msg.Text(msg.TaskState, msg.Text(msg.TaskStateActive)),
+		msg.Text(msg.TaskScenario, "Фича (feature)"),
+		msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
+		msg.Text(msg.ProgressLine, "5 из 5"),
+		msg.Text(msg.TaskTakenAt, "2026-10-09 12:30"),
+		msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
+		msg.Text(msg.TaskWorktree, shopFix),
+	)
+	passedTable := passedFields + "\n" + table(
+		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
+		[]string{"Ветка", "1", "пропуск", "plan"},
+		[]string{"План фичи", "1", msg.Text(msg.ExitKindArtifact, "plan"), "implementation"},
+		[]string{"Реализация", "1", resultWord, "review"},
+		[]string{"Ревью", "1", resultWord, "merge"},
+		[]string{"Слияние", "1", resultWord, "конец"},
+	) + "\n" + table(
+		[]string{msg.Text(msg.ColArtifact), msg.Text(msg.ColKind), msg.Text(msg.ColSaved), msg.Text(msg.ColPlace)},
+		[]string{"plan", "ссылка", "2026-10-09 12:30", "https://claude.ai/code/artifact/plan"},
+	) + "\n"
+	steps := table(
+		[]string{msg.Text(msg.ColStepNumber), msg.Text(msg.ColState), msg.Text(msg.ColStep), msg.Text(msg.ColComment)},
+		[]string{"1", "выполнен", "Добавить расчёт суммы", "go test ./backend/payments/..."},
+		[]string{"2", "снят", "Покрыть расчёт тестами", "Тесты уже есть в шаге 1"},
+	)
+	passedPasses := passedFields + lines(
+		"",
+		"Ветка (branch), круг 1",
+		"Итог: пропуск",
+		msg.Text(msg.TransitionLine, "plan"),
+		"Записано: агентом",
+		"Закрыт: 2026-10-09 12:30",
+		"",
+		"План фичи (plan-feature), круг 1",
+		msg.Text(msg.OutcomeLine, msg.Text(msg.ExitKindArtifact, "plan")),
+		msg.Text(msg.ExitTextLine, "План согласован"),
+		msg.Text(msg.TransitionLine, "implementation"),
+		"Записано: агентом",
+		"Закрыт: 2026-10-09 12:30",
+		"",
+		"Реализация (implementation), круг 1",
+		msg.Text(msg.OutcomeLine, resultWord),
+		msg.Text(msg.ExitTextLine, "Изменения сделаны, тесты проходят"),
+		msg.Text(msg.TransitionLine, "review"),
+		"Записано: агентом",
+		"Закрыт: 2026-10-09 12:30",
+		"",
+	) + steps + lines(
+		"",
+		"Ревью (review), круг 1",
+		msg.Text(msg.OutcomeLine, resultWord),
+		msg.Text(msg.ExitTextLine, "Замечаний нет"),
+		msg.Text(msg.TransitionLine, "merge"),
+		msg.Text(msg.ReasonLine, "Существенных замечаний нет"),
+		"Записано: агентом",
+		"Закрыт: 2026-10-09 12:30",
+		"",
+		"Слияние (merge), круг 1",
+		msg.Text(msg.OutcomeLine, resultWord),
+		msg.Text(msg.ExitTextLine, "Ветка влита в main"),
+		msg.Text(msg.TransitionLine, "конец"),
+		msg.Text(msg.RecordedLine, msg.Text(msg.TaskSourceAgent)),
+		"Закрыт: 2026-10-09 12:30",
+		"",
+	)
 	tests := []struct {
 		name       string
 		out        contract.TaskShowOutput
 		x          taskShowExtra
 		cli, agent string
 	}{
+		{"scenario passed", contract.TaskShowOutput{Task: passed, Path: path, Artifacts: artifacts, Notes: notes},
+			taskShowExtra{names: shopNames(), here: true},
+			passedTable + lines(
+				hintLineOf(msg.HintStatement, "gentry task show --statement"),
+				hintLineOf(msg.HintNotes, "gentry note list"),
+			), passedTable + lines(
+				hintLineOf(msg.HintStatement, "task_show (statement)"),
+				hintLineOf(msg.HintNotes, "note_list"),
+				hintLineOf(msg.HintTaskClose, "task_close"),
+			)},
+		{"path in full", contract.TaskShowOutput{Task: passed, Path: path},
+			taskShowExtra{names: shopNames(), here: true, full: true},
+			passedPasses + lines(hintLineOf(msg.HintStatement, "gentry task show --statement")),
+			passedPasses + lines(
+				hintLineOf(msg.HintStatement, "task_show (statement)"),
+				hintLineOf(msg.HintTaskClose, "task_close"),
+			)},
 		{"current stage", contract.TaskShowOutput{Task: shopTask(), Path: []contract.TaskPass{currentPass()}},
 			taskShowExtra{names: shopNames(), here: true},
 			current + lines(hintLineOf(msg.HintStatement, "gentry task show --statement")),

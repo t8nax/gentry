@@ -24,6 +24,37 @@ func closeStage(t *testing.T, step string, flags ...string) {
 	clitest.MustRun(t, append([]string{"stage", "exit", "--kind", "result", "--text", "Готово"}, flags...)...)
 }
 
+// The words of the outputs are those of the catalog: the tests of the output
+// in package cli state them.
+var (
+	none   = msg.Text(msg.ValueNone)
+	result = msg.Text(msg.ExitKindResult)
+)
+
+// round names a stage of the shop by its title and identifier with the
+// round of its pass.
+func round(title, stage string, n int) string {
+	return msg.Text(msg.StageRound, msg.Text(msg.TaskNamed, title, stage), n)
+}
+
+// progress is the line of the progress of a task of the feature scenario,
+// which has five stages.
+func progress(passed int) string {
+	return msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, passed, 5))
+}
+
+// returnLimit is the refusal of a return to the node to when its limit of n
+// returns is used up.
+func returnLimit(to string, n int) string {
+	return clitest.Lines(
+		msg.Text(msg.ErrReturnLimit, to),
+		msg.Text(msg.ReturnsLine, n, n),
+		"",
+		cli.HintText(msg.HintOtherTransitions),
+		cli.HintFor(msg.HintAllowReturn, "allow_return", to),
+	)
+}
+
 // TestStageFeature takes a task of the shop through the feature scenario
 // with returns from review to implementation up to the limit.
 func TestStageFeature(t *testing.T) {
@@ -32,16 +63,18 @@ func TestStageFeature(t *testing.T) {
 	t.Chdir(fix)
 
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Этап: Ветка (branch), круг 1",
-		"Задача: SHOP-1",
-		"Исполнитель: orchestrator",
-		"Выход: создана ветка задачи",
-		"Фрагменты: —",
+		msg.Text(msg.FlowStage, round("Ветка", "branch", 1)),
+		msg.Text(msg.StageTask, "SHOP-1"),
+		msg.Text(msg.FlowExecutor, "orchestrator"),
+		msg.Text(msg.FlowExit, "создана ветка задачи"),
+		msg.Text(msg.FlowParts, none),
 		"",
-		"ПЕРЕХОД  ЭТАП       УСЛОВИЕ  ВОЗВРАТЫ",
-		"plan     План фичи  —        —",
+	)+clitest.Table(
+		[]string{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)},
+		[]string{"plan", "План фичи", none, none},
+	)+clitest.Lines(
 		"",
-		"Инструкция:",
+		msg.Text(msg.FlowInstruction),
 		"  Создать ветку задачи от main.",
 	), "", "stage", "show")
 	out := clitest.WantJSON(t, contract.ExitOK, "schemas/stage-show.json", "stage", "show")
@@ -53,32 +86,32 @@ func TestStageFeature(t *testing.T) {
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", cli.HintText(msg.HintStepAdd)),
 		"stage", "exit", "--kind", "result", "--text", "Создана ветка")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"К этапу добавлено шагов: 1.",
-		"Номер шага: 1",
+		msg.Text(msg.StepsAdded, 1),
+		msg.Text(msg.StepNumber, 1),
 	), "", "step", "add", "Создать ветку feature/shop-1")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Шаг 1 выполнен.",
-		"Осталось шагов: 0",
+		msg.Text(msg.StepMarkedDone, 1),
+		msg.Text(msg.StepsLeft, 0),
 		"",
-		"Закрыть этап: gentry stage exit --kind <вид> --text <текст>",
+		cli.HintText(msg.HintStageExit),
 	), "", "step", "done", "1", "--check", "git branch --show-current")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Этап «Ветка» закрыт.",
-		"Вид выхода: результат",
-		"Выход: Создана ветка feature/shop-1",
-		"Переход: plan",
-		"Этап: План фичи (plan-feature), круг 1",
-		"Прогресс: 1 из 5",
+		msg.Text(msg.StageExited, "Ветка"),
+		msg.Text(msg.ExitKindLine, result),
+		msg.Text(msg.ExitTextLine, "Создана ветка feature/shop-1"),
+		msg.Text(msg.TransitionLine, "plan"),
+		msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
+		progress(1),
 		"",
-		"Посмотреть этап: gentry stage show",
+		cli.HintText(msg.HintStageShow),
 	), "", "stage", "exit", "--kind", "result", "--text", "Создана ветка feature/shop-1")
 
 	// An exit by an artifact needs the artifact saved.
 	clitest.MustRun(t, "step", "add", "Согласовать план")
 	clitest.MustRun(t, "step", "done", "1")
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrArtifactNotFound, "plan"), "", "Сохранить артефакт: gentry artifact save plan --file <путь>"),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrArtifactNotFound, "plan"), "", cli.HintFor(msg.HintArtifactSave, "name", "plan")),
 		"stage", "exit", "--kind", "artifact", "--artifact", "plan", "--text", "План согласован с оператором")
-	clitest.WantRun(t, contract.ExitOK, clitest.Lines("Артефакт plan сохранён.", "Адрес: https://claude.ai/code/artifact/plan"), "",
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.ArtifactSaved, "plan"), msg.Text(msg.ArtifactURLLine, "https://claude.ai/code/artifact/plan")), "",
 		"artifact", "save", "plan", "--url", "https://claude.ai/code/artifact/plan")
 	out = clitest.WantJSON(t, contract.ExitOK, "schemas/stage-close.json",
 		"stage", "exit", "--kind", "artifact", "--artifact", "plan", "--text", "План согласован с оператором")
@@ -91,32 +124,32 @@ func TestStageFeature(t *testing.T) {
 
 	// Implementation: a step not done is listed; a dropped step needs a reason.
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"К этапу добавлено шагов: 2.",
-		"Номера шагов: 1–2",
+		msg.Text(msg.StepsAdded, 2),
+		msg.Text(msg.StepNumbers, 1, 2),
 	), "", "step", "add", "Добавить расчёт суммы", "Покрыть расчёт тестами")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Шаг 1 выполнен.",
-		"Осталось шагов: 1",
+		msg.Text(msg.StepMarkedDone, 1),
+		msg.Text(msg.StepsLeft, 1),
 	), "", "step", "done", "1", "--check", "go test ./backend/payments/...")
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(
 		msg.Text(msg.ErrStepsOpen),
 		"",
-		"Невыполненные шаги:",
+		msg.Text(msg.StepsOpenHeading),
 		"  2. Покрыть расчёт тестами",
 		"",
-		"Отметить шаг выполненным: gentry step done <номер>",
-		"Снять шаг: gentry step drop <номер> --reason <обоснование>",
+		cli.HintText(msg.HintStepDone),
+		cli.HintText(msg.HintStepDrop),
 	), "stage", "exit", "--kind", "result", "--text", "Изменения сделаны")
 	if code, c := clitest.ErrorCode(t, "step", "drop", "2"); code != contract.ExitUsage || c != contract.CodeMissingField {
 		t.Errorf("step drop without a reason: exit code %d, code %s", code, c)
 	}
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Шаг 2 снят.",
-		"Осталось шагов: 0",
+		msg.Text(msg.StepMarkedDropped, 2),
+		msg.Text(msg.StepsLeft, 0),
 		"",
-		"Закрыть этап: gentry stage exit --kind <вид> --text <текст>",
+		cli.HintText(msg.HintStageExit),
 	), "", "step", "drop", "2", "--reason", "Тесты уже есть в шаге 1")
-	clitest.WantRun(t, contract.ExitOK, "Заметка 1 добавлена.\n", "", "note", "add", "На ревью проверить, что возврат по СБП не задет")
+	clitest.WantRun(t, contract.ExitOK, msg.Text(msg.NoteAdded, 1)+"\n", "", "note", "add", "На ревью проверить, что возврат по СБП не задет")
 	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Изменения сделаны, тесты проходят")
 
 	// Review is a fork: the transition and its reason are required.
@@ -126,18 +159,18 @@ func TestStageFeature(t *testing.T) {
 		"stage", "exit", "--kind", "result", "--text", "Замечания записаны")
 	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrForkReasonMissing), "", cli.HintText(msg.HintCommandHelp, "stage exit")),
 		"stage", "exit", "--kind", "result", "--text", "Замечания записаны", "--to", "implementation")
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ревью» нет перехода к узлу deploy.", "", cli.HintText(msg.HintStageTransitions)),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrTransitionNotFound, "Ревью", "deploy"), "", cli.HintText(msg.HintStageTransitions)),
 		"stage", "exit", "--kind", "result", "--text", "Замечания записаны", "--to", "deploy", "--reason", "Выкатить")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Этап «Ревью» закрыт.",
-		"Вид выхода: результат",
-		"Выход: Замечания записаны",
-		"Переход: implementation",
-		"Обоснование: Две ошибки в расчёте суммы",
-		"Этап: Реализация (implementation), круг 2",
-		"Прогресс: 4 из 5",
+		msg.Text(msg.StageExited, "Ревью"),
+		msg.Text(msg.ExitKindLine, result),
+		msg.Text(msg.ExitTextLine, "Замечания записаны"),
+		msg.Text(msg.TransitionLine, "implementation"),
+		msg.Text(msg.ReasonLine, "Две ошибки в расчёте суммы"),
+		msg.Text(msg.TaskStage, round("Реализация", "implementation", 2)),
+		progress(4),
 		"",
-		"Посмотреть этап: gentry stage show",
+		cli.HintText(msg.HintStageShow),
 	), "", "stage", "exit", "--kind", "result", "--text", "Замечания записаны", "--to", "implementation", "--reason", "Две ошибки в расчёте суммы")
 	// The new pass starts without steps.
 	if code, c := clitest.ErrorCode(t, "stage", "exit", "--kind", "result", "--text", "Исправлено"); code != contract.ExitError || c != contract.CodeStepsEmpty {
@@ -152,30 +185,26 @@ func TestStageFeature(t *testing.T) {
 	clitest.MustRun(t, "step", "add", "Провести ревью")
 	clitest.MustRun(t, "step", "done", "1")
 	_, stdout, _ := clitest.Run("stage", "show")
-	if !strings.Contains(stdout, "Этап: Ревью (review), круг 4\n") || !strings.Contains(stdout, "ревью выявило существенные замечания  3 из 3\n") {
+	if !strings.Contains(stdout, msg.Text(msg.FlowStage, round("Ревью", "review", 4))+"\n") ||
+		!strings.Contains(stdout, "ревью выявило существенные замечания  "+msg.Text(msg.StageReturns, 3, 3)+"\n") {
 		t.Errorf("stage show at the limit:\n%s", stdout)
 	}
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(
-		"Возвраты к узлу implementation исчерпаны.",
-		"Возвратов: 3 из 3",
-		"",
-		"Посмотреть другие переходы: gentry stage show",
-		"Записать разрешение оператора: gentry operator record --answer <ответ> --allow-return implementation",
-	), "stage", "exit", "--kind", "result", "--text", "Замечания", "--to", "implementation", "--reason", "Ещё замечания")
+	clitest.WantRun(t, contract.ExitError, "", returnLimit("implementation", 3),
+		"stage", "exit", "--kind", "result", "--text", "Замечания", "--to", "implementation", "--reason", "Ещё замечания")
 	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Замечаний нет", "--to", "merge", "--reason", "Существенных замечаний нет")
 
 	// Merge is the operator's: no steps needed. Its exit passes the scenario.
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Этап «Слияние» закрыт.",
-		"Вид выхода: результат",
-		"Выход: Ветка влита в main",
-		"Переход: конец",
-		"Этап: сценарий пройден",
-		"Прогресс: 5 из 5",
+		msg.Text(msg.StageExited, "Слияние"),
+		msg.Text(msg.ExitKindLine, result),
+		msg.Text(msg.ExitTextLine, "Ветка влита в main"),
+		msg.Text(msg.TransitionLine, msg.Text(msg.FlowEnd)),
+		msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
+		progress(5),
 		"",
-		"Закрыть задачу: gentry task close",
+		cli.HintText(msg.HintTaskClose),
 	), "", "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
-	finished := clitest.Lines(msg.Text(msg.ErrScenarioFinished, "SHOP-1"), "", "Закрыть задачу: gentry task close")
+	finished := clitest.Lines(msg.Text(msg.ErrScenarioFinished, "SHOP-1"), "", cli.HintText(msg.HintTaskClose))
 	clitest.WantRun(t, contract.ExitError, "", finished, "stage", "show")
 	clitest.WantRun(t, contract.ExitError, "", finished, "step", "add", "Ещё шаг")
 	clitest.WantRun(t, contract.ExitError, "", finished, "stage", "skip", "--reason", "Не нужен")
@@ -186,32 +215,42 @@ func TestStageFeature(t *testing.T) {
 	clitest.MustRun(t, "note", "add", "Первая строка.\nВторая строка.")
 
 	_, stdout, _ = clitest.Run("task", "show")
+	// The table of the path: the columns are as wide as the longest cell.
+	pathTable := clitest.Table(
+		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
+		[]string{"Ветка", "1", result, "plan"},
+		[]string{"План фичи", "1", msg.Text(msg.ExitKindArtifact, "plan"), "implementation"},
+		[]string{"Реализация", "1", result, "review"},
+		[]string{"Ревью", "1", result, "implementation"},
+		[]string{"Реализация", "2", result, "review"},
+		[]string{"Ревью", "2", result, "implementation"},
+		[]string{"Реализация", "3", result, "review"},
+		[]string{"Ревью", "3", result, "implementation"},
+		[]string{"Реализация", "4", result, "review"},
+		[]string{"Ревью", "4", result, "merge"},
+		[]string{"Слияние", "1", result, msg.Text(msg.FlowEnd)},
+	)
 	for _, want := range []string{
-		"Этап: сценарий пройден\nПрогресс: 5 из 5\n",
-		clitest.Lines(
-			"ЭТАП        КРУГ  ИТОГ           ПЕРЕХОД",
-			"Ветка       1     результат      plan",
-			"План фичи   1     артефакт plan  implementation",
-			"Реализация  1     результат      review",
-			"Ревью       1     результат      implementation",
-			"Реализация  2     результат      review",
+		msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)) + "\n" + progress(5) + "\n",
+		pathTable + "\n" + msg.Text(msg.ColArtifact),
+		clitest.Table(
+			[]string{msg.Text(msg.ColArtifact), msg.Text(msg.ColKind), msg.Text(msg.ColSaved), msg.Text(msg.ColPlace)},
+			[]string{"plan", msg.Text(msg.ArtifactKindLink), "2006-01-02 15:04", "https://claude.ai/code/artifact/plan"},
 		),
-		"Ревью       4     результат      merge\nСлияние     1     результат      конец\n\nАРТЕФАКТ",
-		"АРТЕФАКТ  ВИД     СОХРАНЁН          МЕСТО\nplan      ссылка  ",
-		"\n\nПосмотреть постановку: gentry task show --statement\nПосмотреть заметки: gentry note list\n",
+		"\n\n" + cli.HintText(msg.HintStatement) + "\n" + cli.HintText(msg.HintNotes) + "\n",
 	} {
 		if !strings.Contains(clitest.Masked(stdout), clitest.Masked(want)) {
 			t.Errorf("task show has no\n%s\noutput:\n%s", want, stdout)
 		}
 	}
-	if strings.Contains(stdout, "На ревью") || strings.Contains(stdout, "Постановка записана") {
+	if strings.Contains(stdout, "На ревью") || strings.Contains(stdout, msg.Text(msg.TaskSource, "")) {
 		t.Errorf("task show has the notes or the statement:\n%s", stdout)
 	}
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"1. Реализация (implementation), круг 1:",
+		msg.Text(msg.NoteHeading, 1, round("Реализация", "implementation", 1)),
 		"   На ревью проверить, что возврат по СБП не задет",
 		"",
-		"2. Слияние (merge), круг 1:",
+		msg.Text(msg.NoteHeading, 2, round("Слияние", "merge", 1)),
 		"   Первая строка.",
 		"   Вторая строка.",
 	), "", "note", "list")
@@ -222,24 +261,25 @@ func TestStageFeature(t *testing.T) {
 	_, stdout, _ = clitest.Run("task", "show", "--path")
 	for _, want := range []string{
 		clitest.Lines(
-			"Реализация (implementation), круг 1",
-			"Итог: результат",
-			"Выход: Изменения сделаны, тесты проходят",
-			"Переход: review",
-			"Записано: агентом",
-			"Закрыт: <время>",
+			round("Реализация", "implementation", 1),
+			msg.Text(msg.OutcomeLine, result),
+			msg.Text(msg.ExitTextLine, "Изменения сделаны, тесты проходят"),
+			msg.Text(msg.TransitionLine, "review"),
+			msg.Text(msg.RecordedLine, msg.Text(msg.RecordedByAgent)),
+			msg.Text(msg.ClosedLine, "<время>"),
 			"",
-			"№  СОСТОЯНИЕ  ШАГ                     ПОЯСНЕНИЕ",
-			"1  выполнен   Добавить расчёт суммы   go test ./backend/payments/...",
-			"2  снят       Покрыть расчёт тестами  Тесты уже есть в шаге 1",
+		) + clitest.Table(
+			[]string{msg.Text(msg.ColStepNumber), msg.Text(msg.ColState), msg.Text(msg.ColStep), msg.Text(msg.ColComment)},
+			[]string{"1", msg.Text(msg.StepStateDone), "Добавить расчёт суммы", "go test ./backend/payments/..."},
+			[]string{"2", msg.Text(msg.StepStateDropped), "Покрыть расчёт тестами", "Тесты уже есть в шаге 1"},
 		),
-		"Переход: implementation\nОбоснование: Две ошибки в расчёте суммы\n",
+		msg.Text(msg.TransitionLine, "implementation") + "\n" + msg.Text(msg.ReasonLine, "Две ошибки в расчёте суммы") + "\n",
 	} {
 		if !strings.Contains(clitest.Masked(stdout), want) {
 			t.Errorf("task show --path has no\n%s\noutput:\n%s", want, stdout)
 		}
 	}
-	if strings.Contains(stdout, "ЭТАП        КРУГ") {
+	if strings.Contains(stdout, msg.Text(msg.ColRound)) {
 		t.Errorf("task show --path has the table of the path:\n%s", stdout)
 	}
 
@@ -291,13 +331,13 @@ func TestStageSkip(t *testing.T) {
 	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrSkipReasonMissing), "", cli.HintText(msg.HintCommandHelp, "stage skip")),
 		"stage", "skip")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Этап «Ветка» пропущен.",
-		"Обоснование: Ветка уже создана оператором",
-		"Переход: plan",
-		"Этап: План фичи (plan-feature), круг 1",
-		"Прогресс: 1 из 5",
+		msg.Text(msg.StageSkipped, "Ветка"),
+		msg.Text(msg.ReasonLine, "Ветка уже создана оператором"),
+		msg.Text(msg.TransitionLine, "plan"),
+		msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
+		progress(1),
 		"",
-		"Посмотреть этап: gentry stage show",
+		cli.HintText(msg.HintStageShow),
 	), "", "stage", "skip", "--reason", "Ветка уже создана оператором")
 	clitest.MustRun(t, "step", "add", "Согласовать план")
 	if code, c := clitest.ErrorCode(t, "stage", "skip", "--reason", "Не нужен"); code != contract.ExitError || c != contract.CodeStepsOpen {
@@ -315,11 +355,19 @@ func TestStageSkip(t *testing.T) {
 		t.Errorf("skip at a fork without the transition: exit code %d, code %s", code, c)
 	}
 	_, stdout, _ := clitest.Run("stage", "skip", "--reason", "Нечего смотреть", "--to", "merge")
-	if !strings.Contains(stdout, "Переход: merge\nЭтап: Слияние (merge), круг 1\nПрогресс: 4 из 5\n") {
+	if !strings.Contains(stdout, clitest.Lines(msg.Text(msg.TransitionLine, "merge"), msg.Text(msg.TaskStage, round("Слияние", "merge", 1)), progress(4))) {
 		t.Errorf("skip at a fork:\n%s", stdout)
 	}
 	_, stdout, _ = clitest.Run("task", "show")
-	if !strings.Contains(stdout, "Ветка       1     пропуск    plan\n") {
+	skip := msg.Text(msg.OutcomeSkip)
+	if !strings.Contains(stdout, clitest.Table(
+		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
+		[]string{"Ветка", "1", skip, "plan"},
+		[]string{"План фичи", "1", skip, "implementation"},
+		[]string{"Реализация", "1", result, "review"},
+		[]string{"Ревью", "1", skip, "merge"},
+		[]string{"Слияние", "1", msg.Text(msg.OutcomeCurrent), msg.Text(msg.ValueNone)},
+	)) {
 		t.Errorf("task show:\n%s", stdout)
 	}
 }
@@ -341,8 +389,8 @@ func TestStageByAgent(t *testing.T) {
 	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Влито оператором")
 	_, stdout, _ := clitest.Run("task", "show", "--path")
 	for _, want := range []string{
-		"Переход: plan\nЗаписано: агентом\n",
-		"Переход: конец\nЗаписано: агентом со слов оператора\n",
+		clitest.Lines(msg.Text(msg.TransitionLine, "plan"), msg.Text(msg.RecordedLine, msg.Text(msg.RecordedByAgent))),
+		clitest.Lines(msg.Text(msg.TransitionLine, msg.Text(msg.FlowEnd)), msg.Text(msg.RecordedLine, msg.Text(msg.TaskSourceAgent))),
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("task show --path has no %q:\n%s", want, stdout)
@@ -372,15 +420,16 @@ func TestStageOtherDirectory(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(shop)
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", "Добавить шаги: gentry step add <шаг> --task SHOP-1"),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", cli.HintFor(msg.HintStepAdd, "task", "SHOP-1")),
 		"stage", "exit", "--kind", "result", "--text", "Готово", "--task", "SHOP-1")
 	clitest.MustRun(t, "step", "add", "Создать ветку", "--task", "shop-1")
 	_, stdout, _ := clitest.Run("step", "done", "1", "--task", "SHOP-1")
-	if !strings.HasSuffix(stdout, "\nЗакрыть этап: stage_exit (kind, text, task: SHOP-1)\n") {
+	// The commands are the agent's: the hints name tools.
+	if want := clitest.InChannel(cli.HintFor(msg.HintStageExit, "task", "SHOP-1")+"\n", []string{"step", "done"}); !strings.HasSuffix(stdout, "\n"+want) {
 		t.Errorf("step done:\n%s", stdout)
 	}
 	_, stdout, _ = clitest.Run("stage", "exit", "--kind", "result", "--text", "Готово", "--task", "SHOP-1")
-	if !strings.HasSuffix(stdout, "\nПосмотреть этап: stage_show (task: SHOP-1)\n") {
+	if want := clitest.InChannel(cli.HintFor(msg.HintStageShow, "task", "SHOP-1")+"\n", []string{"stage", "exit"}); !strings.HasSuffix(stdout, "\n"+want) {
 		t.Errorf("stage exit:\n%s", stdout)
 	}
 	// In the main worktree, which holds no task, a command without --task finds none.
@@ -423,7 +472,7 @@ func TestWayRefusals(t *testing.T) {
 		{"bad kind", []string{"stage", "exit", "--kind", "fact", "--text", "Т"}, contract.ExitUsage, contract.CodeFlagValue,
 			clitest.Lines(msg.Text(msg.ErrFlagValueInvalid, "--kind", "fact"), "", exitHelp)},
 		{"bad kind in input", []string{"stage", "exit", "--input", input(`{"kind":"fact","text":"Т"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			clitest.Lines("Не удалось прочитать поля из --input: недопустимое значение поля «kind».", "", exitHelp)},
+			clitest.Lines(msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputBadValue, "kind")), "", exitHelp)},
 		{"no text", []string{"stage", "exit", "--kind", "result"}, contract.ExitUsage, contract.CodeMissingField,
 			clitest.Lines(msg.Text(msg.ErrExitTextMissing), "", exitHelp)},
 		{"no artifact", []string{"stage", "exit", "--kind", "artifact", "--text", "Т"}, contract.ExitUsage, contract.CodeMissingField,
@@ -439,13 +488,13 @@ func TestWayRefusals(t *testing.T) {
 		{"step of two lines", []string{"step", "add", "А\nБ"}, contract.ExitUsage, contract.CodeFieldInvalid,
 			clitest.Lines(msg.Text(msg.ErrStepMultiline), "", msg.Text(msg.HintStep))},
 		{"steps not a list", []string{"step", "add", "--input", input(`{"steps":"Шаг"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			clitest.Lines("Не удалось прочитать поля из --input: поле «steps» должно быть массивом строк.", "", cli.HintText(msg.HintCommandHelp, "step add"))},
+			clitest.Lines(msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputNotList, "steps")), "", cli.HintText(msg.HintCommandHelp, "step add"))},
 		{"arguments with input", []string{"step", "add", "Шаг", "--input", input(`{"steps":["Шаг"]}`)}, contract.ExitUsage, contract.CodeConflictingFlags,
 			clitest.Lines(msg.Text(msg.ErrInputWithArgs), "", cli.HintText(msg.HintCommandHelp, "step add"))},
 		{"step number", []string{"step", "done", "первый"}, contract.ExitUsage, contract.CodeInvalidArgument,
 			clitest.Lines(msg.Text(msg.ErrStepNumberInvalid, "первый"), "", cli.HintText(msg.HintSteps))},
 		{"step number not an integer", []string{"step", "done", "--input", input(`{"step":"1"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			clitest.Lines("Не удалось прочитать поля из --input: поле «step» должно быть целым числом.", "", cli.HintText(msg.HintCommandHelp, "step done"))},
+			clitest.Lines(msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputNotInteger, "step")), "", cli.HintText(msg.HintCommandHelp, "step done"))},
 		{"no step number", []string{"step", "done"}, contract.ExitUsage, contract.CodeMissingField,
 			clitest.Lines(msg.Text(msg.ErrStepNumberMissing), "", cli.HintText(msg.HintCommandHelp, "step done"))},
 		{"step not found", []string{"step", "done", "7"}, contract.ExitError, contract.CodeStepNotFound,
@@ -521,7 +570,7 @@ func TestArtifactFile(t *testing.T) {
 	clitest.WriteFiles(t, dir, map[string]string{"plan.md": "# План\n"})
 	_, stdout, _ := clitest.Run("artifact", "save", "plan.md", "--file", "plan.md", "--task", "SHOP-1")
 	copyPath := filepath.Join(os.Getenv("GENTRY_HOME"), "state", "shop", "tasks", "SHOP-1", "artifacts", "plan.md")
-	if want := clitest.Lines("Артефакт plan.md сохранён.", "Файл: "+copyPath); stdout != want {
+	if want := clitest.Lines(msg.Text(msg.ArtifactSaved, "plan.md"), msg.Text(msg.ArtifactFileLine, copyPath)); stdout != want {
 		t.Errorf("artifact save:\n%s\nwant:\n%s", stdout, want)
 	}
 	clitest.WriteFiles(t, dir, map[string]string{"plan.md": "# План, вторая версия\n"})
@@ -536,7 +585,7 @@ func TestArtifactFile(t *testing.T) {
 		t.Errorf("files left in the artifacts: %v", entries)
 	}
 	_, stdout, _ = clitest.Run("artifact", "save", "plan.md", "--url", "https://example.com/plan", "--task", "SHOP-1")
-	if stdout != clitest.Lines("Артефакт plan.md заменён.", "Адрес: https://example.com/plan") {
+	if stdout != clitest.Lines(msg.Text(msg.ArtifactReplaced, "plan.md"), msg.Text(msg.ArtifactURLLine, "https://example.com/plan")) {
 		t.Errorf("replaced by a link:\n%s", stdout)
 	}
 	if clitest.FileExists(copyPath) {
@@ -570,13 +619,13 @@ func TestNoteListEmpty(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(shop)
-	clitest.WantRun(t, contract.ExitOK, "У задачи нет заметок.\n", "", "note", "list", "--task", "SHOP-1")
+	clitest.WantRun(t, contract.ExitOK, msg.Text(msg.NotesNone)+"\n", "", "note", "list", "--task", "SHOP-1")
 	if out := clitest.WantJSON(t, contract.ExitOK, "schemas/note-list.json", "note", "list", "--task", "SHOP-1"); out != `{"notes":[],"task":"SHOP-1"}`+"\n" {
 		t.Errorf("note list --json: %s", out)
 	}
 	clitest.MustRun(t, "note", "add", "Заметка", "--task", "SHOP-1")
 	_, stdout, _ := clitest.Run("task", "show", "SHOP-1")
-	if !strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show SHOP-1 --statement\nПосмотреть заметки: gentry note list --task SHOP-1\n") {
+	if !strings.HasSuffix(stdout, "\n\n"+clitest.Lines(cli.HintFor(msg.HintStatement, "task", "SHOP-1"), cli.HintFor(msg.HintNotes, "task", "SHOP-1"))) {
 		t.Errorf("task show from another directory:\n%s", stdout)
 	}
 }
@@ -587,15 +636,31 @@ func TestStageByTools(t *testing.T) {
 	_, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
+	// byTool is the text of lines as a tool gives it: the hints name tools,
+	// and the text has no newline at its end.
+	byTool := func(ls ...string) string {
+		return strings.TrimSuffix(clitest.InChannel(clitest.Lines(ls...), []string{"stage", "exit"}), "\n")
+	}
 	for _, c := range []struct {
 		tool, args, want string
 		failed           bool
 	}{
-		{"stage_exit", `{"kind":"result","text":"Создана ветка"}`, "У этапа «Ветка» нет шагов.\n\nДобавить шаги: step_add (steps)", true},
-		{"step_add", `{"steps":["Создать ветку feature/shop-1"]}`, "К этапу добавлено шагов: 1.\nНомер шага: 1", false},
-		{"step_done", `{"step":1,"check":"git branch --show-current"}`, "Шаг 1 выполнен.\nОсталось шагов: 0\n\nЗакрыть этап: stage_exit (kind, text)", false},
-		{"stage_exit", `{"kind":"artifact","artifact":"plan","text":"План"}`, "Артефакт plan не сохранён.\n\nСохранить артефакт: artifact_save (name: plan, file)", true},
-		{"stage_exit", `{"kind":"result","text":"Создана ветка"}`, "Этап «Ветка» закрыт.\nВид выхода: результат\nВыход: Создана ветка\nПереход: plan\nЭтап: План фичи (plan-feature), круг 1\nПрогресс: 1 из 5\n\nПосмотреть этап: stage_show", false},
+		{"stage_exit", `{"kind":"result","text":"Создана ветка"}`, byTool(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", cli.HintText(msg.HintStepAdd)), true},
+		{"step_add", `{"steps":["Создать ветку feature/shop-1"]}`, byTool(msg.Text(msg.StepsAdded, 1), msg.Text(msg.StepNumber, 1)), false},
+		{"step_done", `{"step":1,"check":"git branch --show-current"}`,
+			byTool(msg.Text(msg.StepMarkedDone, 1), msg.Text(msg.StepsLeft, 0), "", cli.HintText(msg.HintStageExit)), false},
+		{"stage_exit", `{"kind":"artifact","artifact":"plan","text":"План"}`,
+			byTool(msg.Text(msg.ErrArtifactNotFound, "plan"), "", cli.HintFor(msg.HintArtifactSave, "name", "plan")), true},
+		{"stage_exit", `{"kind":"result","text":"Создана ветка"}`, byTool(
+			msg.Text(msg.StageExited, "Ветка"),
+			msg.Text(msg.ExitKindLine, result),
+			msg.Text(msg.ExitTextLine, "Создана ветка"),
+			msg.Text(msg.TransitionLine, "plan"),
+			msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
+			progress(1),
+			"",
+			cli.HintText(msg.HintStageShow),
+		), false},
 	} {
 		text, failed := cli.CallTool(c.tool, []byte(c.args))
 		if text != c.want || failed != c.failed {

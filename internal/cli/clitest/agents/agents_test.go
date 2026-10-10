@@ -214,18 +214,18 @@ func TestAgentsSync(t *testing.T) {
 	os.RemoveAll(gone)
 
 	header := []string{msg.Text(msg.ColWorktree), msg.Text(msg.ColTask), msg.Text(msg.ColAgents), msg.Text(msg.ColChanges)}
-	none, missing := msg.Text(msg.ValueNone), msg.Text(msg.AgentsWorktreeMissing)
+	missing := msg.Text(msg.AgentsWorktreeMissing)
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.AgentsInPlace, "shop"), "")+clitest.Table(header,
-		[]string{shop, none, "reviewer", none},
-		[]string{fix, "SHOP-1", "reviewer", none},
-		[]string{gone, none, none, missing},
+		[]string{shop, clitest.None, "reviewer", clitest.None},
+		[]string{fix, "SHOP-1", "reviewer", clitest.None},
+		[]string{gone, clitest.None, clitest.None, missing},
 	), "", "agents", "sync")
 
 	os.Remove(reviewerFile(shop))
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.AgentsSynced, "shop"), nextSession, "")+clitest.Table(header,
-		[]string{shop, none, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
-		[]string{fix, "SHOP-1", "reviewer", none},
-		[]string{gone, none, none, missing},
+		[]string{shop, clitest.None, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
+		[]string{fix, "SHOP-1", "reviewer", clitest.None},
+		[]string{gone, clitest.None, clitest.None, missing},
 	), "", "agents", "sync")
 
 	out := clitest.WantJSON(t, contract.ExitOK, "schemas/agents-sync.json", "agents", "sync")

@@ -44,7 +44,7 @@ func TestTaskTake(t *testing.T) {
 		msg.Text(msg.TaskProject, "shop"),
 		msg.Text(msg.TaskState, msg.Text(msg.TaskStateActive)),
 		msg.Text(msg.TaskScenario, msg.Text(msg.TaskNamed, "Фича", "feature")),
-		msg.Text(msg.TaskStage, msg.Text(msg.StageRound, msg.Text(msg.TaskNamed, "Ветка", "branch"), 1)),
+		msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1)),
 		msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, 0, 5)),
 		msg.Text(msg.TaskTakenAt, "<время>"),
 		msg.Text(msg.TaskFlowApplied, "<время>"),
@@ -52,7 +52,7 @@ func TestTaskTake(t *testing.T) {
 		"",
 	) + clitest.Table(
 		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
-		[]string{"Ветка", "1", msg.Text(msg.OutcomeCurrent), msg.Text(msg.ValueNone)},
+		[]string{"Ветка", "1", msg.Text(msg.OutcomeCurrent), clitest.None},
 	) + clitest.Lines(
 		"",
 		msg.Text(msg.StepsNone),
@@ -88,7 +88,7 @@ func TestTaskTake(t *testing.T) {
 		msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceOperator)),
 	), "", "task", "show", "shop-2", "--statement")
 	_, stdout, _ = clitest.Run("task", "show", "shop-2")
-	stage := msg.Text(msg.TaskStage, msg.Text(msg.StageRound, msg.Text(msg.TaskNamed, "Ветка", "branch"), 1))
+	stage := msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1))
 	if !strings.Contains(stdout, stage+"\n") || strings.Contains(stdout, "Первая строка") ||
 		!strings.HasSuffix(stdout, "\n\n"+cli.HintFor(msg.HintStatement, "task", "SHOP-2")+"\n") {
 		t.Errorf("task show shop-2:\n%s", stdout)

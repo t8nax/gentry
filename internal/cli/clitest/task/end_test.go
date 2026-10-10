@@ -49,12 +49,6 @@ func lastEvent(t *testing.T) (string, string) {
 var listHeader = []string{msg.Text(msg.ColNumber), msg.Text(msg.ColTitle), msg.Text(msg.ColState), msg.Text(msg.ColScenario),
 	msg.Text(msg.ColStage), msg.Text(msg.ColWorktree)}
 
-// round names a stage of the shop by its title and identifier with the
-// round of its pass.
-func round(title, stage string, n int) string {
-	return msg.Text(msg.StageRound, msg.Text(msg.TaskNamed, title, stage), n)
-}
-
 // taskEnded is the refusal of a command that writes the closed task key.
 func taskEnded(key string) string {
 	return clitest.Lines(msg.Text(msg.TaskClosed, key), "", cli.HintFor(msg.HintTaskShow, "task", key))
@@ -101,7 +95,7 @@ func TestTaskClose(t *testing.T) {
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	_, stdout, _ = clitest.Run("task", "list", "--all")
 	if stdout != clitest.Table(listHeader,
-		[]string{"SHOP-1", "Частичный возврат по карте", msg.Text(msg.TaskStateClosed), "Фича", msg.Text(msg.StageFinished), msg.Text(msg.ValueNone)},
+		[]string{"SHOP-1", "Частичный возврат по карте", msg.Text(msg.TaskStateClosed), "Фича", msg.Text(msg.StageFinished), clitest.None},
 		[]string{"SHOP-2", "Частичный возврат по карте", msg.Text(msg.TaskStateActive), "Фича", "Ветка", fix}) {
 		t.Errorf("task list --all:\n%s", stdout)
 	}
@@ -121,17 +115,17 @@ func TestTaskCloseRefusals(t *testing.T) {
 
 	// The scenario is not passed: in the worktree and outside it.
 	t.Chdir(fix)
-	notFinished := msg.Text(msg.TaskStage, msg.Text(msg.StageRound, msg.Text(msg.TaskNamed, "Ветка", "branch"), 1))
+	stageLine := msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1))
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(
 		msg.Text(msg.ErrScenarioNotFinished, "SHOP-1"),
-		notFinished,
+		stageLine,
 		"",
 		cli.HintText(msg.HintStageShow),
 	), "task", "close")
 	t.Chdir(shop)
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(
 		msg.Text(msg.ErrScenarioNotFinished, "SHOP-1"),
-		notFinished,
+		stageLine,
 		"",
 		cli.HintFor(msg.HintStageShow, "task", "SHOP-1"),
 	), "task", "close", "shop-1")
@@ -182,7 +176,7 @@ func TestTaskCancel(t *testing.T) {
 
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
 		msg.Text(msg.TaskCancelled, "SHOP-1"),
-		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
+		msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1)),
 		msg.Text(msg.ReasonLine, "Отложено до релиза каталога."),
 		msg.Text(msg.WorktreeReleased, fix),
 		"",
@@ -196,14 +190,13 @@ func TestTaskCancel(t *testing.T) {
 
 	t.Chdir(shop)
 	_, stdout, _ := clitest.Run("task", "show", "SHOP-1")
-	none := msg.Text(msg.ValueNone)
 	want := clitest.Lines(
 		msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
 		"",
 		msg.Text(msg.TaskProject, "shop"),
 		msg.Text(msg.TaskState, msg.Text(msg.TaskStateCancelled)),
 		msg.Text(msg.TaskScenario, msg.Text(msg.TaskNamed, "Фича", "feature")),
-		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
+		msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1)),
 		msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, 0, 5)),
 		msg.Text(msg.TaskTakenAt, "<время>"),
 		msg.Text(msg.TaskCancelledByOperator, "<время>"),
@@ -212,7 +205,7 @@ func TestTaskCancel(t *testing.T) {
 		"",
 	) + clitest.Table(
 		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
-		[]string{"Ветка", "1", none, none},
+		[]string{"Ветка", "1", clitest.None, clitest.None},
 	) + clitest.Lines(
 		"",
 		msg.Text(msg.StepsNone),
@@ -225,7 +218,7 @@ func TestTaskCancel(t *testing.T) {
 		t.Errorf("task show of a cancelled task:\n%s\nwant:\n%s", stdout, want)
 	}
 	if _, stdout, _ := clitest.Run("task", "list", "--state", "cancelled"); stdout != clitest.Table(listHeader,
-		[]string{"SHOP-1", "Частичный возврат по карте", msg.Text(msg.TaskStateCancelled), "Фича", "Ветка", none}) {
+		[]string{"SHOP-1", "Частичный возврат по карте", msg.Text(msg.TaskStateCancelled), "Фича", "Ветка", clitest.None}) {
 		t.Errorf("task list --state cancelled:\n%s", stdout)
 	}
 
@@ -354,7 +347,7 @@ func TestTaskTakeAgain(t *testing.T) {
 	// of the first.
 	_, stdout, _ := clitest.Run("task", "show")
 	if !strings.Contains(stdout, clitest.Lines(msg.Text(msg.TaskScenario, msg.Text(msg.TaskNamed, "Баг", "bug")),
-		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)), msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, 0, 5)))) ||
+		msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1)), msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, 0, 5)))) ||
 		strings.Contains(stdout, msg.Text(msg.HintNotes)) || strings.Contains(stdout, "plan.md") ||
 		!strings.HasSuffix(stdout, "\n\n"+clitest.Lines(cli.HintText(msg.HintStatement), cli.HintText(msg.HintAttempts))) {
 		t.Errorf("task show of the second attempt:\n%s", stdout)
@@ -387,11 +380,10 @@ func TestTaskTakeAgain(t *testing.T) {
 	_, stdout, _ = clitest.Run("task", "attempts", "SHOP-1")
 	// Any time of the width of the times printed: the table is compared masked.
 	const at = "2026-01-01 00:00"
-	none := msg.Text(msg.ValueNone)
 	want := clitest.Table([]string{msg.Text(msg.ColAttempt), msg.Text(msg.ColState), msg.Text(msg.ColScenario),
 		msg.Text(msg.ColTaken), msg.Text(msg.ColEnded), msg.Text(msg.ColCancelReason)},
 		[]string{"1", msg.Text(msg.TaskStateCancelled), "Фича", at, at, "Отложено."},
-		[]string{"2", msg.Text(msg.TaskStateActive), "Баг", at, none, none}) + "\n" + cli.HintFor(msg.HintAttempt, "task", "SHOP-1") + "\n"
+		[]string{"2", msg.Text(msg.TaskStateActive), "Баг", at, clitest.None, clitest.None}) + "\n" + cli.HintFor(msg.HintAttempt, "task", "SHOP-1") + "\n"
 	if clitest.Masked(stdout) != clitest.Masked(want) {
 		t.Errorf("task attempts:\n%s\nwant:\n%s", stdout, want)
 	}
@@ -400,13 +392,13 @@ func TestTaskTakeAgain(t *testing.T) {
 	for _, part := range []string{
 		clitest.Lines(msg.Text(msg.AttemptHeading, "SHOP-1", 1, "Частичный возврат по карте"), "", msg.Text(msg.TaskProject, "shop"),
 			msg.Text(msg.TaskState, msg.Text(msg.TaskStateCancelled))),
-		clitest.Lines(msg.Text(msg.CancelReasonLine, "Отложено."), "", round("Ветка", "branch", 1),
+		clitest.Lines(msg.Text(msg.CancelReasonLine, "Отложено."), "", clitest.Round("Ветка", "branch", 1),
 			msg.Text(msg.OutcomeLine, msg.Text(msg.ExitKindResult)), msg.Text(msg.ExitTextLine, "Ветка создана")),
-		"\n" + clitest.Lines(round("План фичи", "plan-feature", 1), msg.Text(msg.OutcomeLine, msg.Text(msg.ValueNone))),
+		"\n" + clitest.Lines(clitest.Round("План фичи", "plan-feature", 1), msg.Text(msg.OutcomeLine, clitest.None)),
 		"\nplan.md   " + msg.Text(msg.ArtifactKindFile),
-		"\n\n" + clitest.Lines(msg.Text(msg.NotesHeading), "  "+msg.Text(msg.NoteHeading, 1, round("Ветка", "branch", 1)), "     Промокоды в таблице promo."),
+		"\n\n" + clitest.Lines(msg.Text(msg.NotesHeading), "  "+msg.Text(msg.NoteHeading, 1, clitest.Round("Ветка", "branch", 1)), "     Промокоды в таблице promo."),
 		"\n\n" + clitest.Lines(msg.Text(msg.DecisionsHeading),
-			"  "+msg.Text(msg.DecisionHeading, 1, round("Ветка", "branch", 1), msg.Text(msg.TaskSourceOperator))),
+			"  "+msg.Text(msg.DecisionHeading, 1, clitest.Round("Ветка", "branch", 1), msg.Text(msg.TaskSourceOperator))),
 	} {
 		if !strings.Contains(stdout, part) {
 			t.Errorf("task attempts SHOP-1 1 has no %q:\n%s", part, stdout)

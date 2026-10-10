@@ -64,7 +64,7 @@ func TestOperatorRecord(t *testing.T) {
 		msg.Text(msg.TaskSource, operator),
 		"",
 		msg.Text(msg.DecisionsHeading),
-		"  "+msg.Text(msg.DecisionHeading, 1, round("Ветка", "branch", 1), operator),
+		"  "+msg.Text(msg.DecisionHeading, 1, clitest.Round("Ветка", "branch", 1), operator),
 		"     "+msg.Text(msg.DecisionQuestion)+": Делать частичный возврат и для СБП?",
 		"     "+msg.Text(msg.DecisionOptions),
 		"       1. "+msg.Text(msg.OptionRecommended, "Только карта")+": СБП требует другого API банка.",
@@ -74,7 +74,7 @@ func TestOperatorRecord(t *testing.T) {
 		"       3. Отложить",
 		"     "+msg.Text(msg.DecisionAnswer)+": Давай первый.",
 		"",
-		"  "+msg.Text(msg.DecisionHeading, 2, round("План фичи", "plan-feature", 1), msg.Text(msg.TaskSourceAgent)),
+		"  "+msg.Text(msg.DecisionHeading, 2, clitest.Round("План фичи", "plan-feature", 1), msg.Text(msg.TaskSourceAgent)),
 		"     "+msg.Text(msg.DecisionAnswer)+":",
 		"       Сумму возврата писать в лог.",
 		"       Уровень — info.",
@@ -232,7 +232,7 @@ func TestOperatorAllowReturn(t *testing.T) {
 	}
 	clitest.MustRun(t, exit...)
 	_, stdout, _ = clitest.Run("task", "show")
-	if !strings.Contains(stdout, msg.Text(msg.TaskStage, round("Реализация", "implementation", 3))+"\n") {
+	if !strings.Contains(stdout, msg.Text(msg.TaskStage, clitest.Round("Реализация", "implementation", 3))+"\n") {
 		t.Errorf("task show after the return allowed:\n%s", stdout)
 	}
 
@@ -267,13 +267,13 @@ func TestOperatorAllowReturn(t *testing.T) {
 	_, stdout, _ = clitest.Run("task", "show", "--statement")
 	for _, want := range []string{
 		clitest.Lines(
-			"  "+msg.Text(msg.DecisionHeading, 1, round("Ревью", "review", 2), operator),
+			"  "+msg.Text(msg.DecisionHeading, 1, clitest.Round("Ревью", "review", 2), operator),
 			"     "+msg.Text(msg.DecisionQuestion)+": Вернуть на реализацию сверх предела?",
 			"     "+msg.Text(msg.DecisionAnswer)+": Да.",
 			"     "+msg.Text(msg.AllowedReturnLine, msg.Text(msg.TaskNamed, "Реализация", "implementation")),
 		),
 		clitest.Lines(
-			"  "+msg.Text(msg.DecisionHeading, 3, round("Слияние", "merge", 1), operator),
+			"  "+msg.Text(msg.DecisionHeading, 3, clitest.Round("Слияние", "merge", 1), operator),
 			"     "+msg.Text(msg.DecisionAnswer)+": Задачу закрыть.",
 		),
 	} {

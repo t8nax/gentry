@@ -126,7 +126,7 @@ func TestWorktreeList(t *testing.T) {
 	shopRows := [][]string{
 		{"shop", shop, "main", mainFree},
 		{"shop", fix, "fix", free},
-		{"shop", gone, msg.Text(msg.ValueNone), msg.Text(msg.WorktreeMissing)},
+		{"shop", gone, clitest.None, msg.Text(msg.WorktreeMissing)},
 	}
 	cartRow := []string{"cart", cart, "main", mainFree}
 

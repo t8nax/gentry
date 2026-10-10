@@ -41,9 +41,6 @@ func security(t *testing.T, p flow.Places) {
 // The words of the flow are those of the catalog: the tests of the output in
 // package cli state them.
 
-// none is the mark of a missing value.
-var none = msg.Text(msg.ValueNone)
-
 // flowHead is the head of flow show of the shop: its project, when its flow
 // was applied, and the flow directory.
 func flowHead(applied, dir string) string {
@@ -96,7 +93,7 @@ func TestFlowShow(t *testing.T) {
 			msg.Text(msg.FlowTitle, "Слияние"),
 			msg.Text(msg.FlowExecutor, "operator"),
 			msg.Text(msg.FlowExit, "ветка задачи влита в main"),
-			msg.Text(msg.FlowParts, msg.Text(msg.ValueNone)),
+			msg.Text(msg.FlowParts, clitest.None),
 			msg.Text(msg.FlowScenarios, "bug, feature"),
 			"",
 			msg.Text(msg.FlowInstruction),
@@ -160,7 +157,7 @@ func TestFlowDraft(t *testing.T) {
 	report := filepath.Join(filepath.Dir(p.Dir), "changes.md")
 	_, stdout, _ := clitest.Run("flow", "diff")
 	condition := msg.Text(msg.DiffCondition, "ревью выявило существенные замечания")
-	want := diffHead(none, false, report) + clitest.Lines(
+	want := diffHead(clitest.None, false, report) + clitest.Lines(
 		msg.Text(msg.DiffScenarios),
 		change("+", msg.Text(msg.DiffItem, "Баг", "Ветка → План бага → Реализация → Ревью → Слияние")),
 		returnLine("+", "Ревью", "Реализация", condition+", "+msg.Count(msg.DiffRounds, 2)),
@@ -184,7 +181,7 @@ func TestFlowDraft(t *testing.T) {
 		t.Errorf("diff from nothing:\n%s\nwant:\n%s", stdout, want)
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--draft")
-	want = flowHead(none, p.Dir) + "\n" + clitest.ShopTables() + "\n" + cli.HintText(msg.HintFlowApply) + "\n"
+	want = flowHead(clitest.None, p.Dir) + "\n" + clitest.ShopTables() + "\n" + cli.HintText(msg.HintFlowApply) + "\n"
 	if stdout != want {
 		t.Errorf("show --draft:\n%s\nwant:\n%s", stdout, want)
 	}

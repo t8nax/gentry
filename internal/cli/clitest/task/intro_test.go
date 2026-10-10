@@ -78,7 +78,7 @@ func TestIntroWithTask(t *testing.T) {
 		msg.Text(msg.TaskScenario, msg.Text(msg.TaskNamed, "Фича", "feature")),
 	)
 	tail := clitest.Lines("", msg.Text(msg.HintIntroContinue, "gentry:working-on-task"))
-	branch := msg.Text(msg.TaskStage, round("Ветка", "branch", 1))
+	branch := msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1))
 	progress := func(passed int) string { return msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, passed, 5)) }
 
 	want := head + clitest.Lines(branch, msg.Text(msg.IntroNoSteps), progress(0)) + tail

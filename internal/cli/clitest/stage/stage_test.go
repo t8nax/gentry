@@ -26,16 +26,7 @@ func closeStage(t *testing.T, step string, flags ...string) {
 
 // The words of the outputs are those of the catalog: the tests of the output
 // in package cli state them.
-var (
-	none   = msg.Text(msg.ValueNone)
-	result = msg.Text(msg.ExitKindResult)
-)
-
-// round names a stage of the shop by its title and identifier with the
-// round of its pass.
-func round(title, stage string, n int) string {
-	return msg.Text(msg.StageRound, msg.Text(msg.TaskNamed, title, stage), n)
-}
+var result = msg.Text(msg.ExitKindResult)
 
 // progress is the line of the progress of a task of the feature scenario,
 // which has five stages.
@@ -63,15 +54,15 @@ func TestStageFeature(t *testing.T) {
 	t.Chdir(fix)
 
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		msg.Text(msg.FlowStage, round("Ветка", "branch", 1)),
+		msg.Text(msg.FlowStage, clitest.Round("Ветка", "branch", 1)),
 		msg.Text(msg.StageTask, "SHOP-1"),
 		msg.Text(msg.FlowExecutor, "orchestrator"),
 		msg.Text(msg.FlowExit, "создана ветка задачи"),
-		msg.Text(msg.FlowParts, none),
+		msg.Text(msg.FlowParts, clitest.None),
 		"",
 	)+clitest.Table(
 		[]string{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)},
-		[]string{"plan", "План фичи", none, none},
+		[]string{"plan", "План фичи", clitest.None, clitest.None},
 	)+clitest.Lines(
 		"",
 		msg.Text(msg.FlowInstruction),
@@ -100,7 +91,7 @@ func TestStageFeature(t *testing.T) {
 		msg.Text(msg.ExitKindLine, result),
 		msg.Text(msg.ExitTextLine, "Создана ветка feature/shop-1"),
 		msg.Text(msg.TransitionLine, "plan"),
-		msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
+		msg.Text(msg.TaskStage, clitest.Round("План фичи", "plan-feature", 1)),
 		progress(1),
 		"",
 		cli.HintText(msg.HintStageShow),
@@ -167,7 +158,7 @@ func TestStageFeature(t *testing.T) {
 		msg.Text(msg.ExitTextLine, "Замечания записаны"),
 		msg.Text(msg.TransitionLine, "implementation"),
 		msg.Text(msg.ReasonLine, "Две ошибки в расчёте суммы"),
-		msg.Text(msg.TaskStage, round("Реализация", "implementation", 2)),
+		msg.Text(msg.TaskStage, clitest.Round("Реализация", "implementation", 2)),
 		progress(4),
 		"",
 		cli.HintText(msg.HintStageShow),
@@ -185,7 +176,7 @@ func TestStageFeature(t *testing.T) {
 	clitest.MustRun(t, "step", "add", "Провести ревью")
 	clitest.MustRun(t, "step", "done", "1")
 	_, stdout, _ := clitest.Run("stage", "show")
-	if !strings.Contains(stdout, msg.Text(msg.FlowStage, round("Ревью", "review", 4))+"\n") ||
+	if !strings.Contains(stdout, msg.Text(msg.FlowStage, clitest.Round("Ревью", "review", 4))+"\n") ||
 		!strings.Contains(stdout, "ревью выявило существенные замечания  "+msg.Text(msg.StageReturns, 3, 3)+"\n") {
 		t.Errorf("stage show at the limit:\n%s", stdout)
 	}
@@ -247,10 +238,10 @@ func TestStageFeature(t *testing.T) {
 		t.Errorf("task show has the notes or the statement:\n%s", stdout)
 	}
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		msg.Text(msg.NoteHeading, 1, round("Реализация", "implementation", 1)),
+		msg.Text(msg.NoteHeading, 1, clitest.Round("Реализация", "implementation", 1)),
 		"   На ревью проверить, что возврат по СБП не задет",
 		"",
-		msg.Text(msg.NoteHeading, 2, round("Слияние", "merge", 1)),
+		msg.Text(msg.NoteHeading, 2, clitest.Round("Слияние", "merge", 1)),
 		"   Первая строка.",
 		"   Вторая строка.",
 	), "", "note", "list")
@@ -261,7 +252,7 @@ func TestStageFeature(t *testing.T) {
 	_, stdout, _ = clitest.Run("task", "show", "--path")
 	for _, want := range []string{
 		clitest.Lines(
-			round("Реализация", "implementation", 1),
+			clitest.Round("Реализация", "implementation", 1),
 			msg.Text(msg.OutcomeLine, result),
 			msg.Text(msg.ExitTextLine, "Изменения сделаны, тесты проходят"),
 			msg.Text(msg.TransitionLine, "review"),
@@ -334,7 +325,7 @@ func TestStageSkip(t *testing.T) {
 		msg.Text(msg.StageSkipped, "Ветка"),
 		msg.Text(msg.ReasonLine, "Ветка уже создана оператором"),
 		msg.Text(msg.TransitionLine, "plan"),
-		msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
+		msg.Text(msg.TaskStage, clitest.Round("План фичи", "plan-feature", 1)),
 		progress(1),
 		"",
 		cli.HintText(msg.HintStageShow),
@@ -355,7 +346,7 @@ func TestStageSkip(t *testing.T) {
 		t.Errorf("skip at a fork without the transition: exit code %d, code %s", code, c)
 	}
 	_, stdout, _ := clitest.Run("stage", "skip", "--reason", "Нечего смотреть", "--to", "merge")
-	if !strings.Contains(stdout, clitest.Lines(msg.Text(msg.TransitionLine, "merge"), msg.Text(msg.TaskStage, round("Слияние", "merge", 1)), progress(4))) {
+	if !strings.Contains(stdout, clitest.Lines(msg.Text(msg.TransitionLine, "merge"), msg.Text(msg.TaskStage, clitest.Round("Слияние", "merge", 1)), progress(4))) {
 		t.Errorf("skip at a fork:\n%s", stdout)
 	}
 	_, stdout, _ = clitest.Run("task", "show")
@@ -366,7 +357,7 @@ func TestStageSkip(t *testing.T) {
 		[]string{"План фичи", "1", skip, "implementation"},
 		[]string{"Реализация", "1", result, "review"},
 		[]string{"Ревью", "1", skip, "merge"},
-		[]string{"Слияние", "1", msg.Text(msg.OutcomeCurrent), msg.Text(msg.ValueNone)},
+		[]string{"Слияние", "1", msg.Text(msg.OutcomeCurrent), clitest.None},
 	)) {
 		t.Errorf("task show:\n%s", stdout)
 	}
@@ -656,7 +647,7 @@ func TestStageByTools(t *testing.T) {
 			msg.Text(msg.ExitKindLine, result),
 			msg.Text(msg.ExitTextLine, "Создана ветка"),
 			msg.Text(msg.TransitionLine, "plan"),
-			msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
+			msg.Text(msg.TaskStage, clitest.Round("План фичи", "plan-feature", 1)),
 			progress(1),
 			"",
 			cli.HintText(msg.HintStageShow),

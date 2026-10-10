@@ -269,12 +269,15 @@ func TestAgentOnly(t *testing.T) {
 		}
 	}
 	want := []string{"task close", "stage exit", "stage skip", "step add", "step done", "step drop", "artifact save"}
-	// The refusals of an unknown command and action up to the name.
-	unknownCommand, _, _ := strings.Cut(msg.Text(msg.ErrUnknownCommand, "\x00"), "\x00")
-	unknownAction, _, _ := strings.Cut(msg.Text(msg.ErrActionUnknown, "\x00", "\x00"), "\x00")
 	if !slices.Equal(names, want) {
 		t.Errorf("commands only of the agent %v, want %v", names, want)
 	}
+	// The refusals of an unknown command and of an unknown action begin with
+	// the words of the catalog before the name they quote: the text is
+	// formatted with a zero byte for the name, which no name has, and cut
+	// at it.
+	unknownCommand, _, _ := strings.Cut(msg.Text(msg.ErrUnknownCommand, "\x00"), "\x00")
+	unknownAction, _, _ := strings.Cut(msg.Text(msg.ErrActionUnknown, "\x00", "\x00"), "\x00")
 	for _, args := range [][]string{{"step", "add", "Шаг"}, {"step", "--help"}, {"help", "step"}, {"artifact", "save", "plan"}, {"stage", "exit"}, {"task", "close"}, {"help", "stage", "skip"}} {
 		code, _, stderr := run(args...)
 		if code != contract.ExitUsage || !(strings.HasPrefix(stderr, unknownCommand) || strings.HasPrefix(stderr, unknownAction)) {

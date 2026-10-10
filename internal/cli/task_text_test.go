@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -576,10 +577,7 @@ func TestTaskFailureText(t *testing.T) {
 }
 
 func TestCheckTakeFieldsText(t *testing.T) {
-	long := ""
-	for range 81 {
-		long += "я"
-	}
+	long := strings.Repeat("я", 81)
 	tests := []struct {
 		name       string
 		fields     map[string]string

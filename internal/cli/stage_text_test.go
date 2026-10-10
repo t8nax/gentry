@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
@@ -505,7 +506,7 @@ func TestWayFailureText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintArtifactLink, "artifact_save (name, url, task: SHOP-1)"),
 		)},
-		{"no file", "artifact save", &task.FileError{Path: "plan.md", Reason: "not_found"}, true, lines(
+		{"no file", "artifact save", &task.FileError{Path: "plan.md", Reason: task.FileNotFound}, true, lines(
 			"Файл артефакта не найден: plan.md",
 			"",
 			msg.Text(msg.HintArtifactFile),
@@ -521,10 +522,7 @@ func TestWayFailureText(t *testing.T) {
 // TestWayRefusalText checks the refusals of the arguments and fields of the
 // commands of the way of a task, given before the task is looked at.
 func TestWayRefusalText(t *testing.T) {
-	long := ""
-	for range 121 {
-		long += "ш"
-	}
+	long := strings.Repeat("ш", 121)
 	tests := []struct {
 		name       string
 		cmd        string

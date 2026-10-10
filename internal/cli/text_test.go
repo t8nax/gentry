@@ -55,6 +55,31 @@ func wantFail(t *testing.T, name string, f failure, cli, agent string) {
 	wantIn(t, name, "agent", failText(agentChannel, f), agent)
 }
 
+// refusal returns what the command cmd prints on its standard error with
+// args in the channel ch: a refusal of its arguments or fields, given before
+// the command reads the state. A command only the agent runs is run in the
+// channel of the command line too.
+func refusal(ch channel, cmd string, args ...string) string {
+	c, ok := lookup(cmd)
+	if !ok {
+		panic("no command " + cmd)
+	}
+	var out, errOut bytes.Buffer
+	c.run(args, Env{Stdout: &out, Stderr: &errOut, agent: ch == agentChannel})
+	return errOut.String()
+}
+
+// wantRefusal checks the refusal of the command cmd with args in the channel
+// of the command line and of the agent; an empty agent, as wantText has it.
+func wantRefusal(t *testing.T, name, cmd string, args []string, cli, agent string) {
+	t.Helper()
+	if agent == "" {
+		agent = cli
+	}
+	wantIn(t, name, "command line", refusal(cliChannel, cmd, args...), cli)
+	wantIn(t, name, "agent", refusal(agentChannel, cmd, args...), agent)
+}
+
 func wantIn(t *testing.T, name, ch, got, want string) {
 	t.Helper()
 	if got != want {
@@ -64,6 +89,9 @@ func wantIn(t *testing.T, name, ch, got, want string) {
 
 // lines joins lines of a text, each ended by a newline.
 func lines(ls ...string) string { return strings.Join(ls, "\n") + "\n" }
+
+// ptr returns a pointer to v, for the optional fields of the contract.
+func ptr[T any](v T) *T { return &v }
 
 // inUTC makes the local time UTC for the test: the texts name times in the
 // local time.

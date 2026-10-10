@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
@@ -11,31 +10,6 @@ import (
 	"github.com/t8nax/gentry/internal/task"
 )
 
-// refusal returns what the command cmd prints on its standard error with
-// args in the channel ch: a refusal of its arguments or fields, given before
-// the command reads the state. A command only the agent runs is run in the
-// channel of the command line too.
-func refusal(ch channel, cmd string, args ...string) string {
-	c, ok := lookup(cmd)
-	if !ok {
-		panic("no command " + cmd)
-	}
-	var out, errOut bytes.Buffer
-	c.run(args, Env{Stdout: &out, Stderr: &errOut, agent: ch == agentChannel})
-	return errOut.String()
-}
-
-// wantRefusal checks the refusal of the command cmd with args in the channel
-// of the command line and of the agent; an empty agent, as wantText has it.
-func wantRefusal(t *testing.T, name, cmd string, args []string, cli, agent string) {
-	t.Helper()
-	if agent == "" {
-		agent = cli
-	}
-	wantIn(t, name, "command line", refusal(cliChannel, cmd, args...), cli)
-	wantIn(t, name, "agent", refusal(agentChannel, cmd, args...), agent)
-}
-
 // at is shopTask at the node of the stage of the feature scenario, with its
 // progress.
 func at(node, stage, title string, round, passed int) contract.Task {
@@ -44,8 +18,6 @@ func at(node, stage, title string, round, passed int) contract.Task {
 	t.Progress.Passed = passed
 	return t
 }
-
-func ptr[T any](v T) *T { return &v }
 
 func TestStageShowText(t *testing.T) {
 	branch := contract.StageShowOutput{

@@ -84,7 +84,7 @@ func TestProjectFailureText(t *testing.T) {
 		{"not a worktree", projectFailure(&project.NotRepoError{Path: "/work"}), lines(
 			"Папка не является рабочей копией git: /work",
 			"",
-			"Выполните команду в рабочей копии кода проекта.",
+			msg.Text(msg.HintNotGitRepo),
 		), ""},
 		{"no identifier", projectFailure(&project.IDMissingError{}), lines(
 			"Для нового знания нужен идентификатор проекта.",
@@ -138,17 +138,17 @@ func TestProjectAddRefusalText(t *testing.T) {
 		{"no knowledge", []string{"shop"}, lines(
 			"Не указан репозиторий знания.",
 			"",
-			"Укажите папку знания: --knowledge <путь>",
+			msg.Text(msg.HintKnowledgeFlag),
 		)},
 		{"invalid identifier", []string{"Shop", "--knowledge", "../k"}, lines(
 			"Недопустимый идентификатор проекта: «Shop».",
 			"",
-			"Укажите 2–32 строчные латинские буквы, цифры и дефисы, первая — буква.",
+			msg.Text(msg.HintProjectIDInvalid),
 		)},
 		{"invalid prefix", []string{"shop", "--knowledge", "../k", "--prefix", "s"}, lines(
 			"Недопустимое значение флага --prefix: «s».",
 			"",
-			"Укажите от 2 до 10 заглавных латинских букв.",
+			msg.Text(msg.HintPrefixInvalid),
 		)},
 	}
 	for _, tt := range tests {
@@ -257,7 +257,7 @@ func TestWorktreeFailureText(t *testing.T) {
 		{"project undetermined", &project.UndeterminedError{Dir: "/work"}, lines(
 			"Не удалось определить проект для папки /work",
 			"",
-			"Укажите --project или выполните команду в рабочей копии проекта.",
+			msg.Text(msg.HintProjectUndetermined),
 		), ""},
 	}
 	for _, tt := range tests {

@@ -89,22 +89,14 @@ func TestHelpText(t *testing.T) {
 }
 
 // TestArgText states the placeholders of the arguments and the values of
-// flags: the other tests take them from the catalog, the commands of hints
-// too.
+// flags that TestHelpText does not: the other tests take them from the
+// catalog, the commands of hints too.
 func TestArgText(t *testing.T) {
 	for _, c := range []struct {
 		k    msg.Key
 		want string
 	}{
-		{msg.ArgTool, "<ИИ-инструмент>"},
 		{msg.ArgNumber, "<номер>"},
-		{msg.ArgProjectID, "<идентификатор>"},
-		{msg.ArgPath, "<путь>"},
-		{msg.ArgPrefix, "<префикс>"},
-		{msg.ArgScenario, "<сценарий>"},
-		{msg.ArgStage, "<этап>"},
-		{msg.ArgAgent, "<субагент>"},
-		{msg.ArgPart, "<фрагмент>"},
 		{msg.ArgRemote, "<адрес>"},
 		{msg.ArgURL, "<адрес>"},
 		{msg.ArgText, "<текст>"},

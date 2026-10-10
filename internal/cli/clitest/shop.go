@@ -11,6 +11,7 @@ import (
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // work is the directory of the shop of the running test. The tests of a
@@ -178,22 +179,27 @@ func WriteFiles(t *testing.T, dir string, files map[string]string) {
 	}
 }
 
-// ShopTables are the tables of flow show for the flow of the flow testdata.
-const ShopTables = `СЦЕНАРИЙ  НАЗВАНИЕ
-bug       Баг
-feature   Фича
-
-ЭТАП            НАЗВАНИЕ    ИСПОЛНИТЕЛЬ   ВЫХОД
-branch          Ветка       orchestrator  создана ветка задачи
-implementation  Реализация  orchestrator  изменения сделаны, тесты проходят
-merge           Слияние     operator      ветка задачи влита в main
-plan-bug        План бага   orchestrator  причина установлена, план исправления согласован
-plan-feature    План фичи   orchestrator  план согласован с оператором
-review          Ревью       reviewer      замечания ревью записаны и разобраны
-
-СУБАГЕНТ  ИСТОЧНИК    ЭТАПЫ
-reviewer  библиотека  review
-`
+// ShopTables returns the tables of flow show for the flow of the flow
+// testdata: its rows are data, the headers and the source of a subagent are
+// words of the catalog.
+func ShopTables() string {
+	return Table(
+		[]string{msg.Text(msg.ColScenario), msg.Text(msg.ColTitle)},
+		[]string{"bug", "Баг"},
+		[]string{"feature", "Фича"},
+	) + "\n" + Table(
+		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColTitle), msg.Text(msg.ColExecutor), msg.Text(msg.ColExit)},
+		[]string{"branch", "Ветка", "orchestrator", "создана ветка задачи"},
+		[]string{"implementation", "Реализация", "orchestrator", "изменения сделаны, тесты проходят"},
+		[]string{"merge", "Слияние", "operator", "ветка задачи влита в main"},
+		[]string{"plan-bug", "План бага", "orchestrator", "причина установлена, план исправления согласован"},
+		[]string{"plan-feature", "План фичи", "orchestrator", "план согласован с оператором"},
+		[]string{"review", "Ревью", "reviewer", "замечания ревью записаны и разобраны"},
+	) + "\n" + Table(
+		[]string{msg.Text(msg.ColAgent), msg.Text(msg.ColSource), msg.Text(msg.ColStages)},
+		[]string{"reviewer", msg.Text(msg.FlowSourceLibrary), "review"},
+	)
+}
 
 // Statement is the statement of the example of the plan.
 const Statement = "Клиент возвращает часть заказа. Деньги должны вернуться на карту, которой он платил."

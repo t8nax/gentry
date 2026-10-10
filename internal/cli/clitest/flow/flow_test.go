@@ -53,7 +53,7 @@ func flowHead(applied, dir string) string {
 func TestFlowShow(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	code, stdout, stderr := clitest.Run("flow", "show")
-	want := flowHead("<время>", p.Dir) + "\n" + clitest.ShopTables + "\n" + cli.HintText(msg.HintFlowStage) + "\n"
+	want := flowHead("<время>", p.Dir) + "\n" + clitest.ShopTables() + "\n" + cli.HintText(msg.HintFlowStage) + "\n"
 	if stdout = clitest.Masked(stdout); code != contract.ExitOK || stderr != "" || stdout != want {
 		t.Errorf("exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}
@@ -184,7 +184,7 @@ func TestFlowDraft(t *testing.T) {
 		t.Errorf("diff from nothing:\n%s\nwant:\n%s", stdout, want)
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--draft")
-	want = flowHead(none, p.Dir) + "\n" + clitest.ShopTables + "\n" + cli.HintText(msg.HintFlowApply) + "\n"
+	want = flowHead(none, p.Dir) + "\n" + clitest.ShopTables() + "\n" + cli.HintText(msg.HintFlowApply) + "\n"
 	if stdout != want {
 		t.Errorf("show --draft:\n%s\nwant:\n%s", stdout, want)
 	}
@@ -200,7 +200,7 @@ func TestFlowDraft(t *testing.T) {
 	// Editing the files makes a draft.
 	clitest.WriteDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку задачи в main после ревью.\n"})
 	_, stdout, _ = clitest.Run("flow", "show")
-	if want := flowHead("<время>", p.Dir) + msg.Text(msg.FlowDraftOpened) + "\n\n" + clitest.ShopTables + "\n" + cli.HintText(msg.HintFlowShowDraft) + "\n"; clitest.Masked(stdout) != want {
+	if want := flowHead("<время>", p.Dir) + msg.Text(msg.FlowDraftOpened) + "\n\n" + clitest.ShopTables() + "\n" + cli.HintText(msg.HintFlowShowDraft) + "\n"; clitest.Masked(stdout) != want {
 		t.Errorf("show with a draft:\n%s\nwant:\n%s", stdout, want)
 	}
 	// Line ends of another editor are no change.

@@ -86,7 +86,7 @@ func TestProcessRemote(t *testing.T) {
 	b := clitest.ShopPlaces()
 	_, stdout, _ = clitest.Run("flow", "show")
 	if want := clitest.Lines(msg.Text(msg.FlowProject, "shop"), msg.Text(msg.FlowAppliedAt, "<время>"), msg.Text(msg.FlowDir, b.Dir)) + "\n" +
-		clitest.ShopTables; !strings.HasPrefix(clitest.Masked(stdout), want) || b.Dir == p.Dir {
+		clitest.ShopTables(); !strings.HasPrefix(clitest.Masked(stdout), want) || b.Dir == p.Dir {
 		t.Errorf("show on b:\n%s", stdout)
 	}
 

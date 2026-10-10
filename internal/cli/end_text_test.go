@@ -168,7 +168,7 @@ func TestAttemptsText(t *testing.T) {
 		[]string{msg.Text(msg.ColAttempt), msg.Text(msg.ColState), msg.Text(msg.ColScenario), msg.Text(msg.ColTaken),
 			msg.Text(msg.ColEnded), msg.Text(msg.ColCancelReason)},
 		[]string{"1", msg.Text(msg.TaskStateCancelled), "Фича", "2026-10-09 12:30", "2026-10-09 12:30", "Отложено."},
-		[]string{"2", msg.Text(msg.TaskStateActive), "Баг", "2026-10-09 12:30", "—", "—"},
+		[]string{"2", msg.Text(msg.TaskStateActive), "Баг", "2026-10-09 12:30", noValue, noValue},
 	) + "\n"
 	wantText(t, "attempts", func(p *page) {
 		attemptsText(p, out, taskHints("SHOP-1", false, hintOf(msg.HintAttempt)))
@@ -217,13 +217,13 @@ func TestAttemptText(t *testing.T) {
 		msg.Text(msg.ClosedLine, "2026-10-09 12:30"),
 		"",
 		"План фичи (plan-feature), круг 1",
-		msg.Text(msg.OutcomeLine, "—"),
+		msg.Text(msg.OutcomeLine, noValue),
 		"",
 		msg.Text(msg.StepsNone),
 		"",
 	) + table(
 		[]string{msg.Text(msg.ColArtifact), msg.Text(msg.ColKind), msg.Text(msg.ColSaved), msg.Text(msg.ColPlace)},
-		[]string{"plan.md", "файл", "2026-10-09 12:30", "/work/plan.md"},
+		[]string{"plan.md", msg.Text(msg.ArtifactKindFile), "2026-10-09 12:30", "/work/plan.md"},
 	) + lines(
 		"",
 		"Заметки:",

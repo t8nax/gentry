@@ -48,9 +48,9 @@ func TestStageShowText(t *testing.T) {
 			"Задача: SHOP-1",
 			msg.Text(msg.FlowExecutor, "orchestrator"),
 			msg.Text(msg.FlowExit, "создана ветка задачи"),
-			msg.Text(msg.FlowParts, "—"),
+			msg.Text(msg.FlowParts, noValue),
 			"",
-		) + table(header, []string{"plan", "План фичи", "—", "—"}) + lines(
+		) + table(header, []string{"plan", "План фичи", noValue, noValue}) + lines(
 			"",
 			msg.Text(msg.FlowInstruction),
 			"  Создать ветку задачи от main.",
@@ -60,11 +60,11 @@ func TestStageShowText(t *testing.T) {
 			"Задача: SHOP-1",
 			msg.Text(msg.FlowExecutor, "reviewer"),
 			msg.Text(msg.FlowExit, "замечания ревью записаны и разобраны"),
-			msg.Text(msg.FlowParts, "—"),
+			msg.Text(msg.FlowParts, noValue),
 			"",
 		) + table(header,
 			[]string{"implementation", "Реализация", "ревью выявило существенные замечания", "3 из 3"},
-			[]string{"merge", "Слияние", "—", "—"},
+			[]string{"merge", "Слияние", noValue, noValue},
 		) + lines(
 			"",
 			msg.Text(msg.FlowInstruction),
@@ -106,7 +106,7 @@ func TestStageCloseText(t *testing.T) {
 			Closed: closed("branch", "branch", 1, "plan", result("Создана ветка feature/shop-1"), "")},
 			stageCloseExtra{title: "Ветка", hints: show}, lines(
 				"Этап «Ветка» закрыт.",
-				"Вид выхода: результат",
+				"Вид выхода: "+msg.Text(msg.ExitKindResult),
 				"Выход: Создана ветка feature/shop-1",
 				"Переход: plan",
 				msg.Text(msg.TaskStage, "План фичи (plan-feature), круг 1"),
@@ -115,7 +115,7 @@ func TestStageCloseText(t *testing.T) {
 				hintLineOf(msg.HintStageShow, "gentry stage show"),
 			), lines(
 				"Этап «Ветка» закрыт.",
-				"Вид выхода: результат",
+				"Вид выхода: "+msg.Text(msg.ExitKindResult),
 				"Выход: Создана ветка feature/shop-1",
 				"Переход: plan",
 				msg.Text(msg.TaskStage, "План фичи (plan-feature), круг 1"),
@@ -149,7 +149,7 @@ func TestStageCloseText(t *testing.T) {
 			Closed: closed("review", "review", 1, "implementation", result("Замечания записаны"), "Две ошибки в расчёте суммы")},
 			stageCloseExtra{title: "Ревью", hints: taskHints("SHOP-1", false, show...)}, lines(
 				"Этап «Ревью» закрыт.",
-				"Вид выхода: результат",
+				"Вид выхода: "+msg.Text(msg.ExitKindResult),
 				"Выход: Замечания записаны",
 				"Переход: implementation",
 				"Обоснование: Две ошибки в расчёте суммы",
@@ -159,7 +159,7 @@ func TestStageCloseText(t *testing.T) {
 				hintLineOf(msg.HintStageShow, "gentry stage show --task SHOP-1"),
 			), lines(
 				"Этап «Ревью» закрыт.",
-				"Вид выхода: результат",
+				"Вид выхода: "+msg.Text(msg.ExitKindResult),
 				"Выход: Замечания записаны",
 				"Переход: implementation",
 				"Обоснование: Две ошибки в расчёте суммы",
@@ -172,16 +172,16 @@ func TestStageCloseText(t *testing.T) {
 			Closed: closed("merge", "merge", 1, flow.Finish, result("Ветка влита в main"), "")},
 			stageCloseExtra{title: "Слияние", hints: []hint{hintOf(msg.HintTaskClose)}}, lines(
 				"Этап «Слияние» закрыт.",
-				"Вид выхода: результат",
+				"Вид выхода: "+msg.Text(msg.ExitKindResult),
 				"Выход: Ветка влита в main",
-				"Переход: конец",
+				"Переход: "+msg.Text(msg.FlowEnd),
 				msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
 				msg.Text(msg.ProgressLine, "5 из 5"),
 			), lines(
 				"Этап «Слияние» закрыт.",
-				"Вид выхода: результат",
+				"Вид выхода: "+msg.Text(msg.ExitKindResult),
 				"Выход: Ветка влита в main",
-				"Переход: конец",
+				"Переход: "+msg.Text(msg.FlowEnd),
 				msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
 				msg.Text(msg.ProgressLine, "5 из 5"),
 				"",

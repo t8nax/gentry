@@ -196,7 +196,7 @@ func TestDiffText(t *testing.T) {
 		if applied {
 			h += msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30") + "\n"
 		} else {
-			h += msg.Text(msg.FlowAppliedAt, "—") + "\n"
+			h += msg.Text(msg.FlowAppliedAt, noValue) + "\n"
 		}
 		if library {
 			h += msg.Text(msg.LibraryAppliedAt, "2026-10-09 12:30") + "\n"
@@ -312,6 +312,7 @@ func TestDiffText(t *testing.T) {
 func TestDiffReportText(t *testing.T) {
 	inUTC(t)
 	d := diffView{project: "shop", res: diffExample(t)}
+	added, modified := msg.Text(msg.FlowChangeAdded), msg.Text(msg.FlowChangeModified)
 	want := "# Изменения флоу проекта shop\n\n" +
 		msg.Text(msg.FlowProject, "shop") + "  \n" + msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30") + "  \n" +
 		msg.Text(msg.LibraryAppliedAt, "2026-10-09 12:30") + "  \nОшибки черновика: нет  \nФайл сформирован: 2026-10-09 12:30\n\n" +
@@ -320,12 +321,12 @@ func TestDiffReportText(t *testing.T) {
 
 | ` + msg.Text(msg.ColObject) + ` | ` + msg.Text(msg.ColChange) + ` |
 | --- | --- |
-| Сценарий «Баг» (bug) | изменён |
-| Сценарий «Фича» (feature) | изменён |
-| Этап «Ревью» (review) | изменён |
-| Этап «Безопасность» (security) | добавлен |
-| ` + msg.Text(msg.FlowObjAgent, "auditor") + ` | добавлен |
-| ` + msg.Text(msg.FlowObjLibraryAgent, "reviewer") + ` | изменён; ` + msg.Text(msg.DiffUsedBy, "shop") + ` |
+| Сценарий «Баг» (bug) | ` + modified + ` |
+| Сценарий «Фича» (feature) | ` + modified + ` |
+| Этап «Ревью» (review) | ` + modified + ` |
+| Этап «Безопасность» (security) | ` + added + ` |
+| ` + msg.Text(msg.FlowObjAgent, "auditor") + ` | ` + added + ` |
+| ` + msg.Text(msg.FlowObjLibraryAgent, "reviewer") + ` | ` + modified + `; ` + msg.Text(msg.DiffUsedBy, "shop") + ` |
 
 Обозначения на схемах: зелёный — добавлено, жёлтый — изменено, красный пунктир — удалено. Сплошная стрелка — путь по умолчанию, пунктирная — переход с условием.
 
@@ -337,8 +338,8 @@ flowchart TD
     n2["План бага"]
     n3["Реализация"]
     n4["Ревью<br/>исполнитель: reviewer"]
-    n5["Слияние<br/>исполнитель: оператор"]
-    fin(("конец"))
+    n5["Слияние<br/>исполнитель: ` + msg.Text(msg.SchemaOperator) + `"]
+    fin(("` + msg.Text(msg.FlowEnd) + `"))
     n1 --> n2
     n2 --> n3
     n3 --> n4
@@ -365,8 +366,8 @@ flowchart TD
     n3["Реализация"]
     n4["Ревью<br/>исполнитель: reviewer"]
     n5["Безопасность<br/>исполнитель: auditor"]
-    n6["Слияние<br/>исполнитель: оператор"]
-    fin(("конец"))
+    n6["Слияние<br/>исполнитель: ` + msg.Text(msg.SchemaOperator) + `"]
+    fin(("` + msg.Text(msg.FlowEnd) + `"))
     n1 --> n2
     n2 --> n3
     n3 --> n4
@@ -392,7 +393,7 @@ flowchart TD
 - Добавлен ` + msg.Text(msg.DiffTransition, "Безопасность", "Слияние") + `.
 - Удалён ` + msg.Text(msg.DiffTransition, "Ревью", "Слияние") + `.
 
-## Этап «Ревью» (review) — изменён
+## Этап «Ревью» (review) — ` + modified + `
 
 ` + msg.Text(msg.FlowScenarios, "bug, feature") + `
 
@@ -405,15 +406,15 @@ flowchart TD
 +или отклонено с обоснованием.
 ` + "```" + `
 
-## Этап «Безопасность» (security) — добавлен
+## Этап «Безопасность» (security) — ` + added + `
 
 ` + lines(msg.Text(msg.FlowExit, "проверка безопасности пройдена")+"  ", msg.Text(msg.FlowExecutor, "auditor")+"  ",
-		msg.Text(msg.FlowParts, "—")+"  ", msg.Text(msg.FlowScenarios, "feature")) + `
+		msg.Text(msg.FlowParts, noValue)+"  ", msg.Text(msg.FlowScenarios, "feature")) + `
 ` + msg.Text(msg.FlowInstruction) + `
 
 > Проверить изменения на уязвимости.
 
-## ` + msg.Text(msg.FlowObjAgent, "auditor") + ` — добавлен
+## ` + msg.Text(msg.FlowObjAgent, "auditor") + ` — ` + added + `
 
 ` + lines(msg.Text(msg.FlowPurpose, "проверка безопасности изменений")+"  ",
 		msg.Text(msg.FlowCapabilities, "read, search")+"  ", msg.Text(msg.FlowStages, "security")) + `
@@ -423,7 +424,7 @@ flowchart TD
 
 ## Библиотека субагентов
 
-### Субагент reviewer — изменён
+### Субагент reviewer — ` + modified + `
 
 Касается проектов: shop
 

@@ -94,3 +94,47 @@ func TestColumnText(t *testing.T) {
 		}
 	}
 }
+
+// noValue is the mark of a missing value, from the catalog.
+var noValue = msg.Text(msg.ValueNone)
+
+// TestValueText states the short values that the texts print in tables and
+// lines «Поле: значение»: the states, the outcomes, the kinds and the sources.
+// The other tests take them from the catalog, so a change of a value changes
+// this test alone.
+func TestValueText(t *testing.T) {
+	for _, c := range []struct {
+		k    msg.Key
+		want string
+	}{
+		{msg.ValueNone, "—"},
+		{msg.FlowEnd, "конец"},
+		{msg.StageFinished, "сценарий пройден"},
+		{msg.TaskStateActive, "в работе"},
+		{msg.TaskStateClosed, "закрыта"},
+		{msg.TaskStateCancelled, "отменена"},
+		{msg.StepStateDone, "выполнен"},
+		{msg.StepStateDropped, "снят"},
+		{msg.OutcomeCurrent, "идёт"},
+		{msg.OutcomeSkip, "пропуск"},
+		{msg.ExitKindResult, "результат"},
+		{msg.ArtifactKindFile, "файл"},
+		{msg.ArtifactKindLink, "ссылка"},
+		{msg.RecordedByAgent, "агентом"},
+		{msg.TaskSourceOperator, "оператором"},
+		{msg.TaskSourceAgent, "агентом со слов оператора"},
+		{msg.FlowSourceProject, "проект"},
+		{msg.FlowSourceLibrary, "библиотека"},
+		{msg.WorktreeMain, "основная"},
+		{msg.WorktreeFree, "свободна"},
+		{msg.WorktreeMissing, "папка не найдена"},
+		{msg.FlowChangeAdded, "добавлен"},
+		{msg.FlowChangeModified, "изменён"},
+		{msg.FlowChangeRemoved, "удалён"},
+		{msg.SchemaOperator, "оператор"},
+	} {
+		if got := msg.Text(c.k); got != c.want {
+			t.Errorf("%s: %q, want %q", c.k, got, c.want)
+		}
+	}
+}

@@ -95,8 +95,9 @@ func TestFlowShowText(t *testing.T) {
 		[]string{"review", "Ревью", "reviewer", "замечания ревью записаны и разобраны"},
 	) + "\n"
 	agentsHeader := []string{msg.Text(msg.ColAgent), msg.Text(msg.ColSource), msg.Text(msg.ColStages)}
-	library := table(agentsHeader, []string{"reviewer", "библиотека", "review"})
-	withAuditor := table(agentsHeader, []string{"auditor", "проект", "security"}, []string{"reviewer", "библиотека", "review"})
+	libraryWord, projectWord := msg.Text(msg.FlowSourceLibrary), msg.Text(msg.FlowSourceProject)
+	library := table(agentsHeader, []string{"reviewer", libraryWord, "review"})
+	withAuditor := table(agentsHeader, []string{"auditor", projectWord, "security"}, []string{"reviewer", libraryWord, "review"})
 	head := lines(
 		"Проект: shop",
 		"Флоу применён: 2026-10-09 12:30",
@@ -104,7 +105,7 @@ func TestFlowShowText(t *testing.T) {
 	)
 	draftHead := lines(
 		msg.Text(msg.FlowProject, "shop"),
-		msg.Text(msg.FlowAppliedAt, "—"),
+		msg.Text(msg.FlowAppliedAt, noValue),
 		msg.Text(msg.FlowDir, shopFlowDir),
 	)
 	conditional := map[string]string{"scenarios/bug.yaml": "title: Баг\nstart: triage\nnodes:\n" +
@@ -154,7 +155,7 @@ func TestFlowShowText(t *testing.T) {
 			"Название: Фича",
 			"",
 			"Путь по умолчанию:",
-			"  branch → plan → implementation → review → merge → конец",
+			"  branch → plan → implementation → review → merge → "+msg.Text(msg.FlowEnd),
 			"",
 			"Условные переходы:",
 			"  review → implementation, не более 3 возвратов: ревью выявило существенные замечания",
@@ -176,7 +177,7 @@ func TestFlowShowText(t *testing.T) {
 			"",
 			msg.Text(msg.FlowConditional),
 			"  triage → merge: срочно",
-			"  triage → конец: не воспроизводится на main",
+			"  triage → "+msg.Text(msg.FlowEnd)+": не воспроизводится на main",
 			"",
 		) + table(
 			[]string{msg.Text(msg.ColNode), msg.Text(msg.ColStage), msg.Text(msg.ColExecutor)},
@@ -199,7 +200,7 @@ func TestFlowShowText(t *testing.T) {
 			msg.Text(msg.FlowTitle, "Слияние"),
 			msg.Text(msg.FlowExecutor, "operator"),
 			msg.Text(msg.FlowExit, "ветка задачи влита в main"),
-			msg.Text(msg.FlowParts, "—"),
+			msg.Text(msg.FlowParts, noValue),
 			msg.Text(msg.FlowScenarios, "bug, feature"),
 			"",
 			msg.Text(msg.FlowInstruction),
@@ -207,7 +208,7 @@ func TestFlowShowText(t *testing.T) {
 		), ""},
 		{"subagent", reviewer, reviewerX, lines(
 			"Субагент: reviewer",
-			"Источник: библиотека",
+			"Источник: "+msg.Text(msg.FlowSourceLibrary),
 			"Назначение: ревью изменений задачи — поведение и текст",
 			"Возможности: read, search",
 			"Этапы: review",

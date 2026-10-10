@@ -229,10 +229,10 @@ func TestWorktreeListText(t *testing.T) {
 	}}
 	wantText(t, "worktrees", func(p *page) { worktreeListText(p, out) }, table(
 		[]string{msg.Text(msg.ColProject), msg.Text(msg.ColWorktree), msg.Text(msg.ColBranch), msg.Text(msg.ColState)},
-		[]string{"shop", shopMain, "main", "основная, свободна"},
+		[]string{"shop", shopMain, "main", msg.Text(msg.WorktreeMain) + ", " + msg.Text(msg.WorktreeFree)},
 		[]string{"shop", shopFix, "fix", "задача SHOP-1"},
-		[]string{"shop", "/work/shop-2", "two", "свободна"},
-		[]string{"shop", "/work/shop-gone", "—", "папка не найдена"},
+		[]string{"shop", "/work/shop-2", "two", msg.Text(msg.WorktreeFree)},
+		[]string{"shop", "/work/shop-gone", noValue, msg.Text(msg.WorktreeMissing)},
 	), "")
 }
 
@@ -279,16 +279,16 @@ func TestAgentsSyncText(t *testing.T) {
 	wantText(t, "in place", func(p *page) {
 		agentsSyncText(p, contract.AgentsSyncOutput{Project: "shop", Worktrees: worktrees()}, laid)
 	}, lines("Субагенты в рабочих копиях проекта shop соответствуют флоу.", "")+table(header,
-		[]string{shopMain, "—", "reviewer", "—"},
-		[]string{shopFix, "SHOP-1", "reviewer", "—"},
-		[]string{"/work/shop-gone", "—", "—", "папки нет, копия пропущена"},
+		[]string{shopMain, noValue, "reviewer", noValue},
+		[]string{shopFix, "SHOP-1", "reviewer", noValue},
+		[]string{"/work/shop-gone", noValue, noValue, "папки нет, копия пропущена"},
 	), "")
 	wantText(t, "laid out", func(p *page) {
 		agentsSyncText(p, contract.AgentsSyncOutput{Project: "shop", Changed: true, Worktrees: worktrees("reviewer")}, laid)
 	}, lines("Субагенты разложены в рабочие копии проекта shop.", msg.Text(msg.AgentsNextSession), "")+table(header,
-		[]string{shopMain, "—", "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
-		[]string{shopFix, "SHOP-1", "reviewer", "—"},
-		[]string{"/work/shop-gone", "—", "—", msg.Text(msg.AgentsWorktreeMissing)},
+		[]string{shopMain, noValue, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
+		[]string{shopFix, "SHOP-1", "reviewer", noValue},
+		[]string{"/work/shop-gone", noValue, noValue, msg.Text(msg.AgentsWorktreeMissing)},
 	), "")
 }
 

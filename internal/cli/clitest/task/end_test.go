@@ -79,7 +79,7 @@ func TestTaskClose(t *testing.T) {
 	if !strings.Contains(clitest.Masked(stdout), msg.Text(msg.TaskState, msg.Text(msg.TaskStateClosed))+"\n") ||
 		!strings.Contains(clitest.Masked(stdout), clitest.Lines(msg.Text(msg.TaskTakenAt, "<время>"), msg.Text(msg.TaskClosedByAgent, "<время>"),
 			msg.Text(msg.TaskFlowApplied, "<время>"), "")) ||
-		strings.Contains(stdout, msg.Text(msg.TaskWorktree, "")) ||
+		strings.Contains(stdout, fix) ||
 		!strings.HasSuffix(stdout, "\n\n"+cli.HintFor(msg.HintStatement, "task", "SHOP-1")+"\n") {
 		t.Errorf("task show of a closed task:\n%s", stdout)
 	}

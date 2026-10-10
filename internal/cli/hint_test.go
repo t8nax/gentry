@@ -132,3 +132,92 @@ func TestHintsLast(t *testing.T) {
 		t.Errorf("%q, want %q", got, want)
 	}
 }
+
+// TestHintText states the words of the hints: the other tests take them from
+// the catalog, so a change of the words changes this test alone.
+func TestHintText(t *testing.T) {
+	for _, c := range []struct {
+		k    msg.Key
+		args []any
+		want string
+	}{
+		{msg.HintUnknownCommand, nil, "Посмотреть перечень команд"},
+		{msg.HintPluginEnable, nil, "Включить плагин: claude plugin enable gentry@gentry"},
+		{msg.HintPluginElsewhere, nil, "Переключить плагин всех сессий Claude Code на папку данных этой команды"},
+		{msg.HintStateNewer, nil, "Обновите Gentry."},
+		{msg.HintStateNewerAgent, nil, "Сообщить оператору и попросить перезапустить сессию."},
+		{msg.HintActions, nil, "Посмотреть перечень действий"},
+		{msg.HintProjectAdd, nil, "Подключить проект"},
+		{msg.HintNotGitRepo, nil, "Выполните команду в рабочей копии кода проекта."},
+		{msg.HintProjectUnpooled, nil, "Внести копию в пул"},
+		{msg.HintProjectClone, nil, "Внести эту копию в пул"},
+		{msg.HintProjectUndetermined, nil, "Укажите --project или выполните команду в рабочей копии проекта."},
+		{msg.HintProjectNotFound, nil, "Посмотреть перечень проектов"},
+		{msg.HintEventsAfter, nil, "Укажите номер события — целое число не меньше 0."},
+		{msg.HintKnowledgeFlag, nil, "Укажите папку знания: --knowledge <путь>"},
+		{msg.HintProjectIDMissing, nil, "Укажите идентификатор"},
+		{msg.HintProjectIDInvalid, nil, "Укажите 2–32 строчные латинские буквы, цифры и дефисы, первая — буква."},
+		{msg.HintPrefixInvalid, nil, "Укажите от 2 до 10 заглавных латинских букв."},
+		{msg.HintFlowShowDraft, nil, "Посмотреть черновик"},
+		{msg.HintFlowStage, nil, "Посмотреть этап подробно"},
+		{msg.HintFlowApply, nil, "Применить черновик"},
+		{msg.HintFlowObjects, nil, "Посмотреть перечень объектов"},
+		{msg.HintDraftObjects, nil, "Посмотреть перечень объектов"},
+		{msg.HintCommandHelp, nil, "Посмотреть описание команды"},
+		{msg.HintLibraryApply, nil, "Применить изменения"},
+		{msg.HintProcessRemote, nil, "Подключить удалённый репозиторий"},
+		{msg.HintProcessSync, nil, "Синхронизировать"},
+		{msg.HintFlowDiffProject, nil, "Посмотреть отличия"},
+		{msg.HintLibraryDiff, nil, "Посмотреть отличия"},
+		{msg.HintTaskShow, nil, "Посмотреть задачу"},
+		{msg.HintWorktreeAdd, nil, "Внести копию в пул"},
+		{msg.HintWorktreeDirty, nil, "Закоммитьте или отмените изменения и повторите команду."},
+		{msg.HintFlowScenarios, nil, "Посмотреть сценарии"},
+		{msg.HintTitle, nil, "Укажите название одной строкой не длиннее 80 знаков."},
+		{msg.HintTaskListAll, nil, "Посмотреть все задачи"},
+		{msg.HintTaskList, nil, "Посмотреть задачи"},
+		{msg.HintTaskKey, nil, "Укажите номер с префиксом проекта: <префикс>-<число>."},
+		{msg.HintStageExit, nil, "Закрыть этап"},
+		{msg.HintStageShow, nil, "Посмотреть этап"},
+		{msg.HintStatement, nil, "Посмотреть постановку"},
+		{msg.HintNotes, nil, "Посмотреть заметки"},
+		{msg.HintStageTransitions, nil, "Посмотреть переходы"},
+		{msg.HintOtherTransitions, nil, "Посмотреть другие переходы"},
+		{msg.HintStepAdd, nil, "Добавить шаги"},
+		{msg.HintStepDone, nil, "Отметить шаг выполненным"},
+		{msg.HintStepDrop, nil, "Снять шаг"},
+		{msg.HintSteps, nil, "Посмотреть шаги"},
+		{msg.HintStep, nil, "Укажите шаг одной строкой не длиннее 120 знаков."},
+		{msg.HintArtifactSave, nil, "Сохранить артефакт"},
+		{msg.HintArtifactName, nil, "Укажите имя из латинских букв, цифр, точки, дефиса и подчёркивания."},
+		{msg.HintArtifactURL, nil, "Укажите адрес с http:// или https:// в начале."},
+		{msg.HintArtifactFile, nil, "Проверьте путь к файлу и повторите команду."},
+		{msg.HintArtifactLink, nil, "Сохранить ссылку вместо файла"},
+		{msg.HintStatementDecisions, nil, "Посмотреть постановку и решения оператора"},
+		{msg.HintAllowReturn, nil, "Записать разрешение оператора"},
+		{msg.HintOptionsTooFew, nil, "Укажите не меньше двух вариантов или ни одного."},
+		{msg.HintOptionsRecommended, nil, "Отметьте рекомендованным не больше одного варианта."},
+		{msg.HintOptionLabel, nil, "Укажите название варианта одной строкой не длиннее 120 знаков."},
+		{msg.HintTaskClose, nil, "Закрыть задачу"},
+		{msg.HintTaskAgain, nil, "Взять задачу заново"},
+		{msg.HintAttempts, nil, "Посмотреть прежние попытки"},
+		{msg.HintAttemptsList, nil, "Посмотреть попытки"},
+		{msg.HintAttempt, nil, "Посмотреть попытку"},
+		{msg.HintWorktreeListProject, nil, "Посмотреть рабочие копии проекта"},
+		{msg.HintIntroPluginStale, nil, "Сообщить оператору и по его слову обновить плагин"},
+		{msg.HintDiffLibraryApply, nil, "Применить изменения библиотеки"},
+		{msg.HintAgentsConflict, nil, "Необходимо переименовать субагента во флоу или удалить файл из рабочей копии, затем повторить команду."},
+		{msg.HintAgentsConflictWarning, nil, "Разложить субагентов после разбора файлов"},
+		{msg.HintAgentsSyncFailed, nil, "Повторить раскладку"},
+		{msg.HintHookEvents, []any{"session-start"}, "Допустимые значения: session-start"},
+		{msg.HintSetupPermission, []any{"mcp__plugin_gentry_gentry"}, "Разрешить инструменты вручную: правило mcp__plugin_gentry_gentry в permissions.allow"},
+		{msg.HintToolNotFound, []any{"Claude Code"}, "Установите Claude Code и повторите"},
+		{msg.HintRemoteAccess, []any{"git@example.com:shop/process.git"}, "Проверить доступ: git ls-remote git@example.com:shop/process.git"},
+		{msg.HintIntroTake, []any{"/gentry:take"}, "Взять задачу, когда оператор её поставит: скилл /gentry:take"},
+		{msg.HintIntroContinue, []any{"/gentry:continue"}, "Продолжить задачу по слову оператора: скилл /gentry:continue"},
+	} {
+		if got := msg.Text(c.k, c.args...); got != c.want {
+			t.Errorf("%s: %q, want %q", c.k, got, c.want)
+		}
+	}
+}

@@ -139,11 +139,20 @@ func WantJSON(t *testing.T, exit int, schema string, args ...string) string {
 // command.
 func ErrorCode(t *testing.T, args ...string) (int, string) {
 	t.Helper()
+	code, e := ErrorOf(t, args...)
+	return code, e.Code
+}
+
+// ErrorOf returns the exit code and the error of the failure of a --json
+// command: its code with the details that tell apart the refusals of one
+// code, such as the field of missing_field.
+func ErrorOf(t *testing.T, args ...string) (int, contract.Error) {
+	t.Helper()
 	code, out, _ := Run(append(args, "--json")...)
 	Validate(t, "schemas/error.json", out)
 	var e contract.ErrorOutput
 	json.Unmarshal([]byte(out), &e)
-	return code, e.Error.Code
+	return code, e.Error
 }
 
 var schemas struct {

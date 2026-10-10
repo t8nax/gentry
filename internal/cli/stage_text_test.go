@@ -71,30 +71,30 @@ func TestStageShowText(t *testing.T) {
 		cli, agent string
 	}{
 		{"first stage", branch, lines(
-			"Этап: Ветка (branch), круг 1",
+			msg.Text(msg.FlowStage, "Ветка (branch), круг 1"),
 			"Задача: SHOP-1",
-			"Исполнитель: orchestrator",
-			"Выход: создана ветка задачи",
-			"Фрагменты: —",
+			msg.Text(msg.FlowExecutor, "orchestrator"),
+			msg.Text(msg.FlowExit, "создана ветка задачи"),
+			msg.Text(msg.FlowParts, "—"),
 			"",
 		) + table(header, []string{"plan", "План фичи", "—", "—"}) + lines(
 			"",
-			"Инструкция:",
+			msg.Text(msg.FlowInstruction),
 			"  Создать ветку задачи от main.",
 		), ""},
 		{"returns used up", review, lines(
-			"Этап: Ревью (review), круг 4",
+			msg.Text(msg.FlowStage, "Ревью (review), круг 4"),
 			"Задача: SHOP-1",
-			"Исполнитель: reviewer",
-			"Выход: замечания ревью записаны и разобраны",
-			"Фрагменты: —",
+			msg.Text(msg.FlowExecutor, "reviewer"),
+			msg.Text(msg.FlowExit, "замечания ревью записаны и разобраны"),
+			msg.Text(msg.FlowParts, "—"),
 			"",
 		) + table(header,
 			[]string{"implementation", "Реализация", "ревью выявило существенные замечания", "3 из 3"},
 			[]string{"merge", "Слияние", "—", "—"},
 		) + lines(
 			"",
-			"Инструкция:",
+			msg.Text(msg.FlowInstruction),
 			"  Провести ревью.",
 		), ""},
 	}

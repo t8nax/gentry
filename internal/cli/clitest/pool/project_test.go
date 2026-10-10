@@ -14,7 +14,7 @@ import (
 	"github.com/t8nax/gentry/internal/state"
 )
 
-func TestProjectAddText(t *testing.T) {
+func TestProjectAdd(t *testing.T) {
 	root := clitest.ShopDir(t)
 	shop, fix, know := filepath.Join(root, "shop"), filepath.Join(root, "shop-fix"), filepath.Join(root, "shop-knowledge")
 	t.Chdir(fix)
@@ -145,7 +145,7 @@ func TestProjectAddErrors(t *testing.T) {
 	}
 }
 
-func TestProjectAddRefusalText(t *testing.T) {
+func TestProjectAddRefusals(t *testing.T) {
 	root := clitest.ShopDir(t)
 	t.Chdir(root)
 	_, _, stderr := clitest.Run("project", "add", "shop", "--knowledge", "k")

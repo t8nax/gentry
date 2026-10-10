@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // auditor is a valid subagent of the project and a stage it carries out.
@@ -83,29 +84,29 @@ func TestAgentProblems(t *testing.T) {
 		{"fields", map[string]string{
 			"agents/auditor.yaml": "capabilities: read\nmodel: x\n",
 		}, nil, []Problem{
-			{contract.ProblemMissingField, "agents/auditor.yaml", 0, "Субагент auditor: не заполнено поле «purpose»."},
-			{contract.ProblemInvalidValue, "agents/auditor.yaml", 1, "Субагент auditor: значение поля «capabilities» должно быть списком из read, search, edit, run, web, task, progress."},
-			{contract.ProblemUnknownField, "agents/auditor.yaml", 2, "Субагент auditor: неизвестное поле «model»."},
+			{contract.ProblemMissingField, "agents/auditor.yaml", 0, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjAgent, "auditor"), "purpose")},
+			{contract.ProblemInvalidValue, "agents/auditor.yaml", 1, msg.Text(msg.ProblemCapabilities, msg.Text(msg.FlowObjAgent, "auditor"), "read, search, edit, run, web, task, progress")},
+			{contract.ProblemUnknownField, "agents/auditor.yaml", 2, msg.Text(msg.ProblemUnknownField, msg.Text(msg.FlowObjAgent, "auditor"), "model")},
 		}},
 		{"unknown capability", map[string]string{
 			"agents/auditor.yaml": "purpose: x\ncapabilities: [read, write]\n",
 		}, nil, []Problem{
-			{contract.ProblemInvalidValue, "agents/auditor.yaml", 2, "Субагент auditor: значение поля «capabilities» должно быть списком из read, search, edit, run, web, task, progress."},
+			{contract.ProblemInvalidValue, "agents/auditor.yaml", 2, msg.Text(msg.ProblemCapabilities, msg.Text(msg.FlowObjAgent, "auditor"), "read, search, edit, run, web, task, progress")},
 		}},
 		{"no capabilities", map[string]string{
 			"agents/auditor.yaml": "purpose: x\n",
 		}, nil, []Problem{
-			{contract.ProblemMissingField, "agents/auditor.yaml", 0, "Субагент auditor: не заполнено поле «capabilities»."},
+			{contract.ProblemMissingField, "agents/auditor.yaml", 0, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjAgent, "auditor"), "capabilities")},
 		}},
 		{"instructions", map[string]string{
 			"agents/auditor.md": "",
 			"agents/old.md":     "x",
 		}, nil, []Problem{
-			{contract.ProblemMissingInstruction, "agents/auditor.yaml", 0, "Субагент auditor: нет инструкции."},
-			{contract.ProblemOrphanInstruction, "agents/old.md", 0, "Субагент old: есть инструкция, но нет полей субагента."},
+			{contract.ProblemMissingInstruction, "agents/auditor.yaml", 0, msg.Text(msg.ProblemMissingInstruction, msg.Text(msg.FlowObjAgent, "auditor"))},
+			{contract.ProblemOrphanInstruction, "agents/old.md", 0, msg.Text(msg.ProblemOrphanAgentInstruction, msg.Text(msg.FlowObjAgent, "old"))},
 		}},
 		{"invalid id", map[string]string{"agents/Auditor_2.yaml": "x"}, nil, []Problem{
-			{contract.ProblemInvalidID, "agents/Auditor_2.yaml", 0, "Субагент Auditor_2: недопустимый идентификатор; допустимы до 64 строчных латинских букв, цифр и дефисов, первая — буква."},
+			{contract.ProblemInvalidID, "agents/Auditor_2.yaml", 0, msg.Text(msg.ProblemInvalidID, msg.Text(msg.FlowObjAgent, "Auditor_2"))},
 		}},
 		// A library subagent has no file in the flow: its problems name it and
 		// come before files that do not belong to the flow.
@@ -113,12 +114,12 @@ func TestAgentProblems(t *testing.T) {
 			"reviewer.yaml": "purpose: x\ncapabilities: [all]\n",
 			"reviewer.md":   "",
 		}, []Problem{
-			{contract.ProblemInvalidValue, "", 0, "Субагент reviewer из библиотеки: значение поля «capabilities» должно быть списком из read, search, edit, run, web, task, progress."},
-			{contract.ProblemMissingInstruction, "", 0, "Субагент reviewer из библиотеки: нет инструкции."},
-			{contract.ProblemExtraFile, "README.md", 0, "Файл не относится к флоу: README.md"},
+			{contract.ProblemInvalidValue, "", 0, msg.Text(msg.ProblemCapabilities, msg.Text(msg.FlowObjLibraryAgent, "reviewer"), "read, search, edit, run, web, task, progress")},
+			{contract.ProblemMissingInstruction, "", 0, msg.Text(msg.ProblemMissingInstruction, msg.Text(msg.FlowObjLibraryAgent, "reviewer"))},
+			{contract.ProblemExtraFile, "README.md", 0, msg.Text(msg.ProblemExtraFile, "README.md")},
 		}},
 		{"library without fields", nil, map[string]string{"reviewer.yaml": ""}, []Problem{
-			{contract.ProblemUnknownExecutor, "stages/review.yaml", 3, "Этап review: субагент reviewer не найден."},
+			{contract.ProblemUnknownExecutor, "stages/review.yaml", 3, msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer")},
 		}},
 	}
 	for _, tt := range tests {

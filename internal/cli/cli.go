@@ -556,11 +556,13 @@ func runVersion(args []string, env Env) int {
 		StateSchema:     state.SchemaVersion(),
 		KnowledgeFormat: project.KnowledgeFormat,
 	}
-	return emit(env, out, func(p *page, out contract.VersionOutput) {
-		// The contract and format versions are for programs: only --json has
-		// them.
-		fmt.Fprintln(p, msg.Text(msg.VersionGentry, out.Gentry))
-	})
+	return emit(env, out, versionText)
+}
+
+// versionText prints the version of Gentry. The contract and format versions
+// are for programs: only --json has them.
+func versionText(p *page, out contract.VersionOutput) {
+	fmt.Fprintln(p, msg.Text(msg.VersionGentry, out.Gentry))
 }
 
 // writeJSON prints v as the single JSON object of a --json command.

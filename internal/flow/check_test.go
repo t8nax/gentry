@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // bug returns the bug scenario with the given nodes, which start at line 4.
@@ -20,7 +21,7 @@ func TestGraphProblems(t *testing.T) {
 	}{
 		{"unknown start", bug("brnch",
 			"  branch: { stage: branch, next: finish }\n"), []Problem{
-			{contract.ProblemUnknownNode, "scenarios/bug.yaml", 2, "Сценарий bug: начальный узел brnch не найден."},
+			{contract.ProblemUnknownNode, "scenarios/bug.yaml", 2, msg.Text(msg.ProblemUnknownStart, msg.Text(msg.FlowObjScenario, "bug"), "brnch")},
 		}},
 		{"unknown target", bug("branch",
 			"  branch: { stage: branch, next: review }\n"+
@@ -28,11 +29,11 @@ func TestGraphProblems(t *testing.T) {
 				"  merge: { stage: merge, next: finish }\n"), []Problem{
 			// Without the misspelt node the rest is not checked: merge
 			// would be unreachable and review a dead end.
-			{contract.ProblemUnknownNode, "scenarios/bug.yaml", 5, "Сценарий bug, узел review: узел перехода merj не найден."},
+			{contract.ProblemUnknownNode, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemUnknownTarget, msg.Text(msg.FlowObjNode, "bug", "review"), "merj")},
 		}},
 		{"missing start and next", map[string]string{"scenarios/bug.yaml": "title: Баг\nnodes:\n  branch: { stage: branch }\n"}, []Problem{
-			{contract.ProblemMissingField, "scenarios/bug.yaml", 0, "Сценарий bug: не заполнено поле «start»."},
-			{contract.ProblemMissingField, "scenarios/bug.yaml", 3, "Сценарий bug, узел branch: не заполнено поле «next»."},
+			{contract.ProblemMissingField, "scenarios/bug.yaml", 0, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjScenario, "bug"), "start")},
+			{contract.ProblemMissingField, "scenarios/bug.yaml", 3, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjNode, "bug", "branch"), "next")},
 		}},
 		{"invalid nodes", bug("branch",
 			"  branch: { stage: branch, next: 5 }\n"+
@@ -40,21 +41,21 @@ func TestGraphProblems(t *testing.T) {
 				"  finish: { stage: merge, next: finish }\n"+
 				"  review: review\n"+
 				"  plan:\n    stage: plan-bug\n    next:\n      - finish\n      - to: finish\n        if: x\n        max_rounds: 0\n        when: y\n"), []Problem{
-			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 4, "Сценарий bug, узел branch: значение поля «next» должно быть идентификатором узла или списком переходов."},
-			{contract.ProblemInvalidID, "scenarios/bug.yaml", 5, "Сценарий bug, узел Merge_Node: недопустимый идентификатор; допустимы до 64 строчных латинских букв, цифр и дефисов, первая — буква."},
-			{contract.ProblemReservedNode, "scenarios/bug.yaml", 6, "Сценарий bug: finish обозначает конец сценария и не может быть узлом."},
-			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 7, "Сценарий bug, узел review: описание должно состоять из полей."},
-			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 11, "Сценарий bug, узел plan: значение поля «next» должно быть идентификатором узла или списком переходов."},
-			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 14, "Сценарий bug, узел plan: значение поля «max_rounds» должно быть целым числом больше 0."},
-			{contract.ProblemUnknownField, "scenarios/bug.yaml", 15, "Сценарий bug, узел plan: неизвестное поле «when»."},
+			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 4, msg.Text(msg.ProblemNext, msg.Text(msg.FlowObjNode, "bug", "branch"))},
+			{contract.ProblemInvalidID, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemInvalidID, msg.Text(msg.FlowObjNode, "bug", "Merge_Node"))},
+			{contract.ProblemReservedNode, "scenarios/bug.yaml", 6, msg.Text(msg.ProblemReservedNode, msg.Text(msg.FlowObjScenario, "bug"))},
+			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 7, msg.Text(msg.ProblemNotMapping, msg.Text(msg.FlowObjNode, "bug", "review"))},
+			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 11, msg.Text(msg.ProblemNext, msg.Text(msg.FlowObjNode, "bug", "plan"))},
+			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 14, msg.Text(msg.ProblemMaxRounds, msg.Text(msg.FlowObjNode, "bug", "plan"))},
+			{contract.ProblemUnknownField, "scenarios/bug.yaml", 15, msg.Text(msg.ProblemUnknownField, msg.Text(msg.FlowObjNode, "bug", "plan"), "when")},
 		}},
 		{"nodes not a mapping", bug("branch", "  - branch\n"), []Problem{
-			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 3, "Сценарий bug: значение поля «nodes» должно быть набором узлов."},
+			{contract.ProblemInvalidValue, "scenarios/bug.yaml", 3, msg.Text(msg.ProblemNodes, msg.Text(msg.FlowObjScenario, "bug"))},
 		}},
 		{"unreachable", bug("branch",
 			"  branch: { stage: branch, next: finish }\n"+
 				"  cleanup: { stage: merge, next: finish }\n"), []Problem{
-			{contract.ProblemUnreachable, "scenarios/bug.yaml", 5, "Сценарий bug: узел cleanup недостижим из начального узла."},
+			{contract.ProblemUnreachable, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemUnreachable, msg.Text(msg.FlowObjScenario, "bug"), "cleanup")},
 		}},
 		{"dead end", bug("branch",
 			"  branch: { stage: branch, next: implementation }\n"+
@@ -63,34 +64,34 @@ func TestGraphProblems(t *testing.T) {
 				"  merge: { stage: merge, next: finish }\n"), []Problem{
 			// Only the dead end itself, not every node that leads into it;
 			// merge, past the dead end, is unreachable.
-			{contract.ProblemDeadEnd, "scenarios/bug.yaml", 6, "Сценарий bug: из узла review нельзя дойти до конца сценария."},
-			{contract.ProblemUnreachable, "scenarios/bug.yaml", 12, "Сценарий bug: узел merge недостижим из начального узла."},
+			{contract.ProblemDeadEnd, "scenarios/bug.yaml", 6, msg.Text(msg.ProblemDeadEnd, msg.Text(msg.FlowObjScenario, "bug"), "review")},
+			{contract.ProblemUnreachable, "scenarios/bug.yaml", 12, msg.Text(msg.ProblemUnreachable, msg.Text(msg.FlowObjScenario, "bug"), "merge")},
 		}},
 		{"unlimited loop", bug("branch",
 			"  branch: { stage: branch, next: implementation }\n"+
 				"  implementation: { stage: implementation, next: review }\n"+
 				"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n      - to: finish\n"), []Problem{
-			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 5, "Сценарий bug: у цикла implementation → review → implementation нет предела возвратов."},
+			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemUnlimitedLoop, msg.Text(msg.FlowObjScenario, "bug"), "implementation → review → implementation")},
 		}},
 		{"unlimited self loop", bug("review",
 			"  review:\n    stage: review\n    next:\n      - to: review\n        if: ещё круг\n      - to: finish\n"), []Problem{
-			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 4, "Сценарий bug: у цикла review → review нет предела возвратов."},
+			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 4, msg.Text(msg.ProblemUnlimitedLoop, msg.Text(msg.FlowObjScenario, "bug"), "review → review")},
 		}},
 		{"limits", bug("plan",
 			"  plan:\n    stage: plan-bug\n    next:\n      - to: review\n        if: план готов\n        max_rounds: 2\n"+
 				"  review:\n    stage: review\n    next:\n      - to: review\n        max_rounds: 3\n      - to: finish\n        if: замечаний нет\n"), []Problem{
-			{contract.ProblemLimitOutsideLoop, "scenarios/bug.yaml", 7, "Сценарий bug: у перехода plan → review указан предел возвратов, но переход не замыкает цикл."},
-			{contract.ProblemLimitWithoutCondition, "scenarios/bug.yaml", 13, "Сценарий bug: у перехода review → review с пределом возвратов нет условия."},
+			{contract.ProblemLimitOutsideLoop, "scenarios/bug.yaml", 7, msg.Text(msg.ProblemLimitOutsideLoop, msg.Text(msg.FlowObjScenario, "bug"), "plan", "review")},
+			{contract.ProblemLimitWithoutCondition, "scenarios/bug.yaml", 13, msg.Text(msg.ProblemLimitWithoutCondition, msg.Text(msg.FlowObjScenario, "bug"), "review", "review")},
 		}},
 		{"limit to the end", bug("plan",
 			"  plan:\n    stage: plan-bug\n    next:\n      - to: finish\n        if: план готов\n        max_rounds: 2\n"), []Problem{
-			{contract.ProblemLimitOutsideLoop, "scenarios/bug.yaml", 7, "Сценарий bug: у перехода plan → finish указан предел возвратов, но переход не замыкает цикл."},
+			{contract.ProblemLimitOutsideLoop, "scenarios/bug.yaml", 7, msg.Text(msg.ProblemLimitOutsideLoop, msg.Text(msg.FlowObjScenario, "bug"), "plan", "finish")},
 		}},
 		{"transitions of a node", bug("review",
 			"  review:\n    stage: review\n    next:\n      - to: merge\n        if: замечаний нет\n      - to: merge\n      - to: finish\n"+
 				"  merge: { stage: merge, next: finish }\n"), []Problem{
-			{contract.ProblemDuplicateTransition, "scenarios/bug.yaml", 9, "Сценарий bug, узел review: два перехода к узлу merge."},
-			{contract.ProblemSeveralDefaults, "scenarios/bug.yaml", 10, "Сценарий bug, узел review: переход без условия может быть только один."},
+			{contract.ProblemDuplicateTransition, "scenarios/bug.yaml", 9, msg.Text(msg.ProblemDuplicateTransition, msg.Text(msg.FlowObjNode, "bug", "review"), "merge")},
+			{contract.ProblemSeveralDefaults, "scenarios/bug.yaml", 10, msg.Text(msg.ProblemSeveralDefaults, msg.Text(msg.FlowObjNode, "bug", "review"))},
 		}},
 	}
 	for _, tt := range tests {

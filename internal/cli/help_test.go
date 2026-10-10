@@ -197,10 +197,10 @@ func TestGroupHelp(t *testing.T) {
 		args   []string
 		stderr string
 	}{
-		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + "\n\n" + "Посмотреть перечень действий: gentry project --help"},
-		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + "\n\n" + "Посмотреть перечень действий: gentry project --help"},
-		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n\n" + "Посмотреть перечень действий: gentry project --help"},
-		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n\n" + "Посмотреть перечень действий: gentry project --help"},
+		{[]string{"project"}, msg.Text(msg.ErrActionMissing, "project") + "\n\n" + HintText(msg.HintActions, "project")},
+		{[]string{"project", "--prefix", "X"}, msg.Text(msg.ErrActionMissing, "project") + "\n\n" + HintText(msg.HintActions, "project")},
+		{[]string{"project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n\n" + HintText(msg.HintActions, "project")},
+		{[]string{"help", "project", "foo"}, msg.Text(msg.ErrActionUnknown, "foo", "project") + "\n\n" + HintText(msg.HintActions, "project")},
 		{[]string{"project", "list", "extra"}, msg.Text(msg.ErrUnexpectedArgs, "project list")},
 		{[]string{"project", "list", "--foo"}, msg.Text(msg.ErrUnknownFlag, "project list", "--foo")},
 	}
@@ -272,9 +272,15 @@ func TestAgentOnly(t *testing.T) {
 	if !slices.Equal(names, want) {
 		t.Errorf("commands only of the agent %v, want %v", names, want)
 	}
+	// The refusals of an unknown command and of an unknown action begin with
+	// the words of the catalog before the name they quote: the text is
+	// formatted with a zero byte for the name, which no name has, and cut
+	// at it.
+	unknownCommand, _, _ := strings.Cut(msg.Text(msg.ErrUnknownCommand, "\x00"), "\x00")
+	unknownAction, _, _ := strings.Cut(msg.Text(msg.ErrActionUnknown, "\x00", "\x00"), "\x00")
 	for _, args := range [][]string{{"step", "add", "Шаг"}, {"step", "--help"}, {"help", "step"}, {"artifact", "save", "plan"}, {"stage", "exit"}, {"task", "close"}, {"help", "stage", "skip"}} {
 		code, _, stderr := run(args...)
-		if code != contract.ExitUsage || !(strings.Contains(stderr, "Неизвестная команда") || strings.Contains(stderr, "Неизвестное действие")) {
+		if code != contract.ExitUsage || !(strings.HasPrefix(stderr, unknownCommand) || strings.HasPrefix(stderr, unknownAction)) {
 			t.Errorf("%v from the command line: exit code %d, stderr %q", args, code, stderr)
 		}
 	}

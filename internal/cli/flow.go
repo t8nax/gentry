@@ -626,10 +626,13 @@ func runFlowDiscard(args []string, env Env) int {
 		return fail(env, flowFailure(err, places))
 	}
 	record(event{typ: flow.EventDraftDiscarded, project: places.Project})
-	return emit(env, contract.FlowDiscardOutput{Project: places.Project, Dir: places.Dir}, func(p *page, out contract.FlowDiscardOutput) {
-		fmt.Fprintln(p, msg.Text(msg.FlowDiscarded))
-		fmt.Fprintln(p, msg.Text(msg.FlowProject, out.Project))
-	})
+	return emit(env, contract.FlowDiscardOutput{Project: places.Project, Dir: places.Dir}, flowDiscardText)
+}
+
+// flowDiscardText prints the draft discarded and its project.
+func flowDiscardText(p *page, out contract.FlowDiscardOutput) {
+	fmt.Fprintln(p, msg.Text(msg.FlowDiscarded))
+	fmt.Fprintln(p, msg.Text(msg.FlowProject, out.Project))
 }
 
 // flowInvalid is the failure of an active flow with problems: a later Gentry

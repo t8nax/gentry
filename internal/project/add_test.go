@@ -116,7 +116,7 @@ func TestAddCreatesKnowledge(t *testing.T) {
 	if err != nil || info != (Info{Format: KnowledgeFormat, Project: "shop", Language: "ru"}) {
 		t.Errorf("gentry.yaml: %+v, %v", info, err)
 	}
-	if got := commits(t, know); !reflect.DeepEqual(got, []string{"Подключение проекта shop к Gentry"}) {
+	if got := commits(t, know); !reflect.DeepEqual(got, []string{msg.Knowledge("ru", msg.CommitProjectAdded, "shop")}) {
 		t.Errorf("commits %q", got)
 	}
 	if out := gittest.Run(t, know, "status", "--porcelain"); out != "" {

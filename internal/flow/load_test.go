@@ -213,11 +213,11 @@ func TestProblemOrder(t *testing.T) {
 		got = append(got, p.Message)
 	}
 	want := []string{
-		"Сценарий bug: начальный узел brnch не найден.",
-		"Сценарий feature: у цикла implementation → review → implementation нет предела возвратов.",
-		"Этап plan-bug: не заполнено поле «exit».",
-		"Этап review: субагент reviewr не найден.",
-		"Файл не относится к флоу: stages/merge.yml",
+		msg.Text(msg.ProblemUnknownStart, msg.Text(msg.FlowObjScenario, "bug"), "brnch"),
+		msg.Text(msg.ProblemUnlimitedLoop, msg.Text(msg.FlowObjScenario, "feature"), "implementation → review → implementation"),
+		msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjStage, "plan-bug"), "exit"),
+		msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewr"),
+		msg.Text(msg.ProblemExtraFile, "stages/merge.yml"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("problems:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -247,49 +247,49 @@ func TestFileProblems(t *testing.T) {
 		want    []Problem
 	}{
 		{"not utf-8", map[string]string{"stages/review.md": "\xff\xfe"}, []Problem{
-			{contract.ProblemSyntax, "stages/review.md", 0, "Этап review: текст не в кодировке UTF-8."},
+			{contract.ProblemSyntax, "stages/review.md", 0, msg.Text(msg.ProblemEncoding, msg.Text(msg.FlowObjStage, "review"))},
 		}},
 		{"part not utf-8", map[string]string{"parts/plan-format.md": "\xff"}, []Problem{
-			{contract.ProblemSyntax, "parts/plan-format.md", 0, "Фрагмент plan-format: текст не в кодировке UTF-8."},
+			{contract.ProblemSyntax, "parts/plan-format.md", 0, msg.Text(msg.ProblemEncoding, msg.Text(msg.FlowObjPart, "plan-format"))},
 		}},
 		{"two documents", map[string]string{"stages/plan-bug.yaml": stage("---\ntitle: x\n")}, []Problem{
-			{contract.ProblemSyntax, "stages/plan-bug.yaml", 5, "Этап plan-bug: ошибка синтаксиса YAML."},
+			{contract.ProblemSyntax, "stages/plan-bug.yaml", 5, msg.Text(msg.ProblemSyntax, msg.Text(msg.FlowObjStage, "plan-bug"))},
 		}},
 		{"unknown field", map[string]string{"stages/plan-bug.yaml": "title: План бага\nexits: x\nexit: y\nexecutor: orchestrator\n"}, []Problem{
-			{contract.ProblemUnknownField, "stages/plan-bug.yaml", 2, "Этап plan-bug: неизвестное поле «exits»."},
+			{contract.ProblemUnknownField, "stages/plan-bug.yaml", 2, msg.Text(msg.ProblemUnknownField, msg.Text(msg.FlowObjStage, "plan-bug"), "exits")},
 		}},
 		{"later fields", map[string]string{
 			"flow.yaml":          "on_take:\n  tracker:\n    - set_state: In Progress\non_enter: x\n",
 			"stages/branch.yaml": "title: Ветка\nexit: создана ветка\nexecutor: orchestrator\nprocedures: []\non_enter: x\n",
 		}, []Problem{
-			{contract.ProblemUnsupportedField, "flow.yaml", 1, "Общие правила флоу: поле «on_take» не поддерживается этой версией Gentry."},
-			{contract.ProblemUnknownField, "flow.yaml", 4, "Общие правила флоу: неизвестное поле «on_enter»."},
-			{contract.ProblemUnsupportedField, "stages/branch.yaml", 4, "Этап branch: поле «procedures» не поддерживается этой версией Gentry."},
-			{contract.ProblemUnsupportedField, "stages/branch.yaml", 5, "Этап branch: поле «on_enter» не поддерживается этой версией Gentry."},
+			{contract.ProblemUnsupportedField, "flow.yaml", 1, msg.Text(msg.ProblemUnsupportedField, msg.Text(msg.FlowObjCommon), "on_take")},
+			{contract.ProblemUnknownField, "flow.yaml", 4, msg.Text(msg.ProblemUnknownField, msg.Text(msg.FlowObjCommon), "on_enter")},
+			{contract.ProblemUnsupportedField, "stages/branch.yaml", 4, msg.Text(msg.ProblemUnsupportedField, msg.Text(msg.FlowObjStage, "branch"), "procedures")},
+			{contract.ProblemUnsupportedField, "stages/branch.yaml", 5, msg.Text(msg.ProblemUnsupportedField, msg.Text(msg.FlowObjStage, "branch"), "on_enter")},
 		}},
 		{"scenario event", map[string]string{"scenarios/bug.yaml": "on_close:\n  tracker: []\n" + read(t, d0(t), "scenarios/bug.yaml")}, []Problem{
-			{contract.ProblemUnsupportedField, "scenarios/bug.yaml", 1, "Сценарий bug: поле «on_close» не поддерживается этой версией Gentry."},
+			{contract.ProblemUnsupportedField, "scenarios/bug.yaml", 1, msg.Text(msg.ProblemUnsupportedField, msg.Text(msg.FlowObjScenario, "bug"), "on_close")},
 		}},
 		{"missing fields", map[string]string{
 			"stages/plan-bug.yaml": "title: План бага\nexit: \"\"\n",
 			"stages/merge.yaml":    "# пусто\n",
 		}, []Problem{
-			{contract.ProblemMissingField, "stages/merge.yaml", 0, "Этап merge: не заполнено поле «title»."},
-			{contract.ProblemMissingField, "stages/merge.yaml", 0, "Этап merge: не заполнено поле «exit»."},
-			{contract.ProblemMissingField, "stages/merge.yaml", 0, "Этап merge: не заполнено поле «executor»."},
-			{contract.ProblemMissingField, "stages/plan-bug.yaml", 0, "Этап plan-bug: не заполнено поле «executor»."},
-			{contract.ProblemMissingField, "stages/plan-bug.yaml", 2, "Этап plan-bug: не заполнено поле «exit»."},
+			{contract.ProblemMissingField, "stages/merge.yaml", 0, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjStage, "merge"), "title")},
+			{contract.ProblemMissingField, "stages/merge.yaml", 0, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjStage, "merge"), "exit")},
+			{contract.ProblemMissingField, "stages/merge.yaml", 0, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjStage, "merge"), "executor")},
+			{contract.ProblemMissingField, "stages/plan-bug.yaml", 0, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjStage, "plan-bug"), "executor")},
+			{contract.ProblemMissingField, "stages/plan-bug.yaml", 2, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjStage, "plan-bug"), "exit")},
 		}},
 		{"invalid values", map[string]string{
 			"stages/plan-bug.yaml": stage("include: plan-format\n"),
 			"stages/review.yaml":   "title: 5\nexit: [a]\nexecutor: reviewer\ninclude: [Review-Checklist]\n",
 			"stages/merge.yaml":    "- title\n",
 		}, []Problem{
-			{contract.ProblemInvalidValue, "stages/merge.yaml", 1, "Этап merge: описание должно состоять из полей."},
-			{contract.ProblemInvalidValue, "stages/plan-bug.yaml", 4, "Этап plan-bug: значение поля «include» должно быть списком идентификаторов."},
-			{contract.ProblemInvalidValue, "stages/review.yaml", 1, "Этап review: значение поля «title» должно быть строкой."},
-			{contract.ProblemInvalidValue, "stages/review.yaml", 2, "Этап review: значение поля «exit» должно быть строкой."},
-			{contract.ProblemInvalidValue, "stages/review.yaml", 4, "Этап review: значение поля «include» должно быть списком идентификаторов."},
+			{contract.ProblemInvalidValue, "stages/merge.yaml", 1, msg.Text(msg.ProblemNotMapping, msg.Text(msg.FlowObjStage, "merge"))},
+			{contract.ProblemInvalidValue, "stages/plan-bug.yaml", 4, msg.Text(msg.ProblemInclude, msg.Text(msg.FlowObjStage, "plan-bug"))},
+			{contract.ProblemInvalidValue, "stages/review.yaml", 1, msg.Text(msg.ProblemNotString, msg.Text(msg.FlowObjStage, "review"), "title")},
+			{contract.ProblemInvalidValue, "stages/review.yaml", 2, msg.Text(msg.ProblemNotString, msg.Text(msg.FlowObjStage, "review"), "exit")},
+			{contract.ProblemInvalidValue, "stages/review.yaml", 4, msg.Text(msg.ProblemInclude, msg.Text(msg.FlowObjStage, "review"))},
 		}},
 		{"invalid ids", map[string]string{
 			"stages/Plan_Bug.yaml":   stage(""),
@@ -297,9 +297,9 @@ func TestFileProblems(t *testing.T) {
 			"parts/Big.md":           "x",
 			"scenarios/Bug_Fix.yaml": "x",
 		}, []Problem{
-			{contract.ProblemInvalidID, "scenarios/Bug_Fix.yaml", 0, "Сценарий Bug_Fix: недопустимый идентификатор; допустимы до 64 строчных латинских букв, цифр и дефисов, первая — буква."},
-			{contract.ProblemInvalidID, "stages/Plan_Bug.md", 0, "Этап Plan_Bug: недопустимый идентификатор; допустимы до 64 строчных латинских букв, цифр и дефисов, первая — буква."},
-			{contract.ProblemInvalidID, "parts/Big.md", 0, "Фрагмент Big: недопустимый идентификатор; допустимы до 64 строчных латинских букв, цифр и дефисов, первая — буква."},
+			{contract.ProblemInvalidID, "scenarios/Bug_Fix.yaml", 0, msg.Text(msg.ProblemInvalidID, msg.Text(msg.FlowObjScenario, "Bug_Fix"))},
+			{contract.ProblemInvalidID, "stages/Plan_Bug.md", 0, msg.Text(msg.ProblemInvalidID, msg.Text(msg.FlowObjStage, "Plan_Bug"))},
+			{contract.ProblemInvalidID, "parts/Big.md", 0, msg.Text(msg.ProblemInvalidID, msg.Text(msg.FlowObjPart, "Big"))},
 		}},
 		{"extra files", map[string]string{
 			"stages/merge.yml":   "x",
@@ -308,27 +308,27 @@ func TestFileProblems(t *testing.T) {
 			"scenarios/old/x":    "x",
 			"parts/note.txt":     "x",
 		}, []Problem{
-			{contract.ProblemExtraFile, "README.md", 0, "Файл не относится к флоу: README.md"},
-			{contract.ProblemExtraFile, "parts/note.txt", 0, "Файл не относится к флоу: parts/note.txt"},
-			{contract.ProblemExtraFile, "scenarios/old", 0, "Папка не относится к флоу: scenarios/old"},
-			{contract.ProblemExtraFile, "stages/merge.yml", 0, "Файл не относится к флоу: stages/merge.yml"},
-			{contract.ProblemExtraFile, "templates", 0, "Папка не относится к флоу: templates"},
+			{contract.ProblemExtraFile, "README.md", 0, msg.Text(msg.ProblemExtraFile, "README.md")},
+			{contract.ProblemExtraFile, "parts/note.txt", 0, msg.Text(msg.ProblemExtraFile, "parts/note.txt")},
+			{contract.ProblemExtraFile, "scenarios/old", 0, msg.Text(msg.ProblemExtraDir, "scenarios/old")},
+			{contract.ProblemExtraFile, "stages/merge.yml", 0, msg.Text(msg.ProblemExtraFile, "stages/merge.yml")},
+			{contract.ProblemExtraFile, "templates", 0, msg.Text(msg.ProblemExtraDir, "templates")},
 		}},
 		{"instructions", map[string]string{"stages/merge.md": "", "stages/old.md": "x"}, []Problem{
-			{contract.ProblemMissingInstruction, "stages/merge.yaml", 0, "Этап merge: нет инструкции."},
-			{contract.ProblemOrphanInstruction, "stages/old.md", 0, "Этап old: есть инструкция, но нет полей этапа."},
+			{contract.ProblemMissingInstruction, "stages/merge.yaml", 0, msg.Text(msg.ProblemMissingInstruction, msg.Text(msg.FlowObjStage, "merge"))},
+			{contract.ProblemOrphanInstruction, "stages/old.md", 0, msg.Text(msg.ProblemOrphanInstruction, msg.Text(msg.FlowObjStage, "old"))},
 		}},
 		{"no scenarios", map[string]string{"scenarios": ""}, []Problem{
-			{contract.ProblemNoScenarios, "", 0, "Во флоу нет ни одного сценария."},
+			{contract.ProblemNoScenarios, "", 0, msg.Text(msg.ProblemNoScenarios)},
 		}},
 		{"unknown references", map[string]string{
 			"stages/plan-bug.yaml": stage("include: [plan-formt]\n"),
 			"stages/review.yaml":   "title: Ревью\nexit: замечания разобраны\nexecutor: reviewr\n",
 			"scenarios/bug.yaml":   strings.Replace(read(t, d0(t), "scenarios/bug.yaml"), "stage: plan-bug", "stage: plan-bugg", 1),
 		}, []Problem{
-			{contract.ProblemUnknownStage, "scenarios/bug.yaml", 5, "Сценарий bug, узел plan: этап plan-bugg не найден."},
-			{contract.ProblemUnknownPart, "stages/plan-bug.yaml", 4, "Этап plan-bug: фрагмент plan-formt не найден."},
-			{contract.ProblemUnknownExecutor, "stages/review.yaml", 3, "Этап review: субагент reviewr не найден."},
+			{contract.ProblemUnknownStage, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemUnknownStage, msg.Text(msg.FlowObjNode, "bug", "plan"), "plan-bugg")},
+			{contract.ProblemUnknownPart, "stages/plan-bug.yaml", 4, msg.Text(msg.ProblemUnknownPart, msg.Text(msg.FlowObjStage, "plan-bug"), "plan-formt")},
+			{contract.ProblemUnknownExecutor, "stages/review.yaml", 3, msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewr")},
 		}},
 	}
 	for _, tt := range tests {
@@ -344,7 +344,7 @@ func TestFileProblems(t *testing.T) {
 func TestSyntaxProblem(t *testing.T) {
 	got := problems(t, shop(t, map[string]string{"scenarios/bug.yaml": "title: Баг\nstart: [branch\n"}))
 	if len(got) != 1 || got[0].Code != contract.ProblemSyntax || got[0].File != "scenarios/bug.yaml" || got[0].Line < 1 ||
-		got[0].Message != msg.Text(msg.ProblemSyntax, "Сценарий bug") {
+		got[0].Message != msg.Text(msg.ProblemSyntax, msg.Text(msg.FlowObjScenario, "bug")) {
 		t.Errorf("problems:\n%s", dump(got))
 	}
 	// A key given twice is a syntax error of YAML too.

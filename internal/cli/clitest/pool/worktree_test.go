@@ -52,7 +52,7 @@ func TestProjectAddCloneHint(t *testing.T) {
 	}
 }
 
-func TestWorktreeAddText(t *testing.T) {
+func TestWorktreeAdd(t *testing.T) {
 	root := clitest.ConnectedShop(t)
 	shop := filepath.Join(root, "shop")
 	two := gittest.Worktree(t, shop, filepath.Join(root, "shop-2"), "two")
@@ -110,7 +110,7 @@ func TestWorktreeJSON(t *testing.T) {
 	clitest.Validate(t, "schemas/events/worktree.added.json", string(e.Data))
 }
 
-func TestWorktreeListText(t *testing.T) {
+func TestWorktreeList(t *testing.T) {
 	root := clitest.ConnectedShop(t)
 	shop, fix := filepath.Join(root, "shop"), filepath.Join(root, "shop-fix")
 	clitest.Run("worktree", "add", fix)
@@ -121,13 +121,14 @@ func TestWorktreeListText(t *testing.T) {
 	t.Chdir(cart)
 	clitest.Run("project", "add", "cart", "--knowledge", "../cart-knowledge")
 
-	header := []string{"ПРОЕКТ", "РАБОЧАЯ КОПИЯ", "ВЕТКА", "СОСТОЯНИЕ"}
+	header := []string{msg.Text(msg.ColProject), msg.Text(msg.ColWorktree), msg.Text(msg.ColBranch), msg.Text(msg.ColState)}
+	mainFree, free := msg.Text(msg.WorktreeMain)+", "+msg.Text(msg.WorktreeFree), msg.Text(msg.WorktreeFree)
 	shopRows := [][]string{
-		{"shop", shop, "main", "основная, свободна"},
-		{"shop", fix, "fix", "свободна"},
-		{"shop", gone, "—", "папка не найдена"},
+		{"shop", shop, "main", mainFree},
+		{"shop", fix, "fix", free},
+		{"shop", gone, clitest.None, msg.Text(msg.WorktreeMissing)},
 	}
-	cartRow := []string{"cart", cart, "main", "основная, свободна"}
+	cartRow := []string{"cart", cart, "main", mainFree}
 
 	t.Chdir(fix)
 	if _, stdout, _ := clitest.Run("worktree", "list"); stdout != clitest.Table(append([][]string{header}, shopRows...)...) {
@@ -197,7 +198,7 @@ func TestWorktreeErrors(t *testing.T) {
 	}
 }
 
-func TestWorktreeRefusalTexts(t *testing.T) {
+func TestWorktreeRefusals(t *testing.T) {
 	root := clitest.ConnectedShop(t)
 	know := filepath.Join(root, "shop-knowledge")
 	tests := []struct {

@@ -17,7 +17,7 @@ import (
 	"github.com/t8nax/gentry/internal/state"
 )
 
-func TestTaskTakeText(t *testing.T) {
+func TestTaskTake(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 
 	code, stdout, stderr := clitest.Run(clitest.TakeArgs("--worktree", fix)...)
@@ -26,7 +26,7 @@ func TestTaskTakeText(t *testing.T) {
 		msg.Text(msg.TaskTitle, "Частичный возврат по карте"),
 		msg.Text(msg.TaskScenario, "Фича"),
 		msg.Text(msg.TaskStage, "Ветка"),
-		msg.Text(msg.TaskSource, "оператором"),
+		msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceOperator)),
 		msg.Text(msg.TaskWorktree, fix),
 		"",
 		cli.HintFor(msg.HintTaskShow, "task", "SHOP-1"),
@@ -38,25 +38,27 @@ func TestTaskTakeText(t *testing.T) {
 	// From the worktree the hint needs no number.
 	t.Chdir(fix)
 	code, stdout, stderr = clitest.Run("task", "show")
-	want = strings.Join([]string{
-		"Задача SHOP-1: Частичный возврат по карте",
+	want = clitest.Lines(
+		msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
 		"",
-		"Проект: shop",
-		"Состояние: в работе",
-		"Сценарий: Фича (feature)",
-		"Этап: Ветка (branch), круг 1",
-		"Прогресс: 0 из 5",
-		"Взята: <время>",
-		"Флоу задачи применён: <время>",
-		"Рабочая копия: " + fix,
+		msg.Text(msg.TaskProject, "shop"),
+		msg.Text(msg.TaskState, msg.Text(msg.TaskStateActive)),
+		msg.Text(msg.TaskScenario, msg.Text(msg.TaskNamed, "Фича", "feature")),
+		msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1)),
+		msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, 0, 5)),
+		msg.Text(msg.TaskTakenAt, "<время>"),
+		msg.Text(msg.TaskFlowApplied, "<время>"),
+		msg.Text(msg.TaskWorktree, fix),
 		"",
-		"ЭТАП   КРУГ  ИТОГ  ПЕРЕХОД",
-		"Ветка  1     идёт  —",
+	) + clitest.Table(
+		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
+		[]string{"Ветка", "1", msg.Text(msg.OutcomeCurrent), clitest.None},
+	) + clitest.Lines(
 		"",
-		"У этапа нет шагов.",
+		msg.Text(msg.StepsNone),
 		"",
-		"Посмотреть постановку: gentry task show --statement",
-	}, "\n") + "\n"
+		cli.HintText(msg.HintStatement),
+	)
 	if code != contract.ExitOK || stderr != "" || clitest.Masked(stdout) != want {
 		t.Errorf("task show: exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}
@@ -78,37 +80,41 @@ func TestTaskTakeText(t *testing.T) {
 	}
 	t.Chdir(filepath.Dir(shop))
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Постановка задачи SHOP-2:",
+		msg.Text(msg.StatementHeading, "SHOP-2"),
 		"  Первая строка.",
 		"",
 		"  Третья строка.",
 		"",
-		"Постановка записана: оператором",
+		msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceOperator)),
 	), "", "task", "show", "shop-2", "--statement")
 	_, stdout, _ = clitest.Run("task", "show", "shop-2")
-	if !strings.Contains(stdout, "Этап: Ветка (branch), круг 1\n") || strings.Contains(stdout, "Первая строка") ||
-		!strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show SHOP-2 --statement\n") {
+	stage := msg.Text(msg.TaskStage, clitest.Round("Ветка", "branch", 1))
+	if !strings.Contains(stdout, stage+"\n") || strings.Contains(stdout, "Первая строка") ||
+		!strings.HasSuffix(stdout, "\n\n"+cli.HintFor(msg.HintStatement, "task", "SHOP-2")+"\n") {
 		t.Errorf("task show shop-2:\n%s", stdout)
 	}
 	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--path", "--statement"), "", cli.HintText(msg.HintCommandHelp, "task show")),
 		"task", "show", "shop-2", "--statement", "--path")
 
 	// Outside a project the list has the project column.
-	header := []string{"ПРОЕКТ", "НОМЕР", "НАЗВАНИЕ", "СОСТОЯНИЕ", "СЦЕНАРИЙ", "ЭТАП", "РАБОЧАЯ КОПИЯ"}
+	header := []string{msg.Text(msg.ColProject), msg.Text(msg.ColNumber), msg.Text(msg.ColTitle), msg.Text(msg.ColState),
+		msg.Text(msg.ColScenario), msg.Text(msg.ColStage), msg.Text(msg.ColWorktree)}
+	active := msg.Text(msg.TaskStateActive)
 	if _, stdout, _ := clitest.Run("task", "list"); stdout != clitest.Table(header,
-		[]string{"shop", "SHOP-1", "Частичный возврат по карте", "в работе", "Фича", "Ветка", fix},
-		[]string{"shop", "SHOP-2", "Двойное списание", "в работе", "Баг", "Ветка", shop}) {
+		[]string{"shop", "SHOP-1", "Частичный возврат по карте", active, "Фича", "Ветка", fix},
+		[]string{"shop", "SHOP-2", "Двойное списание", active, "Баг", "Ветка", shop}) {
 		t.Errorf("task list outside the project:\n%s", stdout)
 	}
 	t.Chdir(fix)
 	if _, stdout, _ := clitest.Run("task", "list"); stdout != clitest.Table(header[1:],
-		[]string{"SHOP-1", "Частичный возврат по карте", "в работе", "Фича", "Ветка", fix},
-		[]string{"SHOP-2", "Двойное списание", "в работе", "Баг", "Ветка", shop}) {
+		[]string{"SHOP-1", "Частичный возврат по карте", active, "Фича", "Ветка", fix},
+		[]string{"SHOP-2", "Двойное списание", active, "Баг", "Ветка", shop}) {
 		t.Errorf("task list in the project:\n%s", stdout)
 	}
-	if _, stdout, _ := clitest.Run("worktree", "list"); stdout != clitest.Table([]string{"ПРОЕКТ", "РАБОЧАЯ КОПИЯ", "ВЕТКА", "СОСТОЯНИЕ"},
-		[]string{"shop", shop, "main", "основная, задача SHOP-2"},
-		[]string{"shop", fix, "fix", "задача SHOP-1"}) {
+	if _, stdout, _ := clitest.Run("worktree", "list"); stdout != clitest.Table(
+		[]string{msg.Text(msg.ColProject), msg.Text(msg.ColWorktree), msg.Text(msg.ColBranch), msg.Text(msg.ColState)},
+		[]string{"shop", shop, "main", msg.Text(msg.WorktreeMain) + ", " + msg.Text(msg.WorktreeTask, "SHOP-2")},
+		[]string{"shop", fix, "fix", msg.Text(msg.WorktreeTask, "SHOP-1")}) {
 		t.Errorf("worktree list:\n%s", stdout)
 	}
 }
@@ -180,11 +186,11 @@ func TestTaskTakeByAgent(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	input := `{"scenario":"feature","title":"Частичный возврат по карте","statement":"` + clitest.Statement + `","worktree":` + clitest.JSONString(fix) + `}`
 	text, failed := cli.CallTool("task_take", []byte(input))
-	if failed || !strings.Contains(text, msg.Text(msg.TaskSource, "агентом со слов оператора")+"\n") {
+	if failed || !strings.Contains(text, msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceAgent))+"\n") {
 		t.Fatalf("by the tool of the agent: failed %v, output:\n%s", failed, text)
 	}
 	t.Chdir(shop)
-	if _, stdout, _ := clitest.Run(clitest.TakeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, "оператором")+"\n") {
+	if _, stdout, _ := clitest.Run(clitest.TakeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceOperator))+"\n") {
 		t.Errorf("by the operator:\n%s", stdout)
 	}
 	_, stdout, _ := clitest.Run("task", "show", "SHOP-1", "--json")
@@ -195,7 +201,7 @@ func TestTaskTakeByAgent(t *testing.T) {
 	// A command in a session of Claude Code is the agent's, whoever typed it.
 	clitest.MustRun(t, "task", "cancel", "SHOP-2")
 	t.Setenv(caller.ClaudeCodeEnv, "1")
-	if _, stdout, _ := clitest.Run(clitest.TakeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, "агентом со слов оператора")+"\n") {
+	if _, stdout, _ := clitest.Run(clitest.TakeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceAgent))+"\n") {
 		t.Errorf("in a session of Claude Code:\n%s", stdout)
 	}
 
@@ -241,17 +247,17 @@ func TestTaskTakeRefusals(t *testing.T) {
 		{"flag with input", []string{"task", "take", "--title", "Т", "--input", "x.json"}, contract.ExitUsage, contract.CodeConflictingFlags,
 			msg.Text(msg.ErrConflictingFlags, "--title", "--input") + "\n\n" + help},
 		{"input not found", []string{"task", "take", "--input", filepath.Join(root, "none.json")}, contract.ExitUsage, contract.CodeInputInvalid,
-			msg.Text(msg.ErrInputInvalid, "файл не найден") + "\n\n" + help},
+			msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputNotFound)) + "\n\n" + help},
 		{"input not object", []string{"task", "take", "--input", input(`["feature"]`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			msg.Text(msg.ErrInputInvalid, "текст не является объектом JSON") + "\n\n" + help},
+			msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputNotObject)) + "\n\n" + help},
 		{"input with more", []string{"task", "take", "--input", input(`{} {}`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			msg.Text(msg.ErrInputInvalid, "текст не является объектом JSON") + "\n\n" + help},
+			msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputNotObject)) + "\n\n" + help},
 		{"unknown field", []string{"task", "take", "--input", input(`{"scenario":"feature","source":"agent"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			msg.Text(msg.ErrInputInvalid, "неизвестное поле «source»") + "\n\n" + help},
+			msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputUnknownField, "source")) + "\n\n" + help},
 		{"not a string", []string{"task", "take", "--input", input(`{"scenario":"feature","title":5}`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			msg.Text(msg.ErrInputInvalid, "поле «title» должно быть строкой") + "\n\n" + help},
+			msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputNotString, "title")) + "\n\n" + help},
 		{"unknown scenario", []string{"task", "take", "--scenario", "epic", "--title", "Т", "--statement", "С"}, contract.ExitError, contract.CodeFlowObjectNotFound,
-			msg.Text(msg.ErrFlowObjectNotFound, "shop", "сценария", "epic") + "\n\n" + cli.HintText(msg.HintFlowObjects)},
+			msg.Text(msg.ErrFlowObjectNotFound, "shop", msg.Text(msg.FlowKindScenario), "epic") + "\n\n" + cli.HintText(msg.HintFlowObjects)},
 		{"not pooled", clitest.TakeArgs("--worktree", root), contract.ExitError, contract.CodeWorktreeNotPooled,
 			msg.Text(msg.ErrWorktreeNotPooled, root) + "\n\n" + cli.HintText(msg.HintWorktreeAdd)},
 	}
@@ -373,7 +379,7 @@ func TestTaskList(t *testing.T) {
 	if _, stdout, _ := clitest.Run("task", "list"); stdout != msg.Text(msg.TasksNoneOpen)+"\n" {
 		t.Errorf("closed only: %q", stdout)
 	}
-	if _, stdout, _ := clitest.Run("task", "list", "--all"); !strings.Contains(stdout, "SHOP-1") || !strings.Contains(stdout, "закрыта") {
+	if _, stdout, _ := clitest.Run("task", "list", "--all"); !strings.Contains(stdout, "SHOP-1") || !strings.Contains(stdout, msg.Text(msg.TaskStateClosed)) {
 		t.Errorf("--all:\n%s", stdout)
 	}
 

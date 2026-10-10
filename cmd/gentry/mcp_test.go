@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // server is a gentry mcp process, as a session of the agent starts it.
@@ -135,7 +137,7 @@ func TestMCPServer(t *testing.T) {
 		}
 	}
 	if text, failed := s.call(t, "task_take", map[string]any{"scenario": "feature", "title": "Корзина", "statement": "Скидка по промокоду."}); failed ||
-		!strings.Contains(text, "Постановка записана: агентом со слов оператора") {
+		!strings.Contains(text, msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceAgent))) {
 		t.Fatalf("task_take: failed %v:\n%s", failed, text)
 	}
 	if text, failed := s.call(t, "stage_exit", map[string]any{"kind": "result", "text": "Готово"}); !failed || !strings.Contains(text, "step_add (steps)") {

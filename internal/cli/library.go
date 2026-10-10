@@ -86,11 +86,15 @@ func runLibraryApply(args []string, env Env) int {
 	layout, laidPool := layoutFree(r, libraryProjects(r))
 	sent := s.Remote && !s.Unavailable
 	out := contract.LibraryApplyOutput{Applied: *appliedJSON(&applied), Sent: sent, Sync: syncJSON(s, synced), Agents: layout.json(laidPool)}
-	return emit(env, out, func(p *page, out contract.LibraryApplyOutput) {
-		fmt.Fprintln(p, msg.Text(msg.LibraryApplied))
-		fmt.Fprintln(p, msg.Text(msg.LibraryAppliedAt, localTime(out.Applied.Time)))
-		writeLayout(p, out.Agents, false, "")
-	})
+	return emit(env, out, libraryApplyText)
+}
+
+// libraryApplyText prints the library applied and the layout of the free
+// worktrees of the projects that use it.
+func libraryApplyText(p *page, out contract.LibraryApplyOutput) {
+	fmt.Fprintln(p, msg.Text(msg.LibraryApplied))
+	fmt.Fprintln(p, msg.Text(msg.LibraryAppliedAt, localTime(out.Applied.Time)))
+	writeLayout(p, out.Agents, false, "")
 }
 
 func runLibraryDiscard(args []string, env Env) int {
@@ -107,9 +111,12 @@ func runLibraryDiscard(args []string, env Env) int {
 		return fail(env, libraryFailure(err))
 	}
 	record(event{typ: flow.EventLibraryDraftDiscarded})
-	return emit(env, contract.LibraryDiscardOutput{Dir: r.KindDir(process.Library)}, func(p *page, out contract.LibraryDiscardOutput) {
-		fmt.Fprintln(p, msg.Text(msg.LibraryDiscarded))
-	})
+	return emit(env, contract.LibraryDiscardOutput{Dir: r.KindDir(process.Library)}, libraryDiscardText)
+}
+
+// libraryDiscardText prints the draft of the library discarded.
+func libraryDiscardText(p *page, out contract.LibraryDiscardOutput) {
+	fmt.Fprintln(p, msg.Text(msg.LibraryDiscarded))
 }
 
 // libraryFailure turns an error of a library command into a failure.

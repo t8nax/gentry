@@ -288,6 +288,37 @@ func TestTaskShowText(t *testing.T) {
 		"Закрыт: 2026-10-09 12:30",
 		"",
 	)
+	// Ended tasks: cancelled by the operator with a reason, closed by the
+	// agent, cancelled by the agent once the scenario is passed.
+	cancelled := shopTask()
+	cancelled.State, cancelled.Worktree = contract.TaskStateCancelled, nil
+	cancelled.Ended = &contract.TaskEnded{Time: shopTime, Source: contract.EndedSourceOperator, Reason: ptr("Отложено до релиза каталога.")}
+	cancelledText := lines(
+		msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
+		"",
+		msg.Text(msg.TaskProject, "shop"),
+		"Состояние: отменена",
+		msg.Text(msg.TaskScenario, "Фича (feature)"),
+		msg.Text(msg.TaskStage, "Ветка (branch), круг 1"),
+		msg.Text(msg.ProgressLine, "0 из 5"),
+		msg.Text(msg.TaskTakenAt, "2026-10-09 12:30"),
+		"Отменена оператором: 2026-10-09 12:30",
+		msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
+		"Обоснование отмены: Отложено до релиза каталога.",
+		"",
+	) + table(
+		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
+		[]string{"Ветка", "1", "—", "—"},
+	) + lines(
+		"",
+		msg.Text(msg.StepsNone),
+		"",
+	)
+	closedTask := passed
+	closedTask.State, closedTask.Worktree = contract.TaskStateClosed, nil
+	closedTask.Ended = &contract.TaskEnded{Time: shopTime, Source: contract.EndedSourceAgent}
+	cancelledByAgent := closedTask
+	cancelledByAgent.State = contract.TaskStateCancelled
 	tests := []struct {
 		name       string
 		out        contract.TaskShowOutput
@@ -354,6 +385,72 @@ func TestTaskShowText(t *testing.T) {
 				"     Ответ: Да.",
 				"     "+msg.Text(msg.AllowedReturnLine, "Реализация (implementation)"),
 			), ""},
+		{"cancelled", contract.TaskShowOutput{Task: cancelled, Path: []contract.TaskPass{currentPass()}, Notes: notes},
+			taskShowExtra{names: shopNames()}, cancelledText + lines(
+				hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"),
+				hintLineOf(msg.HintNotes, "gentry note list --task SHOP-1"),
+				hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario <сценарий>"),
+			), cancelledText + lines(
+				hintLineOf(msg.HintStatement, "task_show (task: SHOP-1, statement)"),
+				hintLineOf(msg.HintNotes, "note_list (task: SHOP-1)"),
+				hintLineOf(msg.HintTaskAgain, "task_take (task: SHOP-1, scenario)"),
+			)},
+		{"closed by the agent", contract.TaskShowOutput{Task: closedTask}, taskShowExtra{names: shopNames()}, lines(
+			msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
+			"",
+			msg.Text(msg.TaskProject, "shop"),
+			msg.Text(msg.TaskState, "закрыта"),
+			msg.Text(msg.TaskScenario, "Фича (feature)"),
+			msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
+			msg.Text(msg.ProgressLine, "5 из 5"),
+			msg.Text(msg.TaskTakenAt, "2026-10-09 12:30"),
+			"Закрыта агентом: 2026-10-09 12:30",
+			msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
+			"",
+			hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"),
+		), lines(
+			msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
+			"",
+			msg.Text(msg.TaskProject, "shop"),
+			msg.Text(msg.TaskState, "закрыта"),
+			msg.Text(msg.TaskScenario, "Фича (feature)"),
+			msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
+			msg.Text(msg.ProgressLine, "5 из 5"),
+			msg.Text(msg.TaskTakenAt, "2026-10-09 12:30"),
+			"Закрыта агентом: 2026-10-09 12:30",
+			msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
+			"",
+			hintLineOf(msg.HintStatement, "task_show (task: SHOP-1, statement)"),
+		)},
+		{"cancelled by the agent", contract.TaskShowOutput{Task: cancelledByAgent}, taskShowExtra{names: shopNames()}, lines(
+			msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
+			"",
+			msg.Text(msg.TaskProject, "shop"),
+			msg.Text(msg.TaskState, msg.Text(msg.TaskStateCancelled)),
+			msg.Text(msg.TaskScenario, "Фича (feature)"),
+			msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
+			msg.Text(msg.ProgressLine, "5 из 5"),
+			msg.Text(msg.TaskTakenAt, "2026-10-09 12:30"),
+			"Отменена агентом: 2026-10-09 12:30",
+			msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
+			"",
+			hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"),
+			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario <сценарий>"),
+		), lines(
+			msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
+			"",
+			msg.Text(msg.TaskProject, "shop"),
+			msg.Text(msg.TaskState, msg.Text(msg.TaskStateCancelled)),
+			msg.Text(msg.TaskScenario, "Фича (feature)"),
+			msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
+			msg.Text(msg.ProgressLine, "5 из 5"),
+			msg.Text(msg.TaskTakenAt, "2026-10-09 12:30"),
+			"Отменена агентом: 2026-10-09 12:30",
+			msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
+			"",
+			hintLineOf(msg.HintStatement, "task_show (task: SHOP-1, statement)"),
+			hintLineOf(msg.HintTaskAgain, "task_take (task: SHOP-1, scenario)"),
+		)},
 		{"hint to the decisions", contract.TaskShowOutput{Task: shopTask(), Path: []contract.TaskPass{currentPass()}, OperatorDecisions: decisions},
 			taskShowExtra{names: shopNames(), here: true},
 			current + lines(hintLineOf(msg.HintStatementDecisions, "gentry task show --statement")),

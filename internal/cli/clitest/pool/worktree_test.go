@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
@@ -19,7 +20,7 @@ func TestProjectAddNamesUnpooled(t *testing.T) {
 	shop, fix, know := filepath.Join(root, "shop"), filepath.Join(root, "shop-fix"), filepath.Join(root, "shop-knowledge")
 	t.Chdir(shop)
 	_, stdout, _ := clitest.Run("project", "add", "shop", "--knowledge", know)
-	tail := "\n" + msg.Text(msg.ProjectUnpooled) + "\n  " + fix + "\n\n" + msg.Text(msg.HintProjectUnpooled) + "\n"
+	tail := "\n" + msg.Text(msg.ProjectUnpooled) + "\n  " + fix + "\n\n" + cli.HintText(msg.HintProjectUnpooled) + "\n"
 	if !strings.HasPrefix(stdout, msg.Text(msg.ProjectAdded, "shop")+"\n") || !strings.HasSuffix(stdout, msg.Text(msg.ProjectMainWorktree, shop)+"\n"+tail) {
 		t.Errorf("output:\n%s", stdout)
 	}
@@ -41,7 +42,7 @@ func TestProjectAddCloneHint(t *testing.T) {
 	gittest.Run(t, root, "clone", "--quiet", filepath.Join(root, "shop"), clone)
 	t.Chdir(clone)
 	_, _, stderr := clitest.Run("project", "add", "--knowledge", "../shop-knowledge")
-	want := msg.Text(msg.ErrProjectClone, "shop", filepath.Join(root, "shop")) + "\n\n" + msg.Text(msg.HintProjectClone, "shop") + "\n"
+	want := msg.Text(msg.ErrProjectClone, "shop", filepath.Join(root, "shop")) + "\n\n" + cli.HintFor(msg.HintProjectClone, "project", "shop") + "\n"
 	if stderr != want {
 		t.Errorf("got %q, want %q", stderr, want)
 	}
@@ -206,7 +207,7 @@ func TestWorktreeRefusalTexts(t *testing.T) {
 	}{
 		{know, []string{"worktree", "add"}, msg.Text(msg.ErrWorktreeKnowledge, "shop", know)},
 		{root, []string{"worktree", "add", "--project", "shop"}, msg.Text(msg.ErrNotGitRepo, root)},
-		{root, []string{"worktree", "list", "--project", "nope"}, msg.Text(msg.ErrProjectNotFound, "nope") + "\n\n" + msg.Text(msg.HintProjectNotFound)},
+		{root, []string{"worktree", "list", "--project", "nope"}, msg.Text(msg.ErrProjectNotFound, "nope") + "\n\n" + cli.HintText(msg.HintProjectNotFound)},
 	}
 	for _, tt := range tests {
 		t.Chdir(tt.dir)

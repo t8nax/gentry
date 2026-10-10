@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
 	"slices"
@@ -302,58 +301,77 @@ func libraryProjects(r *process.Repo) map[string]bool {
 // writeLayout tells what a layout inside another command did, as blocks
 // each preceded by an empty line: the change of one worktree, or the number
 // of free worktrees changed by project; then the conflicts and the failure.
-func writeLayout(w io.Writer, o layoutOutcome, single bool, project string) {
-	var b strings.Builder
-	if len(o.changes) > 0 {
-		b.WriteString("\n")
+// A layout with nothing to tell is nil.
+func writeLayout(p *page, l *contract.AgentsLayout, single bool, project string) {
+	if l == nil {
+		return
+	}
+	if len(l.Worktrees) > 0 {
+		p.WriteString("\n")
 		switch {
 		case single:
-			fmt.Fprintln(&b, msg.Text(msg.AgentsWorktreeChanged, changesText(o.changes[0])))
+			fmt.Fprintln(p, msg.Text(msg.AgentsWorktreeChanged, changesText(l.Worktrees[0])))
 		case project == "":
-			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSyncedAll))
+			fmt.Fprintln(p, msg.Text(msg.AgentsFreeSyncedAll))
 		default:
-			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSynced, project))
+			fmt.Fprintln(p, msg.Text(msg.AgentsFreeSynced, project))
 		}
-		fmt.Fprintln(&b, msg.Text(msg.AgentsNextSession))
+		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
 	}
-	if len(o.conflicts) > 0 {
-		fmt.Fprintf(&b, "\n%s\n\n", msg.Text(msg.AgentsConflictWarning))
-		writeConflicts(&b, o.conflicts)
-		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HintAgentsConflictWarning))
+	writeLayoutTrouble(p, l)
+}
+
+// writeLayoutTrouble tells the conflicts and the failure of a layout.
+func writeLayoutTrouble(p *page, l *contract.AgentsLayout) {
+	if len(l.Conflicts) > 0 {
+		fmt.Fprintf(p, "\n%s\n\n", msg.Text(msg.AgentsConflictWarning))
+		writeConflicts(&p.Builder, l.Conflicts)
+		p.hints(hintOf(msg.HintAgentsConflictWarning))
 	}
-	if o.failed() {
-		fmt.Fprintf(&b, "\n%s\n%s\n\n%s\n", msg.Text(msg.AgentsSyncFailed), msg.Text(msg.AgentsSyncFailedReason, o.reason()), msg.Text(msg.HintAgentsSyncFailed))
+	if l.Error != nil {
+		fmt.Fprintf(p, "\n%s\n%s\n", msg.Text(msg.AgentsSyncFailed), msg.Text(msg.AgentsSyncFailedReason, *l.Error))
+		p.hints(hintOf(msg.HintAgentsSyncFailed))
 	}
-	io.WriteString(w, b.String())
 }
 
 // writeFreeLayout tells a layout of free worktrees after a synchronization,
-// by project.
-func writeFreeLayout(w io.Writer, o layoutOutcome, p *layoutPool) {
-	if len(o.changes) > 0 && p != nil {
+// by project: projects names the project of each worktree of the pool.
+func writeFreeLayout(p *page, l *contract.AgentsLayout, projects map[string]string) {
+	if l == nil {
+		return
+	}
+	if len(l.Worktrees) > 0 && projects != nil {
 		byProject := map[string]bool{}
-		for _, c := range o.changes {
-			for _, wt := range p.worktrees {
-				if wt.Path == c.Worktree {
-					byProject[wt.Project] = true
-				}
+		for _, w := range l.Worktrees {
+			if id, ok := projects[w.Path]; ok {
+				byProject[id] = true
 			}
 		}
-		var b strings.Builder
-		b.WriteString("\n")
+		p.WriteString("\n")
 		for _, id := range slices.Sorted(maps.Keys(byProject)) {
-			fmt.Fprintln(&b, msg.Text(msg.AgentsFreeSynced, id))
+			fmt.Fprintln(p, msg.Text(msg.AgentsFreeSynced, id))
 		}
-		fmt.Fprintln(&b, msg.Text(msg.AgentsNextSession))
-		io.WriteString(w, b.String())
+		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
 	}
-	o.changes = nil
-	writeLayout(w, o, false, "")
+	writeLayoutTrouble(p, l)
+}
+
+// projectsOf returns the project of each worktree of the pool p; nil
+// without a pool.
+func projectsOf(p *layoutPool) map[string]string {
+	if p == nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, w := range p.worktrees {
+		out[w.Path] = w.Project
+	}
+	return out
 }
 
 // changesText names what a layout changed in a worktree, such as
 // «добавлены reviewer, tester; удалён linter».
-func changesText(c agents.Change) string {
+func changesText(w contract.AgentsWorktree) string {
 	var parts []string
 	add := func(list []string, one, many msg.Key) {
 		switch len(list) {
@@ -364,14 +382,14 @@ func changesText(c agents.Change) string {
 			parts = append(parts, msg.Text(many, strings.Join(list, ", ")))
 		}
 	}
-	add(c.Added, msg.AgentAdded, msg.AgentsAdded)
-	add(c.Updated, msg.AgentUpdated, msg.AgentsUpdated)
-	add(c.Removed, msg.AgentRemoved, msg.AgentsRemoved)
+	add(w.Added, msg.AgentAdded, msg.AgentsAdded)
+	add(w.Updated, msg.AgentUpdated, msg.AgentsUpdated)
+	add(w.Removed, msg.AgentRemoved, msg.AgentsRemoved)
 	return strings.Join(parts, "; ")
 }
 
 // writeConflicts prints the conflicts as a table.
-func writeConflicts(b *strings.Builder, conflicts []agents.Conflict) {
+func writeConflicts(b *strings.Builder, conflicts []contract.AgentsConflict) {
 	rows := [][]string{{msg.Text(msg.ColWorktree), msg.Text(msg.ColAgent), msg.Text(msg.ColFile), msg.Text(msg.ColReason)}}
 	for _, c := range conflicts {
 		reason := msg.Text(msg.AgentsReasonForeign)
@@ -387,13 +405,13 @@ func writeConflicts(b *strings.Builder, conflicts []agents.Conflict) {
 func agentsConflict(conflicts []agents.Conflict) failure {
 	var more strings.Builder
 	more.WriteString("\n")
-	writeConflicts(&more, conflicts)
+	writeConflicts(&more, conflictsJSON(conflicts))
 	return failure{
 		exit:    contract.ExitError,
 		code:    contract.CodeAgentsConflict,
 		message: msg.Text(msg.ErrAgentsConflict),
 		more:    more.String(),
-		hint:    msg.Text(msg.HintAgentsConflict),
+		hints:   []hint{hintOf(msg.HintAgentsConflict)},
 		details: map[string]any{"conflicts": conflictsJSON(conflicts)},
 	}
 }
@@ -435,7 +453,6 @@ func nonNil(s []string) []string {
 func runAgentsSync(args []string, env Env) int {
 	f := newFlags("agents sync")
 	proj := f.String("project")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -498,39 +515,37 @@ func runAgentsSync(args []string, env Env) int {
 	for _, c := range res.Worktrees {
 		changes[c.Worktree] = c
 	}
-	changed := len(res.Changed()) > 0
-
-	if *asJSON {
-		out := contract.AgentsSyncOutput{Project: id, Changed: changed, Worktrees: []contract.AgentsWorktree{}}
-		for _, w := range worktrees {
-			c, ok := changes[w.Path]
-			if !ok {
-				c = agents.Change{Worktree: w.Path}
-			}
-			out.Worktrees = append(out.Worktrees, changeJSON(c, p))
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	var b strings.Builder
-	if changed {
-		fmt.Fprintln(&b, msg.Text(msg.AgentsSynced, id))
-		fmt.Fprintln(&b, msg.Text(msg.AgentsNextSession))
-	} else {
-		fmt.Fprintln(&b, msg.Text(msg.AgentsInPlace, id))
-	}
-	b.WriteString("\n")
-	rows := [][]string{{msg.Text(msg.ColWorktree), msg.Text(msg.ColTask), msg.Text(msg.ColAgents), msg.Text(msg.ColChanges)}}
+	out := contract.AgentsSyncOutput{Project: id, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}}
 	for _, w := range worktrees {
-		c := changes[w.Path]
-		key := ""
-		if t, ok := p.held[w.Path]; ok {
-			key = t.Key()
+		c, ok := changes[w.Path]
+		if !ok {
+			c = agents.Change{Worktree: w.Path}
 		}
-		agentsCell, changesCell := strings.Join(c.Agents, ", "), changesText(c)
-		if c.Missing {
+		out.Worktrees = append(out.Worktrees, changeJSON(c, p))
+	}
+	return emit(env, out, func(p *page, out contract.AgentsSyncOutput) { agentsSyncText(p, out, laid) })
+}
+
+// agentsSyncText prints the layout of the pool of a project as a table of
+// its worktrees. laid holds the worktrees whose subagents are known: the
+// subagents of the others are not laid out, for a flow with problems or a
+// snapshot that cannot be read.
+func agentsSyncText(p *page, out contract.AgentsSyncOutput, laid map[string]bool) {
+	if out.Changed {
+		fmt.Fprintln(p, msg.Text(msg.AgentsSynced, out.Project))
+		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
+	} else {
+		fmt.Fprintln(p, msg.Text(msg.AgentsInPlace, out.Project))
+	}
+	p.WriteString("\n")
+	rows := [][]string{{msg.Text(msg.ColWorktree), msg.Text(msg.ColTask), msg.Text(msg.ColAgents), msg.Text(msg.ColChanges)}}
+	for _, w := range out.Worktrees {
+		key := ""
+		if w.Task != nil {
+			key = *w.Task
+		}
+		agentsCell, changesCell := strings.Join(w.Agents, ", "), changesText(w)
+		if w.Missing != nil && *w.Missing {
 			agentsCell, changesCell = "", msg.Text(msg.AgentsWorktreeMissing)
 		}
 		if !laid[w.Path] {
@@ -538,9 +553,7 @@ func runAgentsSync(args []string, env Env) int {
 		}
 		rows = append(rows, []string{w.Path, orNone(key), orNone(agentsCell), orNone(changesCell)})
 	}
-	writeTable(&b, rows)
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
+	writeTable(&p.Builder, rows)
 }
 
 // layoutFailure is a layout that failed: git failed, or a file could not be
@@ -578,7 +591,6 @@ func layoutRefused(env Env, r *process.Repo, s *process.Sync, also ...string) {
 		projects[id] = true
 	}
 	o, p := layoutFree(r, projects)
-	if !env.json {
-		writeFreeLayout(env.Stderr, o, p)
-	}
+	l, worktrees := o.json(p), projectsOf(p)
+	warn(env, func(w *page) { writeFreeLayout(w, l, worktrees) })
 }

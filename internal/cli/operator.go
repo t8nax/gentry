@@ -44,7 +44,6 @@ func runOperatorRecord(args []string, env Env) int {
 	}
 	key := f.String("task")
 	input := f.String("input")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -73,34 +72,34 @@ func runOperatorRecord(args []string, env Env) int {
 	}
 	defer w.close()
 	req.Task = w.task.ID
+	// The node a return goes to is named by the stage of the snapshot. The
+	// snapshot is read before the decision is recorded: once it is, the
+	// command does not fail, or a repeated call would record it twice.
+	var n names
+	if req.AllowReturn != "" {
+		v, bad := w.view()
+		if bad != nil {
+			return w.fail(env, *bad)
+		}
+		n = namesOf(v)
+	}
 	res, err := task.RecordDecision(w.st, req)
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}
 
-	if *asJSON {
-		out := contract.OperatorRecordOutput{Task: res.Task.Key(), Decision: decisionJSON(res.Decision)}
-		if r := res.Return; r != nil {
-			out.Return = &contract.OperatorRecordOutputReturn{Node: r.Node, To: r.To, Returns: r.Returns,
-				MaxReturns: r.Limit, AllowedReturns: r.Allowed}
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.DecisionRecorded))
+	out := contract.OperatorRecordOutput{Task: res.Task.Key(), Decision: decisionJSON(res.Decision)}
 	if r := res.Return; r != nil {
-		v, bad := w.view()
-		if bad != nil {
-			return w.fail(env, *bad)
-		}
-		fmt.Fprintln(&b, msg.Text(msg.AllowedReturnLine, named(v.NodeStageTitle(r.To), r.To)))
-		fmt.Fprintln(&b, msg.Text(msg.ReturnsLine, r.Returns, r.Limit))
+		out.Return = &contract.OperatorRecordOutputReturn{Node: r.Node, To: r.To, Returns: r.Returns,
+			MaxReturns: r.Limit, AllowedReturns: r.Allowed}
 	}
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
+	return emit(env, out, func(p *page, out contract.OperatorRecordOutput) {
+		fmt.Fprintln(p, msg.Text(msg.DecisionRecorded))
+		if r := out.Return; r != nil {
+			fmt.Fprintln(p, msg.Text(msg.AllowedReturnLine, named(n.nodeTitle(r.To), r.To)))
+			fmt.Fprintln(p, msg.Text(msg.ReturnsLine, r.Returns, r.MaxReturns))
+		}
+	})
 }
 
 // readOptions reads the options of an answer given by --input: an array of
@@ -114,11 +113,12 @@ func readOptions(cmd, input string, raw any) ([]state.Option, *failure) {
 	}
 	refuse := func(cause string) ([]state.Option, *failure) {
 		return nil, &failure{
-			exit:    contract.ExitUsage,
-			code:    contract.CodeInputInvalid,
-			message: msg.Text(msg.ErrInputInvalid, cause),
-			hint:    msg.Text(msg.HintCommandHelp, cmd),
-			details: map[string]any{"input": input, "field": "options"},
+			exit:         contract.ExitUsage,
+			code:         contract.CodeInputInvalid,
+			message:      msg.Text(msg.ErrInputInvalid, cause),
+			agentMessage: msg.Text(msg.ErrToolFields, cause),
+			hints:        []hint{helpHint(msg.HintCommandHelp, cmd)},
+			details:      map[string]any{"input": input, "field": "options"},
 		}
 	}
 	var items []json.RawMessage
@@ -155,7 +155,7 @@ func readOptions(cmd, input string, raw any) ([]state.Option, *failure) {
 // question, at most one recommended.
 func checkDecision(cmd string, req task.Decision) *failure {
 	refuse := func(f failure) *failure { return &f }
-	help := msg.Text(msg.HintCommandHelp, cmd)
+	help := helpHint(msg.HintCommandHelp, cmd)
 	if strings.TrimSpace(req.Answer) == "" {
 		return refuse(missingField(cmd, "answer", msg.Text(msg.ErrAnswerMissing), help))
 	}
@@ -166,7 +166,7 @@ func checkDecision(cmd string, req task.Decision) *failure {
 		return refuse(missingField(cmd, "question", msg.Text(msg.ErrOptionsQuestionMissing), help))
 	}
 	if len(req.Options) < 2 {
-		return refuse(fieldInvalid("options", optionsTooFew, msg.Text(msg.ErrOptionsTooFew), msg.Text(msg.HintOptionsTooFew)))
+		return refuse(fieldInvalid("options", optionsTooFew, msg.Text(msg.ErrOptionsTooFew), hintOf(msg.HintOptionsTooFew)))
 	}
 	recommended := 0
 	for i, o := range req.Options {
@@ -181,7 +181,7 @@ func checkDecision(cmd string, req task.Decision) *failure {
 			reason, k = optionLabelTooLong, msg.ErrOptionLabelTooLong
 		}
 		if reason != "" {
-			f := fieldInvalid("options", reason, msg.Text(k, i+1), msg.Text(msg.HintOptionLabel))
+			f := fieldInvalid("options", reason, msg.Text(k, i+1), hintOf(msg.HintOptionLabel))
 			f.details["option"] = i + 1
 			return &f
 		}
@@ -191,7 +191,7 @@ func checkDecision(cmd string, req task.Decision) *failure {
 	}
 	if recommended > 1 {
 		return refuse(fieldInvalid("options", optionsRecommendedMany, msg.Text(msg.ErrOptionsRecommendedMany),
-			msg.Text(msg.HintOptionsRecommended)))
+			hintOf(msg.HintOptionsRecommended)))
 	}
 	return nil
 }
@@ -211,40 +211,6 @@ func decisionJSON(d state.Decision) contract.OperatorDecision {
 		cd.AllowReturn = &a
 	}
 	return cd
-}
-
-// writeDecisions prints the decisions of the operator of a task under their
-// heading, each a block: the stage and the round it was recorded at, who
-// recorded it, the question with its options, the answer and the return it
-// allows.
-func writeDecisions(b *strings.Builder, v task.View, decisions []state.Decision) {
-	fmt.Fprintln(b, msg.Text(msg.DecisionsHeading))
-	for i, d := range decisions {
-		if i > 0 {
-			b.WriteString("\n")
-		}
-		stage := msg.Text(msg.StageRound, named(v.StageTitleOf(d.Stage), d.Stage), d.Round)
-		fmt.Fprintf(b, "  %s\n", msg.Text(msg.DecisionHeading, d.Number, stage, sourceWord(d.Source)))
-		indent := strings.Repeat(" ", 2+len(fmt.Sprintf("%d. ", d.Number)))
-		if d.Question != "" {
-			writeField(b, indent, msg.Text(msg.DecisionQuestion), d.Question)
-		}
-		if len(d.Options) > 0 {
-			fmt.Fprintf(b, "%s%s\n", indent, msg.Text(msg.DecisionOptions))
-			for j, o := range d.Options {
-				number := fmt.Sprintf("%d. ", j+1)
-				label := oneLine(o.Label)
-				if o.Recommended {
-					label = msg.Text(msg.OptionRecommended, label)
-				}
-				writeField(b, indent+"  "+number, label, o.Description)
-			}
-		}
-		writeField(b, indent, msg.Text(msg.DecisionAnswer), d.Answer)
-		if d.AllowReturn != "" {
-			fmt.Fprintf(b, "%s%s\n", indent, msg.Text(msg.AllowedReturnLine, named(v.NodeStageTitle(d.AllowReturn), d.AllowReturn)))
-		}
-	}
 }
 
 // writeField prints a field as «name: value» after lead; a value of several

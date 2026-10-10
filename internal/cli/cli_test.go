@@ -207,7 +207,7 @@ func TestErrorsJSON(t *testing.T) {
 
 func TestErrorText(t *testing.T) {
 	_, stdout, stderr := run("foo")
-	want := msg.Text(msg.ErrUnknownCommand, "foo") + "\n\n" + msg.Text(msg.HintUnknownCommand) + "\n"
+	want := msg.Text(msg.ErrUnknownCommand, "foo") + "\n\n" + HintText(msg.HintUnknownCommand) + "\n"
 	if stdout != "" || stderr != want {
 		t.Errorf("stdout %q, stderr %q, want stderr %q", stdout, stderr, want)
 	}

@@ -50,7 +50,7 @@ func TestStageFeature(t *testing.T) {
 	}
 
 	// A stage without steps is not closed.
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", msg.Text(msg.HintStepAdd)),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", cli.HintText(msg.HintStepAdd)),
 		"stage", "exit", "--kind", "result", "--text", "Создана ветка")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
 		"К этапу добавлено шагов: 1.",
@@ -122,11 +122,11 @@ func TestStageFeature(t *testing.T) {
 	// Review is a fork: the transition and its reason are required.
 	clitest.MustRun(t, "step", "add", "Провести ревью")
 	clitest.MustRun(t, "step", "done", "1")
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrForkToMissing), "", msg.Text(msg.HintStageTransitions)),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrForkToMissing), "", cli.HintText(msg.HintStageTransitions)),
 		"stage", "exit", "--kind", "result", "--text", "Замечания записаны")
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrForkReasonMissing), "", msg.Text(msg.HintCommandHelp, "stage exit")),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrForkReasonMissing), "", cli.HintText(msg.HintCommandHelp, "stage exit")),
 		"stage", "exit", "--kind", "result", "--text", "Замечания записаны", "--to", "implementation")
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ревью» нет перехода к узлу deploy.", "", msg.Text(msg.HintStageTransitions)),
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines("У этапа «Ревью» нет перехода к узлу deploy.", "", cli.HintText(msg.HintStageTransitions)),
 		"stage", "exit", "--kind", "result", "--text", "Замечания записаны", "--to", "deploy", "--reason", "Выкатить")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
 		"Этап «Ревью» закрыт.",
@@ -288,7 +288,7 @@ func TestStageSkip(t *testing.T) {
 	_, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrSkipReasonMissing), "", msg.Text(msg.HintCommandHelp, "stage skip")),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrSkipReasonMissing), "", cli.HintText(msg.HintCommandHelp, "stage skip")),
 		"stage", "skip")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
 		"Этап «Ветка» пропущен.",
@@ -409,7 +409,7 @@ func TestWayRefusals(t *testing.T) {
 		}
 		return p
 	}
-	exitHelp := msg.Text(msg.HintCommandHelp, "stage exit")
+	exitHelp := cli.HintText(msg.HintCommandHelp, "stage exit")
 	long := strings.Repeat("ш", 121)
 	tests := []struct {
 		name   string
@@ -433,35 +433,35 @@ func TestWayRefusals(t *testing.T) {
 		{"flag with input", []string{"stage", "exit", "--kind", "result", "--input", "x.json"}, contract.ExitUsage, contract.CodeConflictingFlags,
 			clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--kind", "--input"), "", exitHelp)},
 		{"no step", []string{"step", "add"}, contract.ExitUsage, contract.CodeMissingField,
-			clitest.Lines(msg.Text(msg.ErrStepsMissing), "", msg.Text(msg.HintCommandHelp, "step add"))},
+			clitest.Lines(msg.Text(msg.ErrStepsMissing), "", cli.HintText(msg.HintCommandHelp, "step add"))},
 		{"long step", []string{"step", "add", long}, contract.ExitUsage, contract.CodeFieldInvalid,
 			clitest.Lines(msg.Text(msg.ErrStepTooLong), "", msg.Text(msg.HintStep))},
 		{"step of two lines", []string{"step", "add", "А\nБ"}, contract.ExitUsage, contract.CodeFieldInvalid,
 			clitest.Lines(msg.Text(msg.ErrStepMultiline), "", msg.Text(msg.HintStep))},
 		{"steps not a list", []string{"step", "add", "--input", input(`{"steps":"Шаг"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			clitest.Lines("Не удалось прочитать поля из --input: поле «steps» должно быть массивом строк.", "", msg.Text(msg.HintCommandHelp, "step add"))},
+			clitest.Lines("Не удалось прочитать поля из --input: поле «steps» должно быть массивом строк.", "", cli.HintText(msg.HintCommandHelp, "step add"))},
 		{"arguments with input", []string{"step", "add", "Шаг", "--input", input(`{"steps":["Шаг"]}`)}, contract.ExitUsage, contract.CodeConflictingFlags,
-			clitest.Lines(msg.Text(msg.ErrInputWithArgs), "", msg.Text(msg.HintCommandHelp, "step add"))},
+			clitest.Lines(msg.Text(msg.ErrInputWithArgs), "", cli.HintText(msg.HintCommandHelp, "step add"))},
 		{"step number", []string{"step", "done", "первый"}, contract.ExitUsage, contract.CodeInvalidArgument,
-			clitest.Lines(msg.Text(msg.ErrStepNumberInvalid, "первый"), "", msg.Text(msg.HintSteps))},
+			clitest.Lines(msg.Text(msg.ErrStepNumberInvalid, "первый"), "", cli.HintText(msg.HintSteps))},
 		{"step number not an integer", []string{"step", "done", "--input", input(`{"step":"1"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
-			clitest.Lines("Не удалось прочитать поля из --input: поле «step» должно быть целым числом.", "", msg.Text(msg.HintCommandHelp, "step done"))},
+			clitest.Lines("Не удалось прочитать поля из --input: поле «step» должно быть целым числом.", "", cli.HintText(msg.HintCommandHelp, "step done"))},
 		{"no step number", []string{"step", "done"}, contract.ExitUsage, contract.CodeMissingField,
-			clitest.Lines(msg.Text(msg.ErrStepNumberMissing), "", msg.Text(msg.HintCommandHelp, "step done"))},
+			clitest.Lines(msg.Text(msg.ErrStepNumberMissing), "", cli.HintText(msg.HintCommandHelp, "step done"))},
 		{"step not found", []string{"step", "done", "7"}, contract.ExitError, contract.CodeStepNotFound,
-			clitest.Lines(msg.Text(msg.ErrStepNotFound, 7), "", msg.Text(msg.HintSteps))},
+			clitest.Lines(msg.Text(msg.ErrStepNotFound, 7), "", cli.HintText(msg.HintSteps))},
 		{"step done", []string{"step", "done", "1"}, contract.ExitError, contract.CodeStepClosed,
-			clitest.Lines(msg.Text(msg.ErrStepDoneAlready, 1), "", msg.Text(msg.HintSteps))},
+			clitest.Lines(msg.Text(msg.ErrStepDoneAlready, 1), "", cli.HintText(msg.HintSteps))},
 		{"no note", []string{"note", "add"}, contract.ExitUsage, contract.CodeMissingField,
-			clitest.Lines(msg.Text(msg.ErrNoteMissing), "", msg.Text(msg.HintCommandHelp, "note add"))},
+			clitest.Lines(msg.Text(msg.ErrNoteMissing), "", cli.HintText(msg.HintCommandHelp, "note add"))},
 		{"no artifact name", []string{"artifact", "save", "--url", "https://example.com"}, contract.ExitUsage, contract.CodeMissingField,
-			clitest.Lines(msg.Text(msg.ErrArtifactNameMissing), "", msg.Text(msg.HintCommandHelp, "artifact save"))},
+			clitest.Lines(msg.Text(msg.ErrArtifactNameMissing), "", cli.HintText(msg.HintCommandHelp, "artifact save"))},
 		{"bad artifact name", []string{"artifact", "save", "план", "--url", "https://example.com"}, contract.ExitUsage, contract.CodeFieldInvalid,
 			clitest.Lines(msg.Text(msg.ErrArtifactNameInvalid, "план"), "", msg.Text(msg.HintArtifactName))},
 		{"no file or address", []string{"artifact", "save", "plan"}, contract.ExitUsage, contract.CodeMissingField,
-			clitest.Lines(msg.Text(msg.ErrArtifactSourceMissing), "", msg.Text(msg.HintCommandHelp, "artifact save"))},
+			clitest.Lines(msg.Text(msg.ErrArtifactSourceMissing), "", cli.HintText(msg.HintCommandHelp, "artifact save"))},
 		{"file and address", []string{"artifact", "save", "plan", "--file", "plan.md", "--url", "https://example.com"}, contract.ExitUsage, contract.CodeConflictingFlags,
-			clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--file", "--url"), "", msg.Text(msg.HintCommandHelp, "artifact save"))},
+			clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--file", "--url"), "", cli.HintText(msg.HintCommandHelp, "artifact save"))},
 		{"bad address", []string{"artifact", "save", "plan", "--url", "claude.ai/code/artifact/1"}, contract.ExitUsage, contract.CodeFieldInvalid,
 			clitest.Lines(msg.Text(msg.ErrArtifactURLInvalid, "claude.ai/code/artifact/1"), "", msg.Text(msg.HintArtifactURL))},
 		{"no file", []string{"artifact", "save", "plan", "--file", "plan.md"}, contract.ExitUsage, contract.CodeFieldInvalid,
@@ -479,7 +479,7 @@ func TestWayRefusals(t *testing.T) {
 	}
 	clitest.MustRun(t, "step", "add", "Проверить ветку")
 	clitest.MustRun(t, "step", "drop", "2", "--reason", "Не нужно")
-	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrStepDroppedAlready, 2), "", msg.Text(msg.HintSteps)), "step", "drop", "2", "--reason", "Ещё раз")
+	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrStepDroppedAlready, 2), "", cli.HintText(msg.HintSteps)), "step", "drop", "2", "--reason", "Ещё раз")
 }
 
 // TestStepsInput adds steps, marks and drops them through --input.
@@ -546,7 +546,7 @@ func TestArtifactFile(t *testing.T) {
 	if err := os.WriteFile(big, make([]byte, 10<<20+1), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrArtifactFileTooLarge, "big.bin"), "", msg.Text(msg.HintArtifactLink)+" --task SHOP-1"),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrArtifactFileTooLarge, "big.bin"), "", cli.HintFor(msg.HintArtifactLink, "task", "SHOP-1")),
 		"artifact", "save", "big", "--file", "big.bin", "--task", "SHOP-1")
 }
 

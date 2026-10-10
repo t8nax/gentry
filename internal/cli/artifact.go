@@ -21,7 +21,6 @@ func runArtifactSave(args []string, env Env) int {
 	flags := map[string]*stringFlag{"file": f.String("file"), "url": f.String("url")}
 	key := f.String("task")
 	input := f.String("input")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -33,18 +32,18 @@ func runArtifactSave(args []string, env Env) int {
 	if !input.Set && len(f.args) > 0 {
 		name = f.args[0]
 	}
-	help := msg.Text(msg.HintCommandHelp, cmd)
+	help := helpHint(msg.HintCommandHelp, cmd)
 	switch {
 	case name == "":
 		return fail(env, missingField(cmd, "name", msg.Text(msg.ErrArtifactNameMissing), help))
 	case !task.ValidArtifactName(name):
-		return fail(env, fieldInvalid("name", "invalid_name", msg.Text(msg.ErrArtifactNameInvalid, name), msg.Text(msg.HintArtifactName)))
+		return fail(env, fieldInvalid("name", "invalid_name", msg.Text(msg.ErrArtifactNameInvalid, name), hintOf(msg.HintArtifactName)))
 	case file != "" && u != "":
 		return fail(env, conflictingFlags(cmd, []string{"--file", "--url"}))
 	case file == "" && u == "":
 		return fail(env, missingField(cmd, "file", msg.Text(msg.ErrArtifactSourceMissing), help))
 	case u != "" && !task.ValidURL(u):
-		return fail(env, fieldInvalid("url", "invalid_url", msg.Text(msg.ErrArtifactURLInvalid, u), msg.Text(msg.HintArtifactURL)))
+		return fail(env, fieldInvalid("url", "invalid_url", msg.Text(msg.ErrArtifactURLInvalid, u), hintOf(msg.HintArtifactURL)))
 	}
 	if file != "" && !filepath.IsAbs(file) {
 		wd, err := os.Getwd()
@@ -68,25 +67,24 @@ func runArtifactSave(args []string, env Env) int {
 		return w.fail(env, f)
 	}
 	path, _ := task.ArtifactPath(w.task, name)
-	if *asJSON {
-		if err := writeJSON(env, contract.ArtifactSaveOutput{Task: w.task.Key(), Artifact: artifactJSON(a, path), Replaced: replaced}); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	var b strings.Builder
+	out := contract.ArtifactSaveOutput{Task: w.task.Key(), Artifact: artifactJSON(a, path), Replaced: replaced}
+	return emit(env, out, artifactSaveText)
+}
+
+// artifactSaveText prints the artifact saved: the copy of its file or its
+// link.
+func artifactSaveText(p *page, out contract.ArtifactSaveOutput) {
 	k := msg.ArtifactSaved
-	if replaced {
+	if out.Replaced {
 		k = msg.ArtifactReplaced
 	}
-	fmt.Fprintln(&b, msg.Text(k, name))
-	if a.Kind == state.ArtifactFile {
-		fmt.Fprintln(&b, msg.Text(msg.ArtifactFileLine, path))
+	a := out.Artifact
+	fmt.Fprintln(p, msg.Text(k, a.Name))
+	if a.Path != nil {
+		fmt.Fprintln(p, msg.Text(msg.ArtifactFileLine, *a.Path))
 	} else {
-		fmt.Fprintln(&b, msg.Text(msg.ArtifactURLLine, a.URL))
+		fmt.Fprintln(p, msg.Text(msg.ArtifactURLLine, *a.Url))
 	}
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
 }
 
 // artifactJSON returns an artifact as the contract has it; path is where

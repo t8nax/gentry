@@ -15,7 +15,6 @@ import (
 func runWorktreeAdd(args []string, env Env) int {
 	f := newFlags("worktree add")
 	proj := f.String("project")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -56,23 +55,22 @@ func runWorktreeAdd(args []string, env Env) int {
 		layout, laidPool = layoutAdded(st, r, w.Project, []string{w.Path})
 		r.Close()
 	}
-	if *asJSON {
-		out := contract.WorktreeAddOutput{Path: w.Path, Project: w.Project, Main: w.Main, Action: actionAdded, Agents: layout.json(laidPool)}
-		if res.Unchanged {
-			out.Action = actionUnchanged
-		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
+	out := contract.WorktreeAddOutput{Path: w.Path, Project: w.Project, Main: w.Main, Action: actionAdded, Agents: layout.json(laidPool)}
 	if res.Unchanged {
-		fmt.Fprintln(env.Stdout, msg.Text(msg.WorktreeUnchanged, w.Project, w.Path))
-	} else {
-		fmt.Fprintln(env.Stdout, msg.Text(msg.WorktreeAdded, w.Project, w.Path))
+		out.Action = actionUnchanged
 	}
-	writeLayout(env.Stdout, layout, true, "")
-	return contract.ExitOK
+	return emit(env, out, worktreeAddText)
+}
+
+// worktreeAddText prints the worktree added to the pool and the layout of
+// its subagents.
+func worktreeAddText(p *page, out contract.WorktreeAddOutput) {
+	if out.Action == actionUnchanged {
+		fmt.Fprintln(p, msg.Text(msg.WorktreeUnchanged, out.Project, out.Path))
+	} else {
+		fmt.Fprintln(p, msg.Text(msg.WorktreeAdded, out.Project, out.Path))
+	}
+	writeLayout(p, out.Agents, true, "")
 }
 
 // runWorktreeList prints the worktrees of the pools. It only reads: without a
@@ -80,7 +78,6 @@ func runWorktreeAdd(args []string, env Env) int {
 func runWorktreeList(args []string, env Env) int {
 	f := newFlags("worktree list")
 	proj := f.String("project")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -103,49 +100,49 @@ func runWorktreeList(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
-
-	if *asJSON {
-		out := contract.WorktreeListOutput{Worktrees: []contract.WorktreeListItem{}}
-		for _, w := range list {
-			item := contract.WorktreeListItem{Path: w.Path, Project: w.Project, Main: w.Main, Exists: w.Exists}
-			if w.Branch != "" {
-				item.Branch = &w.Branch
-			}
-			if key, ok := held[w.Path]; ok {
-				item.Task = &key
-			}
-			out.Worktrees = append(out.Worktrees, item)
+	out := contract.WorktreeListOutput{Worktrees: []contract.WorktreeListItem{}}
+	for _, w := range list {
+		item := contract.WorktreeListItem{Path: w.Path, Project: w.Project, Main: w.Main, Exists: w.Exists}
+		if w.Branch != "" {
+			item.Branch = &w.Branch
 		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
+		if key, ok := held[w.Path]; ok {
+			item.Task = &key
 		}
-		return contract.ExitOK
+		out.Worktrees = append(out.Worktrees, item)
 	}
-	if len(list) == 0 {
-		fmt.Fprintln(env.Stdout, msg.Text(msg.WorktreesNone))
-		return contract.ExitOK
+	return emit(env, out, worktreeListText)
+}
+
+// worktreeListText prints the worktrees as a table, or a line that there are
+// none.
+func worktreeListText(p *page, out contract.WorktreeListOutput) {
+	if len(out.Worktrees) == 0 {
+		fmt.Fprintln(p, msg.Text(msg.WorktreesNone))
+		return
 	}
 	rows := [][]string{{msg.Text(msg.ColProject), msg.Text(msg.ColWorktree), msg.Text(msg.ColBranch), msg.Text(msg.ColState)}}
-	for _, w := range list {
-		rows = append(rows, []string{w.Project, w.Path, orNone(w.Branch), worktreeState(w, held[w.Path])})
+	for _, w := range out.Worktrees {
+		branch := ""
+		if w.Branch != nil {
+			branch = *w.Branch
+		}
+		rows = append(rows, []string{w.Project, w.Path, orNone(branch), worktreeState(w)})
 	}
-	var b strings.Builder
-	writeTable(&b, rows)
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
+	writeTable(&p.Builder, rows)
 }
 
 // worktreeState is the state column of the list: whether the worktree is the
-// main one, and whether it is free or holds the task named by key. A worktree
-// without its directory is not free.
-func worktreeState(w project.WorktreeState, key string) string {
+// main one, and whether it is free or holds a task. A worktree without its
+// directory is not free.
+func worktreeState(w contract.WorktreeListItem) string {
 	var labels []string
 	if w.Main {
 		labels = append(labels, msg.Text(msg.WorktreeMain))
 	}
 	switch {
-	case key != "":
-		labels = append(labels, msg.Text(msg.WorktreeTask, key))
+	case w.Task != nil:
+		labels = append(labels, msg.Text(msg.WorktreeTask, *w.Task))
 	case w.Exists:
 		labels = append(labels, msg.Text(msg.WorktreeFree))
 	}
@@ -248,7 +245,7 @@ func resolveFailure(err error) (f failure, ok bool) {
 			exit:    contract.ExitError,
 			code:    contract.CodeProjectNotFound,
 			message: msg.Text(msg.ErrProjectNotFound, notFound.Project),
-			hint:    msg.Text(msg.HintProjectNotFound),
+			hints:   []hint{hintOf(msg.HintProjectNotFound)},
 			details: map[string]any{"project": notFound.Project},
 		}, true
 	case errors.As(err, &undet):
@@ -256,7 +253,7 @@ func resolveFailure(err error) (f failure, ok bool) {
 			exit:    contract.ExitError,
 			code:    contract.CodeProjectUndetermined,
 			message: msg.Text(msg.ErrProjectUndetermined, undet.Dir),
-			hint:    msg.Text(msg.HintProjectUndetermined),
+			hints:   []hint{hintOf(msg.HintProjectUndetermined)},
 			details: map[string]any{"dir": undet.Dir},
 		}, true
 	}

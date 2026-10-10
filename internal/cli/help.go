@@ -145,7 +145,7 @@ func describe(c command) string {
 		if f.value != "" {
 			name += " " + msg.Text(f.value)
 		}
-		flags = append(flags, row{name, f.desc()})
+		flags = append(flags, row{name, f.help()})
 		// A flag of the group of the previous one is another choice in its
 		// brackets: [--a <x> | --b <y>].
 		if f.group != "" && i > 0 && c.flags[i-1].group == f.group {

@@ -18,16 +18,20 @@ type failure struct {
 	code    string
 	message string
 	more    string // lines under the message in text only, such as a list of problems
-	hint    string
+	hints   []hint
 	details map[string]any
+	// agentMessage is the message the agent gets instead, if it has words of
+	// its own.
+	agentMessage string
 }
 
 // fail prints f and returns its exit code.
 func fail(env Env, f failure) int {
 	if env.json {
 		out := contract.ErrorOutput{Error: contract.Error{Code: f.code, Message: f.message, Details: f.details}}
-		if f.hint != "" {
-			out.Error.Hint = &f.hint
+		if lines := renderHints(f.hints, jsonChannel); len(lines) > 0 {
+			hint := strings.Join(lines, "\n")
+			out.Error.Hint = &hint
 		}
 		if err := writeJSON(env, out); err == nil {
 			return f.exit
@@ -36,13 +40,15 @@ func fail(env Env, f failure) int {
 	}
 	// The hint is a block of its own, the last one, after an empty line
 	// (principle 12).
-	fmt.Fprintln(env.Stderr, f.message)
-	if f.more != "" {
-		fmt.Fprint(env.Stderr, f.more)
+	p := &page{ch: channelOf(env)}
+	if env.agent && f.agentMessage != "" {
+		fmt.Fprintln(p, f.agentMessage)
+	} else {
+		fmt.Fprintln(p, f.message)
 	}
-	if f.hint != "" {
-		fmt.Fprintf(env.Stderr, "\n%s\n", f.hint)
-	}
+	p.WriteString(f.more)
+	p.hints(f.hints...)
+	fmt.Fprint(env.Stderr, p.String())
 	return f.exit
 }
 
@@ -51,7 +57,7 @@ func unknownCommand(name string) failure {
 		exit:    contract.ExitUsage,
 		code:    contract.CodeUnknownCommand,
 		message: msg.Text(msg.ErrUnknownCommand, name),
-		hint:    msg.Text(msg.HintUnknownCommand),
+		hints:   []hint{helpHint(msg.HintUnknownCommand, "")},
 		details: map[string]any{"command": name},
 	}
 }
@@ -95,12 +101,12 @@ func flagValueMissing(flag string) failure {
 }
 
 // flagValueInvalid is for a flag value the command cannot accept.
-func flagValueInvalid(flag, value, message, hint string) failure {
+func flagValueInvalid(flag, value, message string, hints ...hint) failure {
 	return failure{
 		exit:    contract.ExitUsage,
 		code:    contract.CodeFlagValue,
 		message: message,
-		hint:    hint,
+		hints:   hints,
 		details: map[string]any{"flag": flag, "value": value},
 	}
 }
@@ -115,7 +121,7 @@ func stateFailure(err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeStateNewer,
 			message: msg.Text(msg.ErrStateNewer, ne.Schema, ne.Supported),
-			hint:    msg.Text(msg.HintStateNewer),
+			hints:   []hint{hintOf(msg.HintStateNewer)},
 			details: map[string]any{"path": ne.Path, "schema": ne.Schema, "supported": ne.Supported},
 		}
 	case errors.As(err, &ue):
@@ -123,7 +129,7 @@ func stateFailure(err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeStateUnavailable,
 			message: msg.Text(msg.ErrStateUnavailable, ue.Err),
-			hint:    msg.Text(msg.HintStateUnavail, ue.Path),
+			hints:   []hint{hintOf(msg.HintStateUnavail, ue.Path)},
 			details: map[string]any{"path": ue.Path},
 		}
 	}
@@ -137,7 +143,7 @@ func conflictingFlags(cmd string, flags []string) failure {
 		exit:    contract.ExitUsage,
 		code:    contract.CodeConflictingFlags,
 		message: msg.Text(msg.ErrConflictingFlags, flags[0], flags[1]),
-		hint:    msg.Text(msg.HintCommandHelp, cmd),
+		hints:   []hint{helpHint(msg.HintCommandHelp, cmd)},
 		details: map[string]any{"command": cmd, "flags": flags},
 	}
 }
@@ -159,22 +165,22 @@ func internal(err error) failure {
 	}
 }
 
-func missingArgument(cmd, arg, message, hint string) failure {
+func missingArgument(cmd, arg, message string, hints ...hint) failure {
 	return failure{
 		exit:    contract.ExitUsage,
 		code:    contract.CodeMissingArgument,
 		message: message,
-		hint:    hint,
+		hints:   hints,
 		details: map[string]any{"command": cmd, "argument": arg},
 	}
 }
 
-func invalidArgument(cmd, arg, value, message, hint string) failure {
+func invalidArgument(cmd, arg, value, message string, hints ...hint) failure {
 	return failure{
 		exit:    contract.ExitUsage,
 		code:    contract.CodeInvalidArgument,
 		message: message,
-		hint:    hint,
+		hints:   hints,
 		details: map[string]any{"command": cmd, "argument": arg, "value": value},
 	}
 }
@@ -184,7 +190,7 @@ func homeUnknown() failure {
 		exit:    contract.ExitError,
 		code:    contract.CodeHomeUnknown,
 		message: msg.Text(msg.ErrHomeUnknown),
-		hint:    msg.Text(msg.HintHomeUnknown),
+		hints:   []hint{hintOf(msg.HintHomeUnknown)},
 	}
 }
 
@@ -202,7 +208,7 @@ func toolNotFound(tool, program, title string) failure {
 		exit:    contract.ExitError,
 		code:    contract.CodeToolNotFound,
 		message: msg.Text(msg.ErrToolNotFound, program),
-		hint:    msg.Text(msg.HintToolNotFound, title, tool),
+		hints:   []hint{hintOf(msg.HintToolNotFound, title).set("tool", tool)},
 		details: map[string]any{"tool": tool, "program": program},
 	}
 }
@@ -221,17 +227,17 @@ func pluginElsewhere(tool, registered, dir string) failure {
 		exit:    contract.ExitError,
 		code:    contract.CodePluginElsewhere,
 		message: msg.Text(msg.ErrPluginElsewhere, registered, dir),
-		hint:    msg.Text(msg.HintPluginElsewhere, tool),
+		hints:   []hint{hintOf(msg.HintPluginElsewhere).set("tool", tool)},
 		details: map[string]any{"tool": tool, "registered": registered, "dir": dir},
 	}
 }
 
 func missingAction(g command) failure {
 	return missingArgument(g.name, "action", msg.Text(msg.ErrActionMissing, g.name),
-		msg.Text(msg.HintActions, g.name))
+		helpHint(msg.HintActions, g.name))
 }
 
 func unknownAction(g command, action string) failure {
 	return invalidArgument(g.name, "action", action, msg.Text(msg.ErrActionUnknown, action, g.name),
-		msg.Text(msg.HintActions, g.name))
+		helpHint(msg.HintActions, g.name))
 }

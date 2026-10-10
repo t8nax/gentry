@@ -155,7 +155,7 @@ func TestIntroStalePlugin(t *testing.T) {
 	writeVersion("0.0.0+00000000")
 	want := clitest.Lines(
 		msg.Text(msg.IntroPluginStale),
-		msg.Text(msg.HintIntroPluginStale),
+		msg.Text(msg.HintIntroPluginStale)+": setup (tool: claude)",
 		"",
 		"Проект: shop",
 	)

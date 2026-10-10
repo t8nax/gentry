@@ -18,7 +18,6 @@ func runNoteAdd(args []string, env Env) int {
 	f := newFlags(cmd)
 	key := f.String("task")
 	input := f.String("input")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -31,7 +30,7 @@ func runNoteAdd(args []string, env Env) int {
 		note = f.args[0]
 	}
 	if strings.TrimSpace(note) == "" {
-		return fail(env, missingField(cmd, "text", msg.Text(msg.ErrNoteMissing), msg.Text(msg.HintCommandHelp, cmd)))
+		return fail(env, missingField(cmd, "text", msg.Text(msg.ErrNoteMissing), helpHint(msg.HintCommandHelp, cmd)))
 	}
 	w, bad := openWayTask(key, false)
 	if bad != nil {
@@ -42,14 +41,12 @@ func runNoteAdd(args []string, env Env) int {
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}
-	if *asJSON {
-		if err := writeJSON(env, contract.NoteAddOutput{Task: t.Key(), Note: noteJSON(n)}); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
-	}
-	fmt.Fprintln(env.Stdout, msg.Text(msg.NoteAdded, n.Number))
-	return contract.ExitOK
+	return emit(env, contract.NoteAddOutput{Task: t.Key(), Note: noteJSON(n)}, noteAddText)
+}
+
+// noteAddText prints the number of the note added.
+func noteAddText(p *page, out contract.NoteAddOutput) {
+	fmt.Fprintln(p, msg.Text(msg.NoteAdded, out.Note.Number))
 }
 
 // noteJSON returns a note as the contract has it.
@@ -61,7 +58,6 @@ func noteJSON(n state.Note) contract.TaskNote {
 func runNoteList(args []string, env Env) int {
 	f := newFlags("note list")
 	key := f.String("task")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -74,52 +70,24 @@ func runNoteList(args []string, env Env) int {
 	if err != nil {
 		return w.fail(env, stateFailure(err))
 	}
-	if *asJSON {
-		out := contract.NoteListOutput{Task: w.task.Key(), Notes: []contract.TaskNote{}}
-		for _, n := range notes {
-			out.Notes = append(out.Notes, noteJSON(n))
+	out := contract.NoteListOutput{Task: w.task.Key(), Notes: []contract.TaskNote{}}
+	for _, n := range notes {
+		out.Notes = append(out.Notes, noteJSON(n))
+	}
+	// The stages of the notes are named by the snapshot of the task.
+	var n names
+	if len(notes) > 0 {
+		v, bad := w.view()
+		if bad != nil {
+			return w.fail(env, *bad)
 		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
+		n = namesOf(v)
+	}
+	return emit(env, out, func(p *page, out contract.NoteListOutput) {
+		if len(out.Notes) == 0 {
+			fmt.Fprintln(p, msg.Text(msg.NotesNone))
+			return
 		}
-		return contract.ExitOK
-	}
-	if len(notes) == 0 {
-		fmt.Fprintln(env.Stdout, msg.Text(msg.NotesNone))
-		return contract.ExitOK
-	}
-	v, bad := w.view()
-	if bad != nil {
-		return w.fail(env, *bad)
-	}
-	var b strings.Builder
-	writeNotes(&b, v, notes, "")
-	fmt.Fprint(env.Stdout, b.String())
-	return contract.ExitOK
-}
-
-// writeNotes prints the notes of the task of v, each under its number and
-// stage, every line after indent.
-func writeNotes(b *strings.Builder, v task.View, notes []state.Note, indent string) {
-	for i, n := range notes {
-		if i > 0 {
-			b.WriteString("\n")
-		}
-		stage := msg.Text(msg.StageRound, named(v.StageTitleOf(n.Stage), n.Stage), n.Round)
-		fmt.Fprintln(b, indent+msg.Text(msg.NoteHeading, n.Number, stage))
-		writeIndented(b, n.Text, indent+strings.Repeat(" ", len(fmt.Sprintf("%d. ", n.Number))))
-	}
-}
-
-// writeIndented prints a text written by a person as it is, each line with
-// indent; empty lines stay empty.
-func writeIndented(b *strings.Builder, text, indent string) {
-	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-		line = strings.TrimRight(line, " \t\r")
-		if line == "" {
-			b.WriteString("\n")
-			continue
-		}
-		fmt.Fprintf(b, "%s%s\n", indent, line)
-	}
+		writeNotes(&p.Builder, out.Notes, n, "")
+	})
 }

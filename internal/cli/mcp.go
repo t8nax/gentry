@@ -143,8 +143,8 @@ type tool struct {
 }
 
 // newTool builds the tool of c. Its fields are the fields of --input of c, if
-// it takes it, and its flags and arguments; a field is described by the help
-// of its flag or argument.
+// it takes it, and its flags and arguments; a field is described by the
+// description of its flag or argument.
 func newTool(c command) (tool, error) {
 	t := tool{cmd: c}
 	in, err := inputSchema(c)
@@ -164,16 +164,9 @@ func newTool(c command) (tool, error) {
 			required = append(required, r.(string))
 		}
 	}
-	// A field is described by the lines of the help of its flag that do not
-	// name the command line, such as how to pass a long text with --input.
+	// A field is described by the description of its flag or argument; the
+	// text of the help about the command line is not the agent's.
 	describe := func(name, desc string) {
-		var lines []string
-		for _, l := range strings.Split(desc, "\n") {
-			if !strings.Contains(l, "--") && !strings.Contains(l, "gentry ") {
-				lines = append(lines, l)
-			}
-		}
-		desc = strings.Join(lines, "\n")
 		p, ok := props[name].(map[string]any)
 		if !ok {
 			p = map[string]any{"type": "string"}
@@ -335,7 +328,7 @@ func (t tool) call(raw json.RawMessage) (text string, failed bool) {
 		return msg.Text(msg.ErrToolFields, err.Error()), true
 	}
 	var out bytes.Buffer
-	env := Env{Stdout: &out, Stderr: &out, agent: true, oneOutput: true}
+	env := Env{Stdout: &out, Stderr: &out, agent: true}
 	if stdin != nil {
 		env.Stdin = bytes.NewReader(stdin)
 	}
@@ -395,3 +388,6 @@ func runMCP(args []string, env Env) int {
 	}
 	return contract.ExitOK
 }
+
+// isService reports whether c is a service command: it is no tool.
+func isService(c command) bool { return slices.Contains(serviceCommands, c.name) }

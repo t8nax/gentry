@@ -68,11 +68,12 @@ func readInput(cmd, value string, stdin io.Reader, names []string) (map[string]s
 func readFields(cmd, value string, stdin io.Reader, fields []field) (map[string]any, *failure) {
 	refuse := func(cause, field string) (map[string]any, *failure) {
 		f := failure{
-			exit:    contract.ExitUsage,
-			code:    contract.CodeInputInvalid,
-			message: msg.Text(msg.ErrInputInvalid, cause),
-			hint:    msg.Text(msg.HintCommandHelp, cmd),
-			details: map[string]any{"input": value},
+			exit:         contract.ExitUsage,
+			code:         contract.CodeInputInvalid,
+			message:      msg.Text(msg.ErrInputInvalid, cause),
+			agentMessage: msg.Text(msg.ErrToolFields, cause),
+			hints:        []hint{helpHint(msg.HintCommandHelp, cmd)},
+			details:      map[string]any{"input": value},
 		}
 		if field != "" {
 			f.details["field"] = field
@@ -168,7 +169,7 @@ func commandFields(cmd string, input *stringFlag, flags map[string]*stringFlag, 
 				exit:    contract.ExitUsage,
 				code:    contract.CodeConflictingFlags,
 				message: msg.Text(msg.ErrInputWithArgs),
-				hint:    msg.Text(msg.HintCommandHelp, cmd),
+				hints:   []hint{helpHint(msg.HintCommandHelp, cmd)},
 				details: map[string]any{"command": cmd, "flags": []string{"--input"}, "args": args},
 			}
 			return nil, &f

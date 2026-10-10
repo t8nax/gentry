@@ -28,7 +28,6 @@ type eventLine struct {
 // store is created.
 func runEvents(args []string, env Env) int {
 	f := newFlags("events")
-	f.Bool("json")
 	after := f.String("after")
 	if code, done := f.parse(args, env); done {
 		return code
@@ -37,7 +36,7 @@ func runEvents(args []string, env Env) int {
 	if after.Set {
 		n, err := strconv.ParseInt(after.Value, 10, 64)
 		if err != nil || n < 0 {
-			return fail(env, flagValueInvalid("--after", after.Value, msg.Text(msg.ErrEventsAfter, after.Value), msg.Text(msg.HintEventsAfter)))
+			return fail(env, flagValueInvalid("--after", after.Value, msg.Text(msg.ErrEventsAfter, after.Value), hintOf(msg.HintEventsAfter)))
 		}
 		from = n
 	}

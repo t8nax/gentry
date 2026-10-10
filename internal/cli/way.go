@@ -61,7 +61,7 @@ func openWayTask(key *stringFlag, read bool) (wayTask, *failure) {
 		return wayTask{}, &f
 	}
 	return openTask(key.Value, key.Set, read, func(v string) failure {
-		return flagValueInvalid("--task", v, msg.Text(msg.ErrTaskKeyInvalid, v), msg.Text(msg.HintTaskKey))
+		return flagValueInvalid("--task", v, msg.Text(msg.ErrTaskKeyInvalid, v), hintOf(msg.HintTaskKey))
 	})
 }
 
@@ -73,7 +73,7 @@ func openArgTask(cmd string, args []string, read bool) (wayTask, *failure) {
 		key = args[0]
 	}
 	return openTask(key, len(args) > 0, read, func(v string) failure {
-		return invalidArgument(cmd, "task", v, msg.Text(msg.ErrTaskKeyInvalid, v), msg.Text(msg.HintTaskKey))
+		return invalidArgument(cmd, "task", v, msg.Text(msg.ErrTaskKeyInvalid, v), hintOf(msg.HintTaskKey))
 	})
 }
 
@@ -137,51 +137,28 @@ func (w wayTask) close() {
 	}
 }
 
-// hint returns a hint for the task: outside its worktree each command in it
-// names the task, as the commands of the group task do by their argument and
-// other commands by --task. A command that names the task already is left
-// as it is.
-func (w wayTask) hint(h string) string {
-	if w.here || h == "" {
-		return h
-	}
-	key := w.task.Key()
-	lines := strings.Split(h, "\n")
-	for i, l := range lines {
-		switch {
-		case !strings.Contains(l, "gentry "), strings.HasSuffix(l, "--help"), strings.Contains(l, " "+key):
-		default:
-			var ok bool
-			if lines[i], ok = withArg(l, key); !ok {
-				lines[i] = l + " --task " + key
-			}
-		}
-	}
-	return strings.Join(lines, "\n")
+// hints returns the hints hs for the task: outside its worktree each command
+// in them names the task, by its argument or by --task.
+func (w wayTask) hints(hs ...hint) []hint {
+	return taskHints(w.task.Key(), w.here, hs...)
 }
 
-// argCommands are the commands that name the task by their argument.
-var argCommands = []string{"gentry task show", "gentry task close", "gentry task cancel", "gentry task attempts"}
-
-// withArg names the task in a line of a hint with a command that takes it
-// by its argument, right after the command; ok is false if the line has no
-// such command.
-func withArg(line, key string) (string, bool) {
-	for _, c := range argCommands {
-		i := strings.Index(line, c)
-		if i < 0 {
-			continue
-		}
-		if rest := line[i+len(c):]; rest == "" || rest[0] == ' ' {
-			return line[:i+len(c)] + " " + key + rest, true
-		}
+// taskHints returns the hints hs for the task key: unless here, in its
+// worktree, each command in them names the task.
+func taskHints(key string, here bool, hs ...hint) []hint {
+	if here {
+		return hs
 	}
-	return line, false
+	out := make([]hint, len(hs))
+	for i, h := range hs {
+		out[i] = h.forTask(key)
+	}
+	return out
 }
 
 // fail prints a failure with its hint for the task.
 func (w wayTask) fail(env Env, f failure) int {
-	f.hint = w.hint(f.hint)
+	f.hints = w.hints(f.hints...)
 	return fail(env, f)
 }
 
@@ -211,23 +188,23 @@ func source(env Env) string {
 }
 
 // missingField is the refusal of a command for a required field not given.
-func missingField(cmd, field string, message, hint string) failure {
+func missingField(cmd, field string, message string, hints ...hint) failure {
 	return failure{
 		exit:    contract.ExitUsage,
 		code:    contract.CodeMissingField,
 		message: message,
-		hint:    hint,
+		hints:   hints,
 		details: map[string]any{"command": cmd, "field": field},
 	}
 }
 
 // fieldInvalid is the refusal of a command for a field it cannot accept.
-func fieldInvalid(field, reason, message, hint string) failure {
+func fieldInvalid(field, reason, message string, hints ...hint) failure {
 	return failure{
 		exit:    contract.ExitUsage,
 		code:    contract.CodeFieldInvalid,
 		message: message,
-		hint:    hint,
+		hints:   hints,
 		details: map[string]any{"field": field, "reason": reason},
 	}
 }
@@ -266,23 +243,23 @@ func wayFailure(cmd string, err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeScenarioFinished,
 			message: msg.Text(msg.ErrScenarioFinished, finished.Task),
-			hint:    msg.Text(msg.HintTaskClose),
+			hints:   []hint{hintOf(msg.HintTaskClose)},
 			details: map[string]any{"task": finished.Task},
 		}
 	case errors.As(err, &field) && field.Field == "to":
-		return missingField(cmd, "to", msg.Text(msg.ErrForkToMissing), msg.Text(msg.HintStageTransitions))
+		return missingField(cmd, "to", msg.Text(msg.ErrForkToMissing), hintOf(msg.HintStageTransitions))
 	case errors.As(err, &field):
 		k := msg.ErrReasonMissing
 		if field.Fork {
 			k = msg.ErrForkReasonMissing
 		}
-		return missingField(cmd, "reason", msg.Text(k), msg.Text(msg.HintCommandHelp, cmd))
+		return missingField(cmd, "reason", msg.Text(k), helpHint(msg.HintCommandHelp, cmd))
 	case errors.As(err, &transition):
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeTransitionNotFound,
 			message: msg.Text(msg.ErrTransitionNotFound, stageName(transition.Stage), transition.To),
-			hint:    msg.Text(msg.HintStageTransitions),
+			hints:   []hint{hintOf(msg.HintStageTransitions)},
 			details: map[string]any{"node": transition.Node, "to": transition.To, "transitions": transition.Transitions},
 		}
 	case errors.As(err, &limit):
@@ -291,7 +268,7 @@ func wayFailure(cmd string, err error) failure {
 			code:    contract.CodeReturnLimit,
 			message: msg.Text(msg.ErrReturnLimit, limit.To),
 			more:    msg.Text(msg.ReturnsLine, limit.Limit, limit.Limit) + "\n",
-			hint:    msg.Text(msg.HintOtherTransitions) + "\n" + msg.Text(msg.HintAllowReturn, limit.To),
+			hints:   []hint{hintOf(msg.HintOtherTransitions), hintOf(msg.HintAllowReturn).set("allow_return", limit.To)},
 			details: map[string]any{"node": limit.Node, "to": limit.To, "limit": limit.Limit, "allowed": limit.Allowed},
 		}
 	case errors.As(err, &noReturn):
@@ -299,7 +276,7 @@ func wayFailure(cmd string, err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeReturnNotFound,
 			message: msg.Text(msg.ErrReturnNotFound, stageName(noReturn.Stage), noReturn.To),
-			hint:    msg.Text(msg.HintStageTransitions),
+			hints:   []hint{hintOf(msg.HintStageTransitions)},
 			details: map[string]any{"node": noReturn.Node, "to": noReturn.To, "returns": noReturn.Returns},
 		}
 	case errors.As(err, &empty):
@@ -307,7 +284,7 @@ func wayFailure(cmd string, err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeStepsEmpty,
 			message: msg.Text(msg.ErrStepsEmpty, stageName(empty.Stage)),
-			hint:    msg.Text(msg.HintStepAdd),
+			hints:   []hint{hintOf(msg.HintStepAdd)},
 			details: map[string]any{"node": empty.Node, "stage": empty.Stage.ID},
 		}
 	case errors.As(err, &open):
@@ -323,7 +300,7 @@ func wayFailure(cmd string, err error) failure {
 			code:    contract.CodeStepsOpen,
 			message: msg.Text(msg.ErrStepsOpen),
 			more:    more.String(),
-			hint:    msg.Text(msg.HintStepsOpen),
+			hints:   []hint{hintOf(msg.HintStepDone), hintOf(msg.HintStepDrop)},
 			details: map[string]any{"node": open.Node, "steps": stepNumbers(open.Steps)},
 		}
 	case errors.As(err, &noStep):
@@ -331,7 +308,7 @@ func wayFailure(cmd string, err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeStepNotFound,
 			message: msg.Text(msg.ErrStepNotFound, noStep.Step),
-			hint:    msg.Text(msg.HintSteps),
+			hints:   []hint{hintOf(msg.HintSteps)},
 			details: map[string]any{"step": noStep.Step},
 		}
 	case errors.As(err, &closed):
@@ -343,7 +320,7 @@ func wayFailure(cmd string, err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeStepClosed,
 			message: msg.Text(k, closed.Step),
-			hint:    msg.Text(msg.HintSteps),
+			hints:   []hint{hintOf(msg.HintSteps)},
 			details: map[string]any{"step": closed.Step, "state": closed.State},
 		}
 	case errors.As(err, &noArtifact):
@@ -351,13 +328,13 @@ func wayFailure(cmd string, err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeArtifactNotFound,
 			message: msg.Text(msg.ErrArtifactNotFound, noArtifact.Name),
-			hint:    msg.Text(msg.HintArtifactSave, noArtifact.Name),
+			hints:   []hint{hintOf(msg.HintArtifactSave).set("name", noArtifact.Name)},
 			details: map[string]any{"artifact": noArtifact.Name},
 		}
 	case errors.As(err, &file) && file.Reason == task.FileTooLarge:
-		return fieldInvalid("file", file.Reason, msg.Text(msg.ErrArtifactFileTooLarge, file.Path), msg.Text(msg.HintArtifactLink))
+		return fieldInvalid("file", file.Reason, msg.Text(msg.ErrArtifactFileTooLarge, file.Path), hintOf(msg.HintArtifactLink))
 	case errors.As(err, &file):
-		return fieldInvalid("file", file.Reason, msg.Text(msg.ErrArtifactFileNotFound, file.Path), msg.Text(msg.HintArtifactFile))
+		return fieldInvalid("file", file.Reason, msg.Text(msg.ErrArtifactFileNotFound, file.Path), hintOf(msg.HintArtifactFile))
 	}
 	var se *state.UnavailableError
 	var ne *state.NewerError
@@ -386,12 +363,4 @@ func stageRound(title, stage string, round int, finished bool) string {
 		return named(title, stage)
 	}
 	return msg.Text(msg.StageRound, named(title, stage), round)
-}
-
-// progressText is the progress of a task: 4 из 5, or 2 из 4–5 ahead of a fork.
-func progressText(p task.Progress) string {
-	if p.Min == p.Max {
-		return msg.Text(msg.ProgressValue, p.Passed, p.Max)
-	}
-	return msg.Text(msg.ProgressRange, p.Passed, p.Min, p.Max)
 }

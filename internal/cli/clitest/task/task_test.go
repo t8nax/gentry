@@ -29,7 +29,7 @@ func TestTaskTakeText(t *testing.T) {
 		msg.Text(msg.TaskSource, "оператором"),
 		msg.Text(msg.TaskWorktree, fix),
 		"",
-		msg.Text(msg.HintTaskShowKey, "SHOP-1"),
+		cli.HintFor(msg.HintTaskShow, "task", "SHOP-1"),
 	}, "\n") + "\n"
 	if code != contract.ExitOK || stderr != "" || stdout != want {
 		t.Fatalf("exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
@@ -62,7 +62,7 @@ func TestTaskTakeText(t *testing.T) {
 	}
 	// The repeat is refused: the worktree holds the task.
 	code, _, stderr = clitest.Run(clitest.TakeArgs()...)
-	want = msg.Text(msg.ErrWorktreeBusy, "SHOP-1", fix) + "\n\n" + msg.Text(msg.HintTaskShowKey, "SHOP-1") + "\n"
+	want = msg.Text(msg.ErrWorktreeBusy, "SHOP-1", fix) + "\n\n" + cli.HintFor(msg.HintTaskShow, "task", "SHOP-1") + "\n"
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("repeat: exit code %d, stderr %q, want %q", code, stderr, want)
 	}
@@ -73,7 +73,7 @@ func TestTaskTakeText(t *testing.T) {
 	clitest.WriteFiles(t, filepath.Dir(input), map[string]string{"task.json": `{"scenario":"bug","title":"Двойное списание","statement":"Первая строка.\n\nТретья строка."}`})
 	code, stdout, _ = clitest.Run("task", "take", "--input", input)
 	if code != contract.ExitOK || !strings.HasPrefix(stdout, msg.Text(msg.TaskTaken, "SHOP-2")+"\n") ||
-		!strings.HasSuffix(stdout, "\n\n"+msg.Text(msg.HintTaskShow)+"\n") {
+		!strings.HasSuffix(stdout, "\n\n"+cli.HintText(msg.HintTaskShow)+"\n") {
 		t.Errorf("take from a file: exit code %d, output:\n%s", code, stdout)
 	}
 	t.Chdir(filepath.Dir(shop))
@@ -90,7 +90,7 @@ func TestTaskTakeText(t *testing.T) {
 		!strings.HasSuffix(stdout, "\n\nПосмотреть постановку: gentry task show SHOP-2 --statement\n") {
 		t.Errorf("task show shop-2:\n%s", stdout)
 	}
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--path", "--statement"), "", msg.Text(msg.HintCommandHelp, "task show")),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--path", "--statement"), "", cli.HintText(msg.HintCommandHelp, "task show")),
 		"task", "show", "shop-2", "--statement", "--path")
 
 	// Outside a project the list has the project column.
@@ -220,7 +220,7 @@ func TestTaskTakeRefusals(t *testing.T) {
 		return p
 	}
 	long := strings.Repeat("я", 81)
-	help := msg.Text(msg.HintCommandHelp, "task take")
+	help := cli.HintText(msg.HintCommandHelp, "task take")
 	tests := []struct {
 		name   string
 		args   []string
@@ -229,7 +229,7 @@ func TestTaskTakeRefusals(t *testing.T) {
 		stderr string
 	}{
 		{"no scenario", []string{"task", "take", "--title", "Т", "--statement", "С"}, contract.ExitUsage, contract.CodeMissingField,
-			msg.Text(msg.ErrScenarioMissing) + "\n\n" + msg.Text(msg.HintFlowScenarios)},
+			msg.Text(msg.ErrScenarioMissing) + "\n\n" + cli.HintText(msg.HintFlowScenarios)},
 		{"no title", []string{"task", "take", "--scenario", "feature", "--statement", "С"}, contract.ExitUsage, contract.CodeMissingField,
 			msg.Text(msg.ErrTitleMissing) + "\n\n" + help},
 		{"no statement", []string{"task", "take", "--scenario", "feature", "--title", "Т"}, contract.ExitUsage, contract.CodeMissingField,
@@ -251,9 +251,9 @@ func TestTaskTakeRefusals(t *testing.T) {
 		{"not a string", []string{"task", "take", "--input", input(`{"scenario":"feature","title":5}`)}, contract.ExitUsage, contract.CodeInputInvalid,
 			msg.Text(msg.ErrInputInvalid, "поле «title» должно быть строкой") + "\n\n" + help},
 		{"unknown scenario", []string{"task", "take", "--scenario", "epic", "--title", "Т", "--statement", "С"}, contract.ExitError, contract.CodeFlowObjectNotFound,
-			msg.Text(msg.ErrFlowObjectNotFound, "shop", "сценария", "epic") + "\n\n" + msg.Text(msg.HintFlowObjects)},
+			msg.Text(msg.ErrFlowObjectNotFound, "shop", "сценария", "epic") + "\n\n" + cli.HintText(msg.HintFlowObjects)},
 		{"not pooled", clitest.TakeArgs("--worktree", root), contract.ExitError, contract.CodeWorktreeNotPooled,
-			msg.Text(msg.ErrWorktreeNotPooled, root) + "\n\n" + msg.Text(msg.HintWorktreeAdd)},
+			msg.Text(msg.ErrWorktreeNotPooled, root) + "\n\n" + cli.HintText(msg.HintWorktreeAdd)},
 	}
 	for _, tt := range tests {
 		code, stdout, stderr := clitest.Run(tt.args...)
@@ -310,9 +310,9 @@ func TestTaskShowRefusals(t *testing.T) {
 		stderr string
 	}{
 		{[]string{"task", "show"}, contract.ExitError, contract.CodeTaskUndetermined,
-			msg.Text(msg.ErrTaskUndetermined, root) + "\n\n" + msg.Text(msg.HintTaskList)},
+			msg.Text(msg.ErrTaskUndetermined, root) + "\n\n" + cli.HintText(msg.HintTaskList)},
 		{[]string{"task", "show", "SHOP-9"}, contract.ExitError, contract.CodeTaskNotFound,
-			msg.Text(msg.ErrTaskNotFound, "SHOP-9") + "\n\n" + msg.Text(msg.HintTaskListAll)},
+			msg.Text(msg.ErrTaskNotFound, "SHOP-9") + "\n\n" + cli.HintText(msg.HintTaskListAll)},
 		{[]string{"task", "show", "shop"}, contract.ExitUsage, contract.CodeInvalidArgument,
 			msg.Text(msg.ErrTaskKeyInvalid, "shop") + "\n\n" + msg.Text(msg.HintTaskKey)},
 	}
@@ -377,7 +377,7 @@ func TestTaskList(t *testing.T) {
 		t.Errorf("--all:\n%s", stdout)
 	}
 
-	help := msg.Text(msg.HintCommandHelp, "task list")
+	help := cli.HintText(msg.HintCommandHelp, "task list")
 	refusals := []struct {
 		args   []string
 		code   string

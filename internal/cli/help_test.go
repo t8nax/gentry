@@ -240,7 +240,7 @@ func TestHelpErrors(t *testing.T) {
 		args   []string
 		stderr string
 	}{
-		{[]string{"help", "foo"}, msg.Text(msg.ErrUnknownCommand, "foo") + "\n\n" + msg.Text(msg.HintUnknownCommand)},
+		{[]string{"help", "foo"}, msg.Text(msg.ErrUnknownCommand, "foo") + "\n\n" + HintText(msg.HintUnknownCommand)},
 		{[]string{"help", "setup", "claude"}, msg.Text(msg.ErrExtraArgs, "help", "claude")},
 		{[]string{"help", "--foo"}, msg.Text(msg.ErrUnknownFlag, "help", "--foo")},
 		// help has no --json, so it refuses the flag in text, not in JSON.

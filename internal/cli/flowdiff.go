@@ -17,7 +17,6 @@ import (
 func runFlowDiff(args []string, env Env) int {
 	f := newFlags("flow diff")
 	proj := f.String("project")
-	asJSON := f.Bool("json")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -57,34 +56,28 @@ func runFlowDiff(args []string, env Env) int {
 			details: map[string]any{"path": report},
 		})
 	}
-	if *asJSON {
-		out := contract.FlowDiffOutput{Project: places.Project, Applied: appliedJSON(res.Applied), Changes: []contract.FlowChange{}, Report: report, Sync: syncJSON(s, synced)}
-		for _, c := range res.Changes {
-			cc := contract.FlowChange{
-				Object: contract.FlowDiffOutputChangesElemObject(c.Object),
-				Change: contract.FlowDiffOutputChangesElemChange(c.Change),
-			}
-			if c.ID != "" {
-				id := c.ID
-				cc.Id = &id
-			}
-			out.Changes = append(out.Changes, cc)
+	out := contract.FlowDiffOutput{Project: places.Project, Applied: appliedJSON(res.Applied), Changes: []contract.FlowChange{}, Report: report, Sync: syncJSON(s, synced)}
+	for _, c := range res.Changes {
+		cc := contract.FlowChange{
+			Object: contract.FlowDiffOutputChangesElemObject(c.Object),
+			Change: contract.FlowDiffOutputChangesElemChange(c.Change),
 		}
-		if lib := res.Library; lib != nil {
-			out.Library = &contract.FlowDiffOutputLibrary{Applied: appliedJSON(lib.Applied), Changes: []contract.FlowDiffLibraryChange{}}
-			for _, c := range lib.Changes {
-				out.Library.Changes = append(out.Library.Changes, contract.FlowDiffLibraryChange{
-					Id: c.ID, Change: contract.FlowDiffOutputLibraryChangesElemChange(c.Change), Projects: c.Projects,
-				})
-			}
+		if c.ID != "" {
+			id := c.ID
+			cc.Id = &id
 		}
-		if err := writeJSON(env, out); err != nil {
-			return fail(env, internal(err))
-		}
-		return contract.ExitOK
+		out.Changes = append(out.Changes, cc)
 	}
-	fmt.Fprint(env.Stdout, d.summary(report))
-	return contract.ExitOK
+	if lib := res.Library; lib != nil {
+		out.Library = &contract.FlowDiffOutputLibrary{Applied: appliedJSON(lib.Applied), Changes: []contract.FlowDiffLibraryChange{}}
+		for _, c := range lib.Changes {
+			out.Library.Changes = append(out.Library.Changes, contract.FlowDiffLibraryChange{
+				Id: c.ID, Change: contract.FlowDiffOutputLibraryChangesElemChange(c.Change), Projects: c.Projects,
+			})
+		}
+	}
+	x := d.extra()
+	return emit(env, out, func(p *page, out contract.FlowDiffOutput) { diffText(p, out, x) })
 }
 
 // diffView shows the result of flow.DiffDraft in the words of the operator.
@@ -93,55 +86,81 @@ type diffView struct {
 	res     flow.DiffResult
 }
 
-// mark is the sign of a change in the summary.
-func mark(change string) string {
-	return map[string]string{flow.Added: "+", flow.Modified: "~", flow.Removed: "−"}[change]
+// diffExtra is what the summary of flow diff has apart from the contract:
+// whether the flow has a draft, the names of the stages changed, the lines of
+// the scenarios changed and the problems of the drafts.
+type diffExtra struct {
+	draft     bool
+	stages    map[string]string // the names of the stages changed, by identifier
+	scenarios []string
+	problems  []flow.Problem // of the flow draft and of the library draft
+	hints     []hint
 }
 
-// summary is the text of flow diff in the terminal: blocks separated by an
-// empty line, the hints last.
-func (d diffView) summary(report string) string {
-	res := d.res
-	var blocks []string
-	var b strings.Builder
-	fmt.Fprintln(&b, msg.Text(msg.FlowProject, d.project))
-	writeFlowApplied(&b, appliedJSON(res.Applied))
-	if res.Library != nil {
-		fmt.Fprintln(&b, msg.Text(msg.LibraryAppliedAt, appliedText(res.Library.Applied)))
-	}
-	fmt.Fprintln(&b, msg.Text(msg.DiffReportFile, report))
-	blocks = append(blocks, b.String())
-
-	if !res.Draft {
-		blocks = append(blocks, msg.Text(msg.DiffFlowUnchanged)+"\n")
-	}
-	var scenarios, stages, parts, agents []string
-	for _, c := range res.Changes {
-		switch c.Object {
-		case flow.ObjectCommon:
-			blocks = append(blocks, msg.Text(msg.FlowChange, msg.Text(msg.FlowObjCommon), changeWord(c))+"\n")
-		case flow.ObjectStage:
-			stages = append(stages, mark(c.Change)+" "+d.stageName(c))
-		case flow.ObjectPart:
-			parts = append(parts, mark(c.Change)+" "+c.ID)
-		case flow.ObjectAgent:
-			agents = append(agents, mark(c.Change)+" "+c.ID)
+// extra returns what the summary of d has apart from the contract.
+func (d diffView) extra() diffExtra {
+	x := diffExtra{draft: d.res.Draft, stages: map[string]string{}, problems: d.problems(), hints: d.hints()}
+	for _, c := range d.res.Changes {
+		if c.Object == flow.ObjectStage {
+			x.stages[c.ID] = d.stageName(c)
 		}
 	}
-	for _, sd := range res.Scenarios {
-		scenarios = append(scenarios, d.scenarioLines(sd)...)
+	for _, sd := range d.res.Scenarios {
+		x.scenarios = append(x.scenarios, d.scenarioLines(sd)...)
+	}
+	return x
+}
+
+// mark is the sign of a change in the summary.
+func mark[T ~string](change T) string {
+	return map[string]string{flow.Added: "+", flow.Modified: "~", flow.Removed: "−"}[string(change)]
+}
+
+// diffText is the text of flow diff in the terminal: blocks separated by an
+// empty line, the hints last.
+func diffText(p *page, out contract.FlowDiffOutput, x diffExtra) {
+	var blocks []string
+	var b strings.Builder
+	fmt.Fprintln(&b, msg.Text(msg.FlowProject, out.Project))
+	writeFlowApplied(&b, out.Applied)
+	if out.Library != nil {
+		fmt.Fprintln(&b, msg.Text(msg.LibraryAppliedAt, appliedText(out.Library.Applied)))
+	}
+	fmt.Fprintln(&b, msg.Text(msg.DiffReportFile, out.Report))
+	blocks = append(blocks, b.String())
+
+	if !x.draft {
+		blocks = append(blocks, msg.Text(msg.DiffFlowUnchanged)+"\n")
+	}
+	var stages, parts, agents []string
+	for _, c := range out.Changes {
+		id := ""
+		if c.Id != nil {
+			id = *c.Id
+		}
+		switch string(c.Object) {
+		case flow.ObjectCommon:
+			blocks = append(blocks, msg.Text(msg.FlowChange, msg.Text(msg.FlowObjCommon),
+				changeWord(flow.Change{Object: flow.ObjectCommon, Change: string(c.Change)}))+"\n")
+		case flow.ObjectStage:
+			stages = append(stages, mark(c.Change)+" "+x.stages[id])
+		case flow.ObjectPart:
+			parts = append(parts, mark(c.Change)+" "+id)
+		case flow.ObjectAgent:
+			agents = append(agents, mark(c.Change)+" "+id)
+		}
 	}
 	var library []string
-	if res.Library != nil {
-		for _, c := range res.Library.Changes {
-			library = append(library, mark(c.Change)+" "+msg.Text(msg.DiffItem, c.ID, usedBy(c.Projects)))
+	if out.Library != nil {
+		for _, c := range out.Library.Changes {
+			library = append(library, mark(c.Change)+" "+msg.Text(msg.DiffItem, c.Id, usedBy(c.Projects)))
 		}
 	}
 	for _, sec := range []struct {
 		heading msg.Key
 		lines   []string
 	}{
-		{msg.DiffScenarios, scenarios}, {msg.DiffStages, stages}, {msg.DiffParts, parts},
+		{msg.DiffScenarios, x.scenarios}, {msg.DiffStages, stages}, {msg.DiffParts, parts},
 		{msg.DiffAgents, agents}, {msg.DiffLibraryAgents, library},
 	} {
 		if len(sec.lines) == 0 {
@@ -151,16 +170,31 @@ func (d diffView) summary(report string) string {
 		writeList(&sb, msg.Text(sec.heading), sec.lines)
 		blocks = append(blocks, sb.String())
 	}
-	if problems := d.problems(); len(problems) > 0 {
+	if len(x.problems) > 0 {
 		var sb strings.Builder
-		writeProblems(&sb, problems)
+		writeProblems(&sb, x.problems)
 		blocks = append(blocks, sb.String())
 	}
 	blocks = append(blocks, msg.Text(msg.DiffLegend)+"\n")
-	if hints := d.hints(); len(hints) > 0 {
-		blocks = append(blocks, strings.Join(hints, "\n")+"\n")
+	p.WriteString(strings.Join(blocks, "\n"))
+	p.hints(x.hints...)
+}
+
+// hints say what to do next: apply the drafts without problems, look at the
+// flow draft with them.
+func (d diffView) hints() []hint {
+	var out []hint
+	if lib := d.res.Library; lib != nil && len(lib.Problems) == 0 {
+		out = append(out, hintOf(msg.HintDiffLibraryApply))
 	}
-	return strings.Join(blocks, "\n")
+	switch {
+	case !d.res.Draft:
+	case len(d.res.Problems) > 0:
+		out = append(out, hintOf(msg.HintFlowShowDraft))
+	default:
+		out = append(out, hintOf(msg.HintFlowApply))
+	}
+	return out
 }
 
 // problems are the problems of the flow draft and of the library draft.
@@ -168,23 +202,6 @@ func (d diffView) problems() []flow.Problem {
 	out := append([]flow.Problem{}, d.res.Problems...)
 	if d.res.Library != nil {
 		out = append(out, d.res.Library.Problems...)
-	}
-	return out
-}
-
-// hints say what to do next: apply the drafts without problems, look at the
-// flow draft with them.
-func (d diffView) hints() []string {
-	var out []string
-	if lib := d.res.Library; lib != nil && len(lib.Problems) == 0 {
-		out = append(out, msg.Text(msg.HintDiffLibraryApply))
-	}
-	switch {
-	case !d.res.Draft:
-	case len(d.res.Problems) > 0:
-		out = append(out, msg.Text(msg.HintFlowShowDraft))
-	default:
-		out = append(out, msg.Text(msg.HintFlowApply))
 	}
 	return out
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/caller"
+	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
@@ -237,7 +238,7 @@ func TestTaskCancel(t *testing.T) {
 	if !strings.Contains(out, `"reason":"Первая строка.\nВторая строка."`) || !strings.Contains(out, `"worktree":`+clitest.JSONString(fix)+`}`) {
 		t.Errorf("task cancel --json: %s", out)
 	}
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--reason", "--input"), "", msg.Text(msg.HintCommandHelp, "task cancel")),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--reason", "--input"), "", cli.HintText(msg.HintCommandHelp, "task cancel")),
 		"task", "cancel", "SHOP-3", "--reason", "Причина", "--input", input)
 }
 
@@ -435,13 +436,13 @@ func TestTaskTakeAgainRefusals(t *testing.T) {
 	if code, c := clitest.ErrorCode(t, "task", "take", "--task", "SHOP-3", "--scenario", "feature"); code != contract.ExitError || c != contract.CodeTaskInWork {
 		t.Errorf("take a task in work: exit code %d, code %s", code, c)
 	}
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--task", "--title"), "", msg.Text(msg.HintCommandHelp, "task take")),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--task", "--title"), "", cli.HintText(msg.HintCommandHelp, "task take")),
 		"task", "take", "--task", "SHOP-2", "--scenario", "feature", "--title", "Скидка")
 	input := filepath.Join(t.TempDir(), "task.json")
 	if err := os.WriteFile(input, []byte(`{"task":"SHOP-2","scenario":"feature","statement":"Текст."}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--task", "--statement"), "", msg.Text(msg.HintCommandHelp, "task take")),
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--task", "--statement"), "", cli.HintText(msg.HintCommandHelp, "task take")),
 		"task", "take", "--input", input)
 	if code, c := clitest.ErrorCode(t, "task", "take", "--task", "SHOP-2"); code != contract.ExitUsage || c != contract.CodeMissingField {
 		t.Errorf("take without a scenario: exit code %d, code %s", code, c)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
@@ -90,7 +91,7 @@ func TestProjectAddJSON(t *testing.T) {
 
 func TestProjectListEmpty(t *testing.T) {
 	root := clitest.ShopDir(t)
-	if _, stdout, _ := clitest.Run("project", "list"); stdout != msg.Text(msg.ProjectsNone)+"\n" {
+	if _, stdout, _ := clitest.Run("project", "list"); stdout != msg.Text(msg.ProjectsNone)+"\n\n"+cli.HintText(msg.HintProjectAdd)+"\n" {
 		t.Errorf("got %q", stdout)
 	}
 	if _, stdout, _ := clitest.Run("project", "list", "--json"); stdout != `{"projects":[]}`+"\n" {
@@ -159,7 +160,7 @@ func TestProjectAddRefusalText(t *testing.T) {
 		want string
 	}{
 		{[]string{"shop"}, msg.Text(msg.ErrKnowledgeFlagMissing) + "\n\n" + msg.Text(msg.HintKnowledgeFlag)},
-		{[]string{"--knowledge", "../new"}, msg.Text(msg.ErrProjectIDMissing) + "\n\n" + msg.Text(msg.HintProjectIDMissing)},
+		{[]string{"--knowledge", "../new"}, msg.Text(msg.ErrProjectIDMissing) + "\n\n" + cli.HintText(msg.HintProjectIDMissing)},
 		{[]string{"Shop", "--knowledge", "../k"}, msg.Text(msg.ErrProjectIDInvalid, "Shop") + "\n\n" + msg.Text(msg.HintProjectIDInvalid)},
 		{[]string{"shop", "--knowledge", "../k", "--prefix", "s"}, msg.Text(msg.ErrPrefixInvalid, "s") + "\n\n" + msg.Text(msg.HintPrefixInvalid)},
 	}

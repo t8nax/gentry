@@ -393,7 +393,7 @@ flowchart TD
 - Добавлен ` + msg.Text(msg.DiffTransition, "Безопасность", "Слияние") + `.
 - Удалён ` + msg.Text(msg.DiffTransition, "Ревью", "Слияние") + `.
 
-## Этап «Ревью» (review) — ` + modified + `
+` + msg.Text(msg.ReportHeadingChange, "Этап «Ревью» (review)", modified) + `
 
 ` + msg.Text(msg.FlowScenarios, "bug, feature") + `
 
@@ -406,7 +406,7 @@ flowchart TD
 +или отклонено с обоснованием.
 ` + "```" + `
 
-## Этап «Безопасность» (security) — ` + added + `
+` + msg.Text(msg.ReportHeadingChange, "Этап «Безопасность» (security)", added) + `
 
 ` + lines(msg.Text(msg.FlowExit, "проверка безопасности пройдена")+"  ", msg.Text(msg.FlowExecutor, "auditor")+"  ",
 		msg.Text(msg.FlowParts, noValue)+"  ", msg.Text(msg.FlowScenarios, "feature")) + `
@@ -414,7 +414,7 @@ flowchart TD
 
 > Проверить изменения на уязвимости.
 
-## ` + msg.Text(msg.FlowObjAgent, "auditor") + ` — ` + added + `
+` + msg.Text(msg.ReportHeadingChange, msg.Text(msg.FlowObjAgent, "auditor"), added) + `
 
 ` + lines(msg.Text(msg.FlowPurpose, "проверка безопасности изменений")+"  ",
 		msg.Text(msg.FlowCapabilities, "read, search")+"  ", msg.Text(msg.FlowStages, "security")) + `
@@ -454,11 +454,11 @@ func TestDiffReportParts(t *testing.T) {
 		parts []string
 	}{
 		{"scenarios added and removed", diffIncident(t), []string{
-			"\n## " + msg.Text(msg.ReportObjScenario, "Баг", "bug") + " — " + msg.Text(msg.FlowChangeRemoved) + "\n\n```mermaid\n",
-			"\n## " + msg.Text(msg.ReportObjScenario, "Инцидент", "incident") + " — " + msg.Text(msg.FlowChangeAdded) + "\n\n```mermaid\n",
+			"\n" + msg.Text(msg.ReportHeadingChange, msg.Text(msg.ReportObjScenario, "Баг", "bug"), msg.Text(msg.FlowChangeRemoved)) + "\n\n```mermaid\n",
+			"\n" + msg.Text(msg.ReportHeadingChange, msg.Text(msg.ReportObjScenario, "Инцидент", "incident"), msg.Text(msg.FlowChangeAdded)) + "\n\n```mermaid\n",
 			"    n2 -.->|\"ошибка воспроизводится\"| n3\n",
-			"\n## " + msg.Text(msg.ReportObjStage, "План бага", "plan-bug") + " — " + msg.Text(msg.FlowChangeRemoved) + "\n\n" + msg.Text(msg.FlowExit, ""),
-			"\n## " + msg.Text(msg.FlowObjPart, "plan-format") + " — " + msg.Text(msg.FlowChangeModified) + "\n\n" + msg.Text(msg.FlowStages, "plan-feature") + "\n\n" + msg.Text(msg.FlowText) +
+			"\n" + msg.Text(msg.ReportHeadingChange, msg.Text(msg.ReportObjStage, "План бага", "plan-bug"), msg.Text(msg.FlowChangeRemoved)) + "\n\n" + msg.Text(msg.FlowExit, ""),
+			"\n" + msg.Text(msg.ReportHeadingChange, msg.Text(msg.FlowObjPart, "plan-format"), msg.Text(msg.FlowChangeModified)) + "\n\n" + msg.Text(msg.FlowStages, "plan-feature") + "\n\n" + msg.Text(msg.FlowText) +
 				"\n\n```diff\n ## План\n Шаги, проверка и риски.\n+Срок.\n```\n",
 		}},
 		{"draft with problems", diffProblems(t), []string{

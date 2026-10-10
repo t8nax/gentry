@@ -338,10 +338,10 @@ func TestNoteText(t *testing.T) {
 			note(2, "merge", "merge", "Первая строка.\nВторая строка."),
 		}}, shopNames())
 	}, lines(
-		"1. "+round("Реализация", "implementation", 1)+":",
+		msg.Text(msg.NoteHeading, 1, round("Реализация", "implementation", 1)),
 		"   На ревью проверить, что возврат по СБП не задет",
 		"",
-		"2. "+round("Слияние", "merge", 1)+":",
+		msg.Text(msg.NoteHeading, 2, round("Слияние", "merge", 1)),
 		"   Первая строка.",
 		"   Вторая строка.",
 	), "")

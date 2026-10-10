@@ -103,10 +103,14 @@ func inUTC(t *testing.T) {
 	t.Cleanup(func() { time.Local = local })
 }
 
+// titled names a scenario or a stage by its title and identifier, from the
+// catalog: «Фича (feature)».
+func titled(title, id string) string { return msg.Text(msg.TaskNamed, title, id) }
+
 // round names a stage by its title and identifier with the round of its
 // pass, from the catalog: «Ветка (branch), круг 1».
 func round(title, stage string, n int) string {
-	return msg.Text(msg.StageRound, msg.Text(msg.TaskNamed, title, stage), n)
+	return msg.Text(msg.StageRound, titled(title, stage), n)
 }
 
 // progress is passed stages of total, from the catalog: «0 из 5».

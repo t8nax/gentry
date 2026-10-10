@@ -24,7 +24,7 @@ func TestOperatorRecordText(t *testing.T) {
 			Node: "review", To: "implementation", Returns: 1, MaxReturns: 2, AllowedReturns: 1}}, shopNames())
 	}, lines(
 		"Решение оператора записано.",
-		"Разрешён возврат: Реализация (implementation)",
+		"Разрешён возврат: "+titled("Реализация", "implementation"),
 		msg.Text(msg.ReturnsLine, 1, 2),
 	), "")
 }

@@ -201,7 +201,7 @@ func TestAttemptText(t *testing.T) {
 		"",
 		msg.Text(msg.TaskProject, "shop"),
 		msg.Text(msg.TaskState, msg.Text(msg.TaskStateCancelled)),
-		msg.Text(msg.TaskScenario, "Фича (feature)"),
+		msg.Text(msg.TaskScenario, titled("Фича", "feature")),
 		msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
 		msg.Text(msg.ProgressLine, progress(1, 5)),
 		msg.Text(msg.TaskTakenAt, "2026-10-09 12:30"),
@@ -227,7 +227,7 @@ func TestAttemptText(t *testing.T) {
 	) + lines(
 		"",
 		"Заметки:",
-		"  1. "+round("Ветка", "branch", 1)+":",
+		"  "+msg.Text(msg.NoteHeading, 1, round("Ветка", "branch", 1)),
 		"     Промокоды в таблице promo.",
 		"",
 		msg.Text(msg.DecisionsHeading),

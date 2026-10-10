@@ -100,7 +100,9 @@ var noValue = msg.Text(msg.ValueNone)
 
 // TestValueText states the short values that the texts print in tables and
 // lines «Поле: значение»: the states, the outcomes, the kinds and the sources,
-// the round of a stage and the progress.
+// the round of a stage and the progress; and the templates without words: the
+// name with the identifier, the heading of a note and of a change in the file
+// of changes.
 // The other tests take them from the catalog, so a change of a value changes
 // this test alone.
 func TestValueText(t *testing.T) {
@@ -136,6 +138,9 @@ func TestValueText(t *testing.T) {
 		{msg.SchemaOperator, nil, "оператор"},
 		{msg.StageRound, []any{"Ветка (branch)", 1}, "Ветка (branch), круг 1"},
 		{msg.ProgressValue, []any{0, 5}, "0 из 5"},
+		{msg.TaskNamed, []any{"Фича", "feature"}, "Фича (feature)"},
+		{msg.NoteHeading, []any{1, "Ветка (branch), круг 1"}, "1. Ветка (branch), круг 1:"},
+		{msg.ReportHeadingChange, []any{"Этап «Ревью» (review)", "изменён"}, "## Этап «Ревью» (review) — изменён"},
 	} {
 		if got := msg.Text(c.k, c.args...); got != c.want {
 			t.Errorf("%s: %q, want %q", c.k, got, c.want)

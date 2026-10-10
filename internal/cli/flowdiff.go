@@ -56,7 +56,16 @@ func runFlowDiff(args []string, env Env) int {
 			details: map[string]any{"path": report},
 		})
 	}
-	out := contract.FlowDiffOutput{Project: places.Project, Applied: appliedJSON(res.Applied), Changes: []contract.FlowChange{}, Report: report, Sync: syncJSON(s, synced)}
+	out := flowDiffOutput(places.Project, res, report, syncJSON(s, synced))
+	x := d.extra()
+	return emit(env, out, func(p *page, out contract.FlowDiffOutput) { diffText(p, out, x) })
+}
+
+// flowDiffOutput returns the result res of flow diff of project as the
+// contract has it, with the file of changes report and what the
+// synchronization did.
+func flowDiffOutput(project string, res flow.DiffResult, report string, sync *contract.Sync) contract.FlowDiffOutput {
+	out := contract.FlowDiffOutput{Project: project, Applied: appliedJSON(res.Applied), Changes: []contract.FlowChange{}, Report: report, Sync: sync}
 	for _, c := range res.Changes {
 		cc := contract.FlowChange{
 			Object: contract.FlowDiffOutputChangesElemObject(c.Object),
@@ -76,8 +85,7 @@ func runFlowDiff(args []string, env Env) int {
 			})
 		}
 	}
-	x := d.extra()
-	return emit(env, out, func(p *page, out contract.FlowDiffOutput) { diffText(p, out, x) })
+	return out
 }
 
 // diffView shows the result of flow.DiffDraft in the words of the operator.

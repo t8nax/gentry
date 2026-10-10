@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/process"
@@ -13,107 +12,52 @@ import (
 // shopReport is the file of changes of the shop as the texts name it.
 const shopReport = "/work/process/shop/changes.md"
 
-// shopDiff is what flow diff finds in the shop: the flow of the flow testdata
-// active, its draft with the changes draft and the library draft with the
-// changes library, as flow.DiffDraft compares them. applied tells that the
-// flow is applied; without changes of the flow it has no draft.
-func shopDiff(t *testing.T, applied bool, draft, library map[string]string) flow.DiffResult {
+// The results of flow diff of the tests are made by hand: the flows are read
+// from the files of the flow testdata, the changes of their objects are
+// listed, the scenarios are compared by flow.DiffScenario.
+
+// readFlow reads the files of a flow of the shop with the library of the flow
+// testdata and, if not nil, its draft draftLibrary.
+func readFlow(t *testing.T, files, draftLibrary process.Files) *flow.Result {
 	t.Helper()
-	active, lib := testdataFiles(t, "shop/flow", nil), testdataFiles(t, "agents", nil)
-	if !applied {
-		active = process.Files{}
-	}
-	old, err := flow.Read(active, lib, nil)
+	res, err := flow.Read(files, testdataFiles(t, "agents", nil), draftLibrary)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := flow.DiffResult{Old: old.Read, New: old.Read}
-	if applied {
-		out.Applied = &process.Applied{Commit: "c0ffee", Time: shopTime}
-	}
-	if draft != nil {
-		working := testdataFiles(t, "shop/flow", draft)
-		res, err := flow.Read(working, lib, testdataFiles(t, "agents", library))
-		if err != nil {
-			t.Fatal(err)
-		}
-		out.Draft, out.New, out.Problems = true, res.Read, res.Problems
-		out.Changes = flow.Diff(flow.Snapshot{Files: active}, flow.Snapshot{Files: res.Snapshot.Files})
-		stages := map[string]string{}
-		for _, c := range out.Changes {
-			if c.Object == flow.ObjectStage {
-				stages[c.ID] = c.Change
-			}
-		}
-		for _, c := range out.Changes {
-			if c.Object != flow.ObjectScenario {
-				continue
-			}
-			var before, after *flow.Scenario
-			if s, ok := out.Old.Scenario(c.ID); ok {
-				before = &s
-			}
-			if s, ok := out.New.Scenario(c.ID); ok {
-				after = &s
-			}
-			if before == nil && after == nil {
-				continue
-			}
-			d := flow.DiffScenario(before, after, stages)
-			d.Unreadable = res.Unreadable[c.ID]
-			out.Scenarios = append(out.Scenarios, d)
-		}
-	}
-	if library != nil {
-		working := testdataFiles(t, "agents", library)
-		in := func(f process.Files) flow.Snapshot {
-			s := flow.Snapshot{Files: map[string]string{}}
-			for p, text := range f {
-				s.Files["agents/"+p] = text
-			}
-			return s
-		}
-		before, after := flow.LibraryAgents(lib), flow.LibraryAgents(working)
-		lr := flow.LibraryDiffResult{Applied: &process.Applied{Commit: "c0ffee", Time: shopTime}}
-		for _, c := range flow.Diff(in(lib), in(working)) {
-			lc := flow.LibraryChange{ID: c.ID, Change: c.Change, Projects: []string{}}
-			if a, ok := before[c.ID]; ok {
-				lc.Old = &a
-			}
-			if a, ok := after[c.ID]; ok {
-				lc.New = &a
-			}
-			if len(out.New.Users(c.ID)) > 0 {
-				lc.Projects = append(lc.Projects, "shop")
-			}
-			lr.Changes = append(lr.Changes, lc)
-		}
-		out.Library = &lr
-	}
-	return out
+	return res
 }
 
-// diffOutput is the output of flow diff for the result res, as runFlowDiff
-// builds it.
-func diffOutput(res flow.DiffResult) contract.FlowDiffOutput {
-	out := contract.FlowDiffOutput{Project: "shop", Applied: appliedJSON(res.Applied), Changes: []contract.FlowChange{}, Report: shopReport}
-	for _, c := range res.Changes {
-		cc := contract.FlowChange{Object: contract.FlowDiffOutputChangesElemObject(c.Object), Change: contract.FlowDiffOutputChangesElemChange(c.Change)}
-		if c.ID != "" {
-			cc.Id = ptr(c.ID)
-		}
-		out.Changes = append(out.Changes, cc)
+// scenarioDiff is how scenario id differs between the flows old and cur,
+// with the changes of its stages; unreadable marks a scenario of the draft
+// with problems of its own.
+func scenarioDiff(old, cur *flow.Flow, id string, stages map[string]string, unreadable bool) flow.ScenarioDiff {
+	var before, after *flow.Scenario
+	if s, ok := old.Scenario(id); ok {
+		before = &s
 	}
-	if lib := res.Library; lib != nil {
-		out.Library = &contract.FlowDiffOutputLibrary{Applied: appliedJSON(lib.Applied), Changes: []contract.FlowDiffLibraryChange{}}
-		for _, c := range lib.Changes {
-			out.Library.Changes = append(out.Library.Changes, contract.FlowDiffLibraryChange{
-				Id: c.ID, Change: contract.FlowDiffOutputLibraryChangesElemChange(c.Change), Projects: c.Projects,
-			})
-		}
+	if s, ok := cur.Scenario(id); ok {
+		after = &s
 	}
-	return out
+	d := flow.DiffScenario(before, after, stages)
+	d.Unreadable = unreadable
+	return d
 }
+
+// libraryChange is the change of subagent id of the library from the files
+// old to cur; projects are those whose flows name it.
+func libraryChange(id, change string, old, cur process.Files, projects ...string) flow.LibraryChange {
+	c := flow.LibraryChange{ID: id, Change: change, Projects: append([]string{}, projects...)}
+	if a, ok := flow.LibraryAgents(old)[id]; ok {
+		c.Old = &a
+	}
+	if a, ok := flow.LibraryAgents(cur)[id]; ok {
+		c.New = &a
+	}
+	return c
+}
+
+// applied is the time a flow or the library was applied in the tests.
+var applied = &process.Applied{Commit: "c0ffee", Time: shopTime}
 
 // reviewerRuns is the change of the library of the example of the plan: the
 // reviewer runs the tests.
@@ -122,18 +66,67 @@ var reviewerRuns = map[string]string{
 	"reviewer.md":   "Проверить изменения задачи: поведение, тесты и тексты для оператора.\nЗапустить тесты проекта и приложить результат к замечаниям.\n",
 }
 
-// example is the change of the example of the plan: security, and a return
-// of the bug scenario allowed three times.
-func example(t *testing.T) map[string]string {
+// reviewerChanged is the library with reviewerRuns, the subagent named by
+// the projects given.
+func reviewerChanged(t *testing.T, projects ...string) *flow.LibraryDiffResult {
+	lib := testdataFiles(t, "agents", nil)
+	return &flow.LibraryDiffResult{Applied: applied, Changes: []flow.LibraryChange{
+		libraryChange("reviewer", flow.Modified, lib, testdataFiles(t, "agents", reviewerRuns), projects...),
+	}}
+}
+
+// change is a change of an object of the flow.
+func change(object, id, change string) flow.Change {
+	return flow.Change{Object: object, ID: id, Change: change}
+}
+
+// diffFromNothing is the draft of the whole flow of the shop, never applied.
+func diffFromNothing(t *testing.T) flow.DiffResult {
+	old, cur := readFlow(t, process.Files{}, nil), readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
+	stages := map[string]string{}
+	res := flow.DiffResult{Draft: true, Old: old.Read, New: cur.Read}
+	res.Changes = append(res.Changes, change(flow.ObjectScenario, "bug", flow.Added), change(flow.ObjectScenario, "feature", flow.Added))
+	for _, id := range []string{"branch", "implementation", "merge", "plan-bug", "plan-feature", "review"} {
+		res.Changes = append(res.Changes, change(flow.ObjectStage, id, flow.Added))
+		stages[id] = flow.Added
+	}
+	res.Changes = append(res.Changes, change(flow.ObjectPart, "plan-format", flow.Added), change(flow.ObjectPart, "review-checklist", flow.Added))
+	res.Scenarios = []flow.ScenarioDiff{
+		scenarioDiff(res.Old, res.New, "bug", stages, false),
+		scenarioDiff(res.Old, res.New, "feature", stages, false),
+	}
+	return res
+}
+
+// diffExample is the example of the plan: security, a return of the bug
+// scenario allowed three times and the reviewer of the library who runs the
+// tests.
+func diffExample(t *testing.T) flow.DiffResult {
 	changes := security(t)
 	bug := testdataFiles(t, "shop/flow", nil)["scenarios/bug.yaml"]
 	changes["scenarios/bug.yaml"] = strings.Replace(bug, "max_rounds: 2", "max_rounds: 3", 1)
-	return changes
+	old := readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
+	cur := readFlow(t, testdataFiles(t, "shop/flow", changes), testdataFiles(t, "agents", reviewerRuns))
+	stages := map[string]string{"review": flow.Modified, "security": flow.Added}
+	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read,
+		Changes: []flow.Change{
+			change(flow.ObjectScenario, "bug", flow.Modified), change(flow.ObjectScenario, "feature", flow.Modified),
+			change(flow.ObjectStage, "review", flow.Modified), change(flow.ObjectStage, "security", flow.Added),
+			change(flow.ObjectAgent, "auditor", flow.Added),
+		},
+		Scenarios: []flow.ScenarioDiff{
+			scenarioDiff(old.Read, cur.Read, "bug", stages, false),
+			scenarioDiff(old.Read, cur.Read, "feature", stages, false),
+		},
+		Library: reviewerChanged(t, "shop"),
+	}
 }
 
-func TestDiffText(t *testing.T) {
-	inUTC(t)
-	incident := map[string]string{
+// diffIncident is a draft that removes the bug scenario with its stage, adds
+// the incident scenario and changes a part.
+func diffIncident(t *testing.T) flow.DiffResult {
+	old := readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
+	cur := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
 		"scenarios/bug.yaml":   "",
 		"stages/plan-bug.yaml": "",
 		"stages/plan-bug.md":   "",
@@ -145,15 +138,59 @@ func TestDiffText(t *testing.T) {
 			"  plan: { stage: plan-feature, next: merge }\n" +
 			"  merge: { stage: merge, next: finish }\n",
 		"parts/plan-format.md": "## План\nШаги, проверка и риски.\nСрок.\n",
+	}), nil)
+	stages := map[string]string{"plan-bug": flow.Removed}
+	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read,
+		Changes: []flow.Change{
+			change(flow.ObjectScenario, "bug", flow.Removed), change(flow.ObjectScenario, "incident", flow.Added),
+			change(flow.ObjectStage, "plan-bug", flow.Removed), change(flow.ObjectPart, "plan-format", flow.Modified),
+		},
+		Scenarios: []flow.ScenarioDiff{
+			scenarioDiff(old.Read, cur.Read, "bug", stages, false),
+			scenarioDiff(old.Read, cur.Read, "incident", stages, false),
+		},
 	}
-	problems := map[string]string{
+}
+
+// diffProblems is a draft with problems: a scenario that is not YAML and a
+// stage without its exit.
+func diffProblems(t *testing.T) flow.DiffResult {
+	old := readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
+	cur := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
 		"stages/review.yaml": "title: Ревью\nexecutor: reviewer\n",
 		"scenarios/bug.yaml": "title: [\n",
+	}), nil)
+	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read, Problems: cur.Problems,
+		Changes: []flow.Change{change(flow.ObjectScenario, "bug", flow.Modified), change(flow.ObjectStage, "review", flow.Modified)},
+		Scenarios: []flow.ScenarioDiff{
+			scenarioDiff(old.Read, cur.Read, "bug", map[string]string{"review": flow.Modified}, cur.Unreadable["bug"]),
+		},
 	}
-	unused := map[string]string{
+}
+
+// diffLibrary is the draft of the library alone.
+func diffLibrary(t *testing.T) flow.DiffResult {
+	old := readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
+	return flow.DiffResult{Applied: applied, Old: old.Read, New: old.Read, Library: reviewerChanged(t, "shop")}
+}
+
+// diffUnused is the draft of the library with a subagent of the project of
+// the same name in the draft of the flow: the change of the library concerns
+// no project.
+func diffUnused(t *testing.T) flow.DiffResult {
+	old := readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
+	cur := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
 		"agents/reviewer.yaml": "purpose: ревью магазина\ncapabilities: [read]\n",
 		"agents/reviewer.md":   "Проверить изменения магазина.\n",
+	}), testdataFiles(t, "agents", reviewerRuns))
+	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read,
+		Changes: []flow.Change{change(flow.ObjectAgent, "reviewer", flow.Added)},
+		Library: reviewerChanged(t),
 	}
+}
+
+func TestDiffText(t *testing.T) {
+	inUTC(t)
 	head := func(applied, library bool) string {
 		h := msg.Text(msg.FlowProject, "shop") + "\n"
 		if applied {
@@ -173,7 +210,7 @@ func TestDiffText(t *testing.T) {
 		body       string
 		cli, agent []string // the hints
 	}{
-		{"from nothing", shopDiff(t, false, map[string]string{}, nil), head(false, false) + lines(
+		{"from nothing", diffFromNothing(t), head(false, false) + lines(
 			"Сценарии:",
 			"  + Баг: Ветка → План бага → Реализация → Ревью → Слияние",
 			"    + возврат «Ревью → Реализация»: если ревью выявило существенные замечания, до 2 раз",
@@ -195,7 +232,7 @@ func TestDiffText(t *testing.T) {
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
 			[]string{hintLineOf(msg.HintFlowApply, "flow_apply")}},
-		{"example of the plan", shopDiff(t, true, example(t), reviewerRuns), head(true, true) + lines(
+		{"example of the plan", diffExample(t), head(true, true) + lines(
 			msg.Text(msg.DiffScenarios),
 			"  Баг: Ветка → План бага → Реализация → ~ Ревью → Слияние",
 			"    ~ возврат «Ревью → Реализация»: до 3 раз вместо 2",
@@ -214,7 +251,7 @@ func TestDiffText(t *testing.T) {
 		) + legend,
 			[]string{hintLineOf(msg.HintDiffLibraryApply, "gentry library apply"), hintLineOf(msg.HintFlowApply, "gentry flow apply")},
 			[]string{hintLineOf(msg.HintDiffLibraryApply, "library_apply"), hintLineOf(msg.HintFlowApply, "flow_apply")}},
-		{"scenarios added and removed", shopDiff(t, true, incident, nil), head(true, false) + lines(
+		{"scenarios added and removed", diffIncident(t), head(true, false) + lines(
 			msg.Text(msg.DiffScenarios),
 			"  − Баг",
 			"  + Инцидент: Ветка → Реализация",
@@ -230,7 +267,7 @@ func TestDiffText(t *testing.T) {
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
 			[]string{hintLineOf(msg.HintFlowApply, "flow_apply")}},
-		{"draft with problems", shopDiff(t, true, problems, nil), head(true, false) + lines(
+		{"draft with problems", diffProblems(t), head(true, false) + lines(
 			msg.Text(msg.DiffScenarios),
 			"  bug: в сценарии есть ошибки",
 			"",
@@ -244,7 +281,7 @@ func TestDiffText(t *testing.T) {
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft")},
 			[]string{hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)")}},
-		{"library alone", shopDiff(t, true, nil, reviewerRuns), head(true, true) + lines(
+		{"library alone", diffLibrary(t), head(true, true) + lines(
 			"Флоу проекта не изменён.",
 			"",
 			msg.Text(msg.DiffLibraryAgents),
@@ -253,7 +290,7 @@ func TestDiffText(t *testing.T) {
 		) + legend,
 			[]string{hintLineOf(msg.HintDiffLibraryApply, "gentry library apply")},
 			[]string{hintLineOf(msg.HintDiffLibraryApply, "library_apply")}},
-		{"library unused", shopDiff(t, true, unused, reviewerRuns), head(true, true) + lines(
+		{"library unused", diffUnused(t), head(true, true) + lines(
 			msg.Text(msg.DiffAgents),
 			"  + reviewer",
 			"",
@@ -267,14 +304,14 @@ func TestDiffText(t *testing.T) {
 	for _, tt := range tests {
 		d := diffView{project: "shop", res: tt.res}
 		x := d.extra()
-		wantText(t, tt.name, func(p *page) { diffText(p, diffOutput(tt.res), x) }, tt.body+lines(tt.cli...), tt.body+lines(tt.agent...))
+		wantText(t, tt.name, func(p *page) { diffText(p, flowDiffOutput("shop", tt.res, shopReport, nil), x) }, tt.body+lines(tt.cli...), tt.body+lines(tt.agent...))
 	}
 }
 
 // TestDiffReportText checks the file of changes of flow diff.
 func TestDiffReportText(t *testing.T) {
 	inUTC(t)
-	d := diffView{project: "shop", res: shopDiff(t, true, example(t), reviewerRuns)}
+	d := diffView{project: "shop", res: diffExample(t)}
 	want := "# Изменения флоу проекта shop\n\n" +
 		msg.Text(msg.FlowProject, "shop") + "  \n" + msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30") + "  \n" +
 		msg.Text(msg.LibraryAppliedAt, "2026-10-09 12:30") + "  \nОшибки черновика: нет  \nФайл сформирован: 2026-10-09 12:30\n\n" +
@@ -410,29 +447,12 @@ flowchart TD
 // added and removed, of a part changed and of a draft with problems.
 func TestDiffReportParts(t *testing.T) {
 	inUTC(t)
-	incident := map[string]string{
-		"scenarios/bug.yaml":   "",
-		"stages/plan-bug.yaml": "",
-		"stages/plan-bug.md":   "",
-		"scenarios/incident.yaml": "title: Инцидент\nstart: branch\nnodes:\n" +
-			"  branch: { stage: branch, next: repro }\n" +
-			"  repro:\n    stage: implementation\n    next:\n" +
-			"      - to: plan\n        if: ошибка воспроизводится\n" +
-			"      - to: merge\n        if: ошибка не воспроизводится\n" +
-			"  plan: { stage: plan-feature, next: merge }\n" +
-			"  merge: { stage: merge, next: finish }\n",
-		"parts/plan-format.md": "## План\nШаги, проверка и риски.\nСрок.\n",
-	}
-	problems := map[string]string{
-		"stages/review.yaml": "title: Ревью\nexecutor: reviewer\n",
-		"scenarios/bug.yaml": "title: [\n",
-	}
 	for _, c := range []struct {
 		name  string
-		draft map[string]string
+		res   flow.DiffResult
 		parts []string
 	}{
-		{"scenarios added and removed", incident, []string{
+		{"scenarios added and removed", diffIncident(t), []string{
 			"\n## " + msg.Text(msg.ReportObjScenario, "Баг", "bug") + " — " + msg.Text(msg.FlowChangeRemoved) + "\n\n```mermaid\n",
 			"\n## " + msg.Text(msg.ReportObjScenario, "Инцидент", "incident") + " — " + msg.Text(msg.FlowChangeAdded) + "\n\n```mermaid\n",
 			"    n2 -.->|\"ошибка воспроизводится\"| n3\n",
@@ -440,13 +460,13 @@ func TestDiffReportParts(t *testing.T) {
 			"\n## " + msg.Text(msg.FlowObjPart, "plan-format") + " — " + msg.Text(msg.FlowChangeModified) + "\n\n" + msg.Text(msg.FlowStages, "plan-feature") + "\n\n" + msg.Text(msg.FlowText) +
 				"\n\n```diff\n ## План\n Шаги, проверка и риски.\n+Срок.\n```\n",
 		}},
-		{"draft with problems", problems, []string{
+		{"draft with problems", diffProblems(t), []string{
 			msg.Text(msg.ReportCreated, "2026-10-09 12:30") + "\n\nОшибки черновика:\n\n- ",
 			"\n## " + msg.Text(msg.ReportObjScenario, "bug", "bug") + "\n\nСхема не построена: в сценарии есть ошибки.\n",
 			"\n" + hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft") + "\n",
 		}},
 	} {
-		report := diffView{project: "shop", res: shopDiff(t, true, c.draft, nil)}.report(shopTime)
+		report := diffView{project: "shop", res: c.res}.report(shopTime)
 		for _, part := range c.parts {
 			if !strings.Contains(report, part) {
 				t.Errorf("%s: the file of changes:\n%s\nwant within:\n%s", c.name, report, part)

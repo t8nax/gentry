@@ -389,7 +389,7 @@ func TestTaskShowText(t *testing.T) {
 			taskShowExtra{names: shopNames()}, cancelledText + lines(
 				hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"),
 				hintLineOf(msg.HintNotes, "gentry note list --task SHOP-1"),
-				hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario <сценарий>"),
+				hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 			), cancelledText + lines(
 				hintLineOf(msg.HintStatement, "task_show (task: SHOP-1, statement)"),
 				hintLineOf(msg.HintNotes, "note_list (task: SHOP-1)"),
@@ -435,7 +435,7 @@ func TestTaskShowText(t *testing.T) {
 			msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
 			"",
 			hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"),
-			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario <сценарий>"),
+			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
 			"",

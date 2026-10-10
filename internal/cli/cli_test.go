@@ -81,6 +81,10 @@ func TestVersionText(t *testing.T) {
 	if want := msg.Text(msg.VersionGentry, buildinfo.Version()) + "\n"; stdout != want {
 		t.Errorf("output %q, want %q", stdout, want)
 	}
+	// The contract and format versions are in JSON only.
+	wantText(t, "version", func(p *page) {
+		versionText(p, contract.VersionOutput{Gentry: "1.4.0", Contract: 3, StateSchema: 7, KnowledgeFormat: 1})
+	}, "Версия Gentry: 1.4.0\n", "")
 }
 
 func TestVersionJSON(t *testing.T) {

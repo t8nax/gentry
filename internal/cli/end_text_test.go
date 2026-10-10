@@ -42,7 +42,7 @@ func TestTaskCancelText(t *testing.T) {
 			msg.Text(msg.ReasonLine, "Отложено до релиза каталога."),
 			msg.Text(msg.WorktreeReleased, shopFix),
 			"",
-			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario <сценарий>"),
+			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			msg.Text(msg.TaskCancelled, "SHOP-1"),
 			msg.Text(msg.TaskStage, "Ветка (branch), круг 1"),
@@ -56,7 +56,7 @@ func TestTaskCancelText(t *testing.T) {
 			msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
 			msg.Text(msg.WorktreeReleased, shopFix),
 			"",
-			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario <сценарий>"),
+			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			msg.Text(msg.TaskCancelled, "SHOP-1"),
 			msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
@@ -116,7 +116,7 @@ func TestEndFailureText(t *testing.T) {
 		{"task cancelled", &task.EndedError{Task: "SHOP-2", State: state.TaskCancelled}, lines(
 			"Задача SHOP-2 отменена.",
 			"",
-			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-2 --scenario <сценарий>"),
+			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-2 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			"Задача SHOP-2 отменена.",
 			"",
@@ -172,7 +172,7 @@ func TestAttemptsText(t *testing.T) {
 	) + "\n"
 	wantText(t, "attempts", func(p *page) {
 		attemptsText(p, out, taskHints("SHOP-1", false, hintOf(msg.HintAttempt)))
-	}, attempts+lines(hintLineOf(msg.HintAttempt, "gentry task attempts SHOP-1 <попытка>")),
+	}, attempts+lines(hintLineOf(msg.HintAttempt, "gentry task attempts SHOP-1 "+msg.Text(msg.ArgAttempt))),
 		attempts+lines(hintLineOf(msg.HintAttempt, "task_attempts (task: SHOP-1, attempt)")))
 }
 

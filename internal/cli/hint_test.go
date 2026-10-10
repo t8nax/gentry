@@ -28,12 +28,12 @@ func TestHintChannels(t *testing.T) {
 		{hintOf(msg.HintStatement).forTask("SHOP-1"),
 			hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"), hintLineOf(msg.HintStatement, "task_show (task: SHOP-1, statement)")},
 		{hintOf(msg.HintAttempt),
-			hintLineOf(msg.HintAttempt, "gentry task attempts <попытка>"), hintLineOf(msg.HintAttempt, "task_attempts (attempt)")},
+			hintLineOf(msg.HintAttempt, "gentry task attempts "+msg.Text(msg.ArgAttempt)), hintLineOf(msg.HintAttempt, "task_attempts (attempt)")},
 		{hintOf(msg.HintAttempt).forTask("SHOP-1"),
-			hintLineOf(msg.HintAttempt, "gentry task attempts SHOP-1 <попытка>"), hintLineOf(msg.HintAttempt, "task_attempts (task: SHOP-1, attempt)")},
+			hintLineOf(msg.HintAttempt, "gentry task attempts SHOP-1 "+msg.Text(msg.ArgAttempt)), hintLineOf(msg.HintAttempt, "task_attempts (task: SHOP-1, attempt)")},
 		{hintOf(msg.HintStepDrop), "", hintLineOf(msg.HintStepDrop, "step_drop (step, reason)")},
 		{hintOf(msg.HintAllowReturn).set("allow_return", "plan"),
-			hintLineOf(msg.HintAllowReturn, "gentry operator record --answer <ответ> --allow-return plan"),
+			hintLineOf(msg.HintAllowReturn, "gentry operator record --answer "+msg.Text(msg.ArgAnswer)+" --allow-return plan"),
 			hintLineOf(msg.HintAllowReturn, "operator_record (answer, allow_return: plan)")},
 		{hintOf(msg.HintFlowShowDraft), hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft"), hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)")},
 		{hintOf(msg.HintTaskClose), "", hintLineOf(msg.HintTaskClose, "task_close")},
@@ -60,7 +60,7 @@ func TestHintChannels(t *testing.T) {
 // types it, a command only the agent runs too.
 func TestHintJSON(t *testing.T) {
 	got := renderHints([]hint{hintOf(msg.HintStageExit), helpHint(msg.HintCommandHelp, "task close")}, jsonChannel)
-	want := []string{hintLineOf(msg.HintStageExit, "gentry stage exit --kind <вид> --text <текст>"), hintLineOf(msg.HintCommandHelp, "gentry task close --help")}
+	want := []string{hintLineOf(msg.HintStageExit, "gentry stage exit --kind "+msg.Text(msg.ArgKind)+" --text "+msg.Text(msg.ArgText)), hintLineOf(msg.HintCommandHelp, "gentry task close --help")}
 	if !slices.Equal(got, want) {
 		t.Errorf("%q, want %q", got, want)
 	}

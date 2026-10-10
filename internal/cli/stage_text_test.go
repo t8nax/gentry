@@ -447,7 +447,7 @@ func TestWayFailureText(t *testing.T) {
 			"Возвратов: 3 из 3",
 			"",
 			hintLineOf(msg.HintOtherTransitions, "gentry stage show"),
-			hintLineOf(msg.HintAllowReturn, "gentry operator record --answer <ответ> --allow-return implementation"),
+			hintLineOf(msg.HintAllowReturn, "gentry operator record --answer "+msg.Text(msg.ArgAnswer)+" --allow-return implementation"),
 		), lines(
 			"Возвраты к узлу implementation исчерпаны.",
 			"Возвратов: 3 из 3",

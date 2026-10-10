@@ -559,25 +559,26 @@ func TestFlowRefusals(t *testing.T) {
 
 func TestFlowHelp(t *testing.T) {
 	_, stdout, _ := clitest.Run("flow", "--help")
-	want := `Показать или изменить флоу проекта.
-Изменения в папке флоу — черновик; действующим он становится после применения.
-
-Использование:
-  gentry flow <действие> [аргументы] [флаги]
-
-Действия:
-  show      Показать флоу проекта
-  diff      Показать изменения черновика
-  apply     Применить черновик флоу
-  discard   Отменить изменения флоу
-
-Посмотреть описание действия: gentry flow <действие> --help
-`
+	want := clitest.Lines(
+		msg.Text(msg.CmdFlowDesc),
+		"",
+		msg.Text(msg.HelpUsageTitle),
+		"  "+msg.Text(msg.HelpGroupUsage, "flow"),
+		"",
+		msg.Text(msg.HelpActions),
+		"  show      "+msg.Text(msg.CmdFlowShowSummary),
+		"  diff      "+msg.Text(msg.CmdFlowDiffSummary),
+		"  apply     "+msg.Text(msg.CmdFlowApplySummary),
+		"  discard   "+msg.Text(msg.CmdFlowDiscardSummary),
+		"",
+		msg.Text(msg.HelpGroupMore, "flow"),
+	)
 	if stdout != want {
 		t.Errorf("flow --help:\n%s\nwant:\n%s", stdout, want)
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--help")
-	if usage := "  gentry flow show [--scenario <сценарий> | --stage <этап> | --agent <субагент> | --part <фрагмент>] [--draft] [--project <идентификатор>] [--json]\n"; !strings.Contains(stdout, usage) {
+	if usage := "  gentry flow show [--scenario " + msg.Text(msg.ArgScenario) + " | --stage " + msg.Text(msg.ArgStage) + " | --agent " + msg.Text(msg.ArgAgent) +
+		" | --part " + msg.Text(msg.ArgPart) + "] [--draft] [--project " + msg.Text(msg.ArgProjectID) + "] [--json]\n"; !strings.Contains(stdout, usage) {
 		t.Errorf("flow show --help:\n%s\nwant within:\n%s", stdout, usage)
 	}
 }

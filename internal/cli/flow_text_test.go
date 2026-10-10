@@ -138,7 +138,7 @@ func TestFlowShowText(t *testing.T) {
 		cli, agent string
 	}{
 		{"flow", shown(nil, true, nil), flowShowExtra{}, head + "\n" + tables + library + "\n" +
-			lines(hintLineOf(msg.HintFlowStage, "gentry flow show --stage <этап>")),
+			lines(hintLineOf(msg.HintFlowStage, "gentry flow show --stage "+msg.Text(msg.ArgStage))),
 			head + "\n" + tables + library + "\n" + lines(hintLineOf(msg.HintFlowStage, "flow_show (stage)"))},
 		{"flow with a draft", shown(nil, true, &contract.FlowDraftInfo{}), flowShowExtra{}, head + "Черновик существует.\n\n" + tables + library + "\n" +
 			lines(hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft")),

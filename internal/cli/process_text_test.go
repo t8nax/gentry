@@ -53,7 +53,7 @@ func TestProcessStatusText(t *testing.T) {
 		{"no remote", contract.ProcessStatusOutput{Drafts: none, Unsent: none, Conflicts: none}, lines(
 			"Удалённый репозиторий не подключён.",
 			"",
-			hintLineOf(msg.HintProcessRemote, "gentry process remote <адрес>"),
+			hintLineOf(msg.HintProcessRemote, "gentry process remote "+msg.Text(msg.ArgRemote)),
 		), lines(
 			"Удалённый репозиторий не подключён.",
 			"",

@@ -50,7 +50,7 @@ func TestProjectAddText(t *testing.T) {
 		), ""},
 		{"unchanged", unchanged, projectAddExtra{}, "Проект shop уже подключён.\n", ""},
 		{"worktrees out of the pool", unchanged, projectAddExtra{unpooled: []string{shopFix}},
-			msg.Text(msg.ProjectUnchanged, "shop") + "\n" + unpooled + lines(hintLineOf(msg.HintProjectUnpooled, "gentry worktree add <путь>")),
+			msg.Text(msg.ProjectUnchanged, "shop") + "\n" + unpooled + lines(hintLineOf(msg.HintProjectUnpooled, "gentry worktree add "+msg.Text(msg.ArgPath))),
 			msg.Text(msg.ProjectUnchanged, "shop") + "\n" + unpooled + lines(hintLineOf(msg.HintProjectUnpooled, "worktree_add (path)"))},
 	}
 	for _, tt := range tests {
@@ -89,7 +89,7 @@ func TestProjectFailureText(t *testing.T) {
 		{"no identifier", projectFailure(&project.IDMissingError{}), lines(
 			"Для нового знания нужен идентификатор проекта.",
 			"",
-			hintLineOf(msg.HintProjectIDMissing, "gentry project add <идентификатор> --knowledge <путь>"),
+			hintLineOf(msg.HintProjectIDMissing, "gentry project add "+msg.Text(msg.ArgProjectID)+" --knowledge "+msg.Text(msg.ArgPath)),
 		), lines(
 			"Для нового знания нужен идентификатор проекта.",
 			"",

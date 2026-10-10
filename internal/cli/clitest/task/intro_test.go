@@ -35,14 +35,16 @@ func introBy(t *testing.T, dir string, flags ...string) string {
 	return stdout
 }
 
+// The introduction is built from the state store: no test of package cli
+// reaches the line of no task, this test states its words.
 func TestIntroWithoutTask(t *testing.T) {
 	_, fix := clitest.TaskShop(t)
 	want := clitest.Lines(
-		"Проект: shop",
-		"Рабочая копия: "+fix,
+		msg.Text(msg.TaskProject, "shop"),
+		msg.Text(msg.TaskWorktree, fix),
 		"Задача в этой копии не взята.",
 		"",
-		"Взять задачу, когда оператор её поставит: скилл gentry:working-on-task",
+		msg.Text(msg.HintIntroTake, "gentry:working-on-task"),
 	)
 	if got := introIn(t, fix); got != want {
 		t.Errorf("introduction:\n%s\nwant:\n%s", got, want)
@@ -70,14 +72,16 @@ func TestIntroWithTask(t *testing.T) {
 	t.Chdir(fix)
 	clitest.MustRun(t, clitest.TakeArgs()...)
 	head := clitest.Lines(
-		"Проект: shop",
-		"Рабочая копия: "+fix,
-		"Задача SHOP-1: Частичный возврат по карте",
-		"Сценарий: Фича (feature)",
+		msg.Text(msg.TaskProject, "shop"),
+		msg.Text(msg.TaskWorktree, fix),
+		msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
+		msg.Text(msg.TaskScenario, msg.Text(msg.TaskNamed, "Фича", "feature")),
 	)
-	tail := clitest.Lines("", "Продолжить задачу по слову оператора: скилл gentry:working-on-task")
+	tail := clitest.Lines("", msg.Text(msg.HintIntroContinue, "gentry:working-on-task"))
+	branch := msg.Text(msg.TaskStage, round("Ветка", "branch", 1))
+	progress := func(passed int) string { return msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, passed, 5)) }
 
-	want := head + clitest.Lines("Этап: Ветка (branch), круг 1", "Шаги этапа: не заданы", "Прогресс: 0 из 5") + tail
+	want := head + clitest.Lines(branch, msg.Text(msg.IntroNoSteps), progress(0)) + tail
 	if got := introIn(t, fix); got != want {
 		t.Errorf("stage without steps:\n%s\nwant:\n%s", got, want)
 	}
@@ -86,7 +90,7 @@ func TestIntroWithTask(t *testing.T) {
 	clitest.MustRun(t, "step", "add", "Создать ветку", "Проверить имя", "Удалить старую ветку")
 	clitest.MustRun(t, "step", "done", "1")
 	clitest.MustRun(t, "step", "drop", "3", "--reason", "Старой ветки нет")
-	want = head + clitest.Lines("Этап: Ветка (branch), круг 1", "Шаги этапа: выполнено 1 из 2", "Прогресс: 0 из 5") + tail
+	want = head + clitest.Lines(branch, msg.Text(msg.IntroSteps, 1, 2), progress(0)) + tail
 	if got := introIn(t, fix); got != want {
 		t.Errorf("stage with steps:\n%s\nwant:\n%s", got, want)
 	}
@@ -94,7 +98,7 @@ func TestIntroWithTask(t *testing.T) {
 	// A passed scenario has no stage and no steps.
 	clitest.MustRun(t, "step", "done", "2")
 	passScenario(t)
-	want = head + clitest.Lines("Этап: сценарий пройден", "Прогресс: 5 из 5") + tail
+	want = head + clitest.Lines(msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)), progress(5)) + tail
 	if got := introIn(t, fix); got != want {
 		t.Errorf("passed scenario:\n%s\nwant:\n%s", got, want)
 	}
@@ -102,11 +106,11 @@ func TestIntroWithTask(t *testing.T) {
 	// A closed task frees the worktree.
 	clitest.MustRun(t, "task", "close")
 	if got := introIn(t, fix); got != clitest.Lines(
-		"Проект: shop",
-		"Рабочая копия: "+fix,
-		"Задача в этой копии не взята.",
+		msg.Text(msg.TaskProject, "shop"),
+		msg.Text(msg.TaskWorktree, fix),
+		msg.Text(msg.IntroNoTask),
 		"",
-		"Взять задачу, когда оператор её поставит: скилл gentry:working-on-task",
+		msg.Text(msg.HintIntroTake, "gentry:working-on-task"),
 	) {
 		t.Errorf("closed task:\n%s", got)
 	}
@@ -153,11 +157,13 @@ func TestIntroStalePlugin(t *testing.T) {
 	exe, _ = filepath.EvalSymlinks(exe)
 
 	writeVersion("0.0.0+00000000")
+	// The warning is built in the introduction from the plugin: this test
+	// states its words.
 	want := clitest.Lines(
-		msg.Text(msg.IntroPluginStale),
+		"Плагин Gentry не соответствует программе gentry: скиллы могут описывать прежние команды.",
 		msg.Text(msg.HintIntroPluginStale)+": setup (tool: claude)",
 		"",
-		"Проект: shop",
+		msg.Text(msg.TaskProject, "shop"),
 	)
 	if got := introIn(t, fix); len(got) < len(want) || got[:len(want)] != want {
 		t.Errorf("stale plugin:\n%s", got)
@@ -168,19 +174,20 @@ func TestIntroStalePlugin(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeVersion(p.Version)
-	if got := introIn(t, fix); len(got) < len("Проект:") || got[:len("Проект:")] != "Проект:" {
+	project := msg.Text(msg.TaskProject, "")
+	if got := introIn(t, fix); !strings.HasPrefix(got, project) {
 		t.Errorf("plugin of this gentry:\n%s", got)
 	}
 
 	// Another tool has no plugin of Claude Code to compare.
 	writeVersion("0.0.0+00000000")
-	if got := introBy(t, fix); got[:len("Проект:")] != "Проект:" {
+	if got := introBy(t, fix); !strings.HasPrefix(got, project) {
 		t.Errorf("no tool:\n%s", got)
 	}
 
 	// Without the plugin of the hook there is nothing to compare.
 	os.Remove(manifest)
-	if got := introIn(t, fix); got[:len("Проект:")] != "Проект:" {
+	if got := introIn(t, fix); !strings.HasPrefix(got, project) {
 		t.Errorf("no manifest:\n%s", got)
 	}
 }

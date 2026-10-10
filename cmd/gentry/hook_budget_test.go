@@ -15,6 +15,7 @@ import (
 	"github.com/t8nax/gentry/internal/agenttext"
 	"github.com/t8nax/gentry/internal/hook"
 	"github.com/t8nax/gentry/internal/integration"
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // hookBudget is the time limit of the session start hook (technical
@@ -72,7 +73,7 @@ func TestHookBudget(t *testing.T) {
 		if n > hook.MaxOutput {
 			t.Errorf("hook output %s is %d characters, limit %d", place.name, n, hook.MaxOutput)
 		}
-		if place.name == "worktree with a task" && !strings.Contains(string(out), "Шаги этапа: выполнено 0 из 2") {
+		if place.name == "worktree with a task" && !strings.Contains(string(out), msg.Text(msg.IntroSteps, 0, 2)) {
 			t.Fatalf("no introduction to the task:\n%s", out)
 		}
 

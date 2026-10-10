@@ -27,6 +27,7 @@ func TestProblemText(t *testing.T) {
 		{msg.ProblemDuplicateTransition, []any{"Сценарий bug, узел review", "merge"}, "Сценарий bug, узел review: два перехода к узлу merge."},
 		{msg.ProblemEncoding, []any{"Этап review"}, "Этап review: текст не в кодировке UTF-8."},
 		{msg.ProblemExecutorInDraftLibrary, []any{"Этап review", "tester"}, "Этап review: субагент tester есть только в черновике библиотеки."},
+		{msg.ProblemLibraryExtraFile, []any{"notes.txt"}, "Файл не относится к библиотеке субагентов: notes.txt"},
 		{msg.ProblemExtraDir, []any{"scenarios/old"}, "Папка не относится к флоу: scenarios/old"},
 		{msg.ProblemExtraFile, []any{"README.md"}, "Файл не относится к флоу: README.md"},
 		{msg.ProblemInclude, []any{"Этап plan-bug"}, "Этап plan-bug: значение поля «include» должно быть списком идентификаторов."},

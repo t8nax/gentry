@@ -46,37 +46,47 @@ func twoMachines(t *testing.T) machines {
 func (m machines) onA() { m.t.Setenv(home.EnvVar, m.a) }
 func (m machines) onB() { m.t.Setenv(home.EnvVar, m.b) }
 
-func TestProcessRemoteText(t *testing.T) {
+// The words of the process are those of the catalog: the tests of the output
+// in package cli state them.
+var (
+	synced   = msg.Text(msg.ProcessSynced) + "\n"
+	flowShop = msg.Text(msg.KindFlow, "shop")
+	// laidOut is the block of the free worktrees of the shop laid out.
+	laidOut = clitest.Lines(msg.Text(msg.AgentsFreeSynced, "shop"), msg.Text(msg.AgentsNextSession))
+)
+
+func TestProcessRemote(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	root := filepath.Dir(os.Getenv(home.EnvVar))
 	remote := filepath.Join(root, "remote.git")
 	gittest.Run(t, root, "init", "--quiet", "--bare", remote)
 
 	_, stdout, _ := clitest.Run("process", "status")
-	if want := "Удалённый репозиторий не подключён.\n\nПодключить удалённый репозиторий: gentry process remote <адрес>\n"; stdout != want {
+	if want := clitest.Lines(msg.Text(msg.ProcessNoRemote), "", cli.HintText(msg.HintProcessRemote)); stdout != want {
 		t.Errorf("status without a remote:\n%s\nwant:\n%s", stdout, want)
 	}
 	code, stdout, stderr := clitest.Run("process", "remote", remote)
-	if want := "Удалённый репозиторий подключён: " + remote + "\nПроцесс: отправлен в удалённый репозиторий\n"; code != contract.ExitOK || stderr != "" || stdout != want {
+	if want := clitest.Lines(msg.Text(msg.ProcessRemoteSet, remote), msg.Text(msg.ProcessResultSent)); code != contract.ExitOK || stderr != "" || stdout != want {
 		t.Errorf("remote: exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}
 	_, stdout, _ = clitest.Run("process", "status")
-	if want := "Удалённый репозиторий: " + remote + "\nСинхронизирован: <время>\n"; clitest.Masked(stdout) != want {
+	if want := clitest.Lines(msg.Text(msg.ProcessRemote, remote), msg.Text(msg.ProcessSyncedAt, "<время>")); clitest.Masked(stdout) != want {
 		t.Errorf("status:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := clitest.Run("process", "remote", remote); !strings.HasSuffix(stdout, "\nПроцесс: совпадает с удалённым репозиторием\n") {
+	if _, stdout, _ := clitest.Run("process", "remote", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultUnchanged)+"\n") {
 		t.Errorf("remote again:\n%s", stdout)
 	}
 
 	// Another machine gets the process and shows the same flow.
 	t.Setenv(home.EnvVar, filepath.Join(root, "home-b"))
 	clitest.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
-	if _, stdout, _ := clitest.Run("process", "remote", remote); !strings.HasSuffix(stdout, "\nПроцесс: получен из удалённого репозитория\n") {
+	if _, stdout, _ := clitest.Run("process", "remote", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultReceived)+"\n") {
 		t.Errorf("remote on b:\n%s", stdout)
 	}
 	b := clitest.ShopPlaces()
 	_, stdout, _ = clitest.Run("flow", "show")
-	if want := "Проект: shop\nФлоу применён: <время>\nПапка флоу: " + b.Dir + "\n\n" + clitest.ShopTables; !strings.HasPrefix(clitest.Masked(stdout), want) || b.Dir == p.Dir {
+	if want := clitest.Lines(msg.Text(msg.FlowProject, "shop"), msg.Text(msg.FlowAppliedAt, "<время>"), msg.Text(msg.FlowDir, b.Dir)) + "\n" +
+		clitest.ShopTables; !strings.HasPrefix(clitest.Masked(stdout), want) || b.Dir == p.Dir {
 		t.Errorf("show on b:\n%s", stdout)
 	}
 
@@ -87,11 +97,11 @@ func TestProcessRemoteText(t *testing.T) {
 		stderr string
 	}{
 		{"no address", []string{"process", "remote"}, contract.ExitUsage,
-			"Не указан адрес удалённого репозитория.\n\nПосмотреть описание команды: gentry process remote --help"},
+			msg.Text(msg.ErrRemoteMissing) + "\n\n" + cli.HintText(msg.HintCommandHelp, "process remote")},
 		{"unavailable", []string{"process", "remote", filepath.Join(root, "none.git")}, contract.ExitError,
-			"Удалённый репозиторий недоступен: " + filepath.Join(root, "none.git") + "\n\nПроверить доступ: git ls-remote " + filepath.Join(root, "none.git")},
+			msg.Text(msg.ErrRemoteUnavailable, filepath.Join(root, "none.git")) + "\n\n" + msg.Text(msg.HintRemoteAccess, filepath.Join(root, "none.git"))},
 		{"code", []string{"process", "remote", filepath.Join(root, "shop")}, contract.ExitError,
-			"Репозиторий не является репозиторием процесса: " + filepath.Join(root, "shop")},
+			msg.Text(msg.ErrRemoteNotProcess, filepath.Join(root, "shop"))},
 	}
 	for _, tt := range tests {
 		code, stdout, stderr := clitest.Run(tt.args...)
@@ -99,12 +109,12 @@ func TestProcessRemoteText(t *testing.T) {
 			t.Errorf("%s: exit code %d, stdout %q, stderr %q, want %q", tt.name, code, stdout, stderr, tt.stderr)
 		}
 	}
-	if _, stdout, _ := clitest.Run("process", "status"); !strings.HasPrefix(stdout, "Удалённый репозиторий: "+remote+"\n") {
+	if _, stdout, _ := clitest.Run("process", "status"); !strings.HasPrefix(stdout, msg.Text(msg.ProcessRemote, remote)+"\n") {
 		t.Errorf("a refused address is kept:\n%s", stdout)
 	}
 }
 
-func TestProcessSyncText(t *testing.T) {
+func TestProcessSync(t *testing.T) {
 	m := twoMachines(t)
 	b := clitest.ShopPlaces()
 	clitest.WriteDraft(t, b, map[string]string{"stages/merge.md": "Влить ветку задачи в main после ревью.\n"})
@@ -113,11 +123,11 @@ func TestProcessSyncText(t *testing.T) {
 	}
 	m.onA()
 	code, stdout, stderr := clitest.Run("flow", "show", "--stage", "merge")
-	if want := "Получены изменения с другой машины:\n  флоу shop\n\n"; code != contract.ExitOK || stderr != want ||
+	if want := clitest.Lines(msg.Text(msg.SyncReceived), "  "+flowShop, ""); code != contract.ExitOK || stderr != want ||
 		!strings.HasSuffix(stdout, "  Влить ветку задачи в main после ревью.\n") {
 		t.Errorf("show on a: exit code %d, stderr:\n%s\noutput:\n%s", code, stderr, stdout)
 	}
-	if _, stdout, stderr := clitest.Run("process", "sync"); stdout != "Процесс синхронизирован.\n" || stderr != "" {
+	if _, stdout, stderr := clitest.Run("process", "sync"); stdout != synced || stderr != "" {
 		t.Errorf("sync with nothing new: %q, %q", stdout, stderr)
 	}
 
@@ -145,7 +155,7 @@ func TestProcessSyncText(t *testing.T) {
 		t.Errorf("library apply:\n%s", stdout)
 	}
 	m.onB()
-	if _, stdout, _ := clitest.Run("process", "sync"); stdout != "Процесс синхронизирован.\n\nПолучено:\n  библиотека субагентов\n" {
+	if _, stdout, _ := clitest.Run("process", "sync"); stdout != synced+clitest.Lines("", msg.Text(msg.ProcessReceived), "  "+msg.Text(msg.KindLibrary)) {
 		t.Errorf("sync on b:\n%s", stdout)
 	}
 	if _, err := os.Stat(report); !os.IsNotExist(err) {
@@ -161,7 +171,7 @@ func TestProcessSyncText(t *testing.T) {
 	}
 }
 
-func TestProcessConflictText(t *testing.T) {
+func TestProcessConflict(t *testing.T) {
 	m := twoMachines(t)
 	b := clitest.ShopPlaces()
 	m.onA()
@@ -171,8 +181,8 @@ func TestProcessConflictText(t *testing.T) {
 	m.onB()
 	clitest.WriteDraft(t, b, map[string]string{"stages/review.md": "Проверить изменения по списку машины Б.\n"})
 	code, stdout, stderr := clitest.Run("flow", "apply")
-	want := "Флоу проекта shop изменён на другой машине; изменения этой машины сохранены как черновик.\nВерсии файлов другой машины: " + b.Conflict +
-		"\n\nИзменены на обеих машинах:\n  Этап review\n\nПосмотреть отличия: gentry flow diff --project shop\n"
+	want := clitest.Lines(msg.Text(msg.SyncFlowConflict, "shop"), msg.Text(msg.SyncConflictDir, b.Conflict), "",
+		msg.Text(msg.SyncBothChanged), "  "+msg.Text(msg.FlowObjStage, "review"), "", cli.HintFor(msg.HintFlowDiffProject, "project", "shop"))
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("apply on b: exit code %d, stdout %q, stderr:\n%s\nwant:\n%s", code, stdout, stderr, want)
 	}
@@ -180,10 +190,11 @@ func TestProcessConflictText(t *testing.T) {
 		t.Errorf("variant of a: %q, %v", text, err)
 	}
 	_, stdout, _ = clitest.Run("process", "status")
-	if want := "Удалённый репозиторий: " + m.remote + "\nСинхронизирован: <время>\n\nЧерновики:\n  флоу shop\n\nКонфликты:\n  флоу shop\n"; clitest.Masked(stdout) != want {
+	if want := clitest.Lines(msg.Text(msg.ProcessRemote, m.remote), msg.Text(msg.ProcessSyncedAt, "<время>"), "", msg.Text(msg.ProcessDrafts),
+		"  "+flowShop, "", msg.Text(msg.ProcessConflicts), "  "+flowShop); clitest.Masked(stdout) != want {
 		t.Errorf("status:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := clitest.Run("flow", "diff"); !strings.Contains(stdout, "\nЭтапы:\n  ~ Ревью (review)\n") {
+	if _, stdout, _ := clitest.Run("flow", "diff"); !strings.Contains(stdout, "\n"+clitest.Lines(msg.Text(msg.DiffStages), "  ~ "+msg.Text(msg.DiffStage, "Ревью", "review"))) {
 		t.Errorf("diff:\n%s", stdout)
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--json")
@@ -219,7 +230,7 @@ func TestProcessConflictText(t *testing.T) {
 	}
 }
 
-func TestProcessOfflineText(t *testing.T) {
+func TestProcessOffline(t *testing.T) {
 	m := twoMachines(t)
 	if err := os.Rename(m.remote, m.remote+"-away"); err != nil {
 		t.Fatal(err)
@@ -227,25 +238,25 @@ func TestProcessOfflineText(t *testing.T) {
 	b := clitest.ShopPlaces()
 	clitest.WriteDraft(t, b, map[string]string{"stages/merge.md": "Влить ветку задачи в main без сети.\n"})
 	code, stdout, stderr := clitest.Run("flow", "apply")
-	if code != contract.ExitOK || stderr != "Отправка отложена: удалённый репозиторий недоступен.\n\n" ||
-		!strings.HasPrefix(stdout, "Изменения флоу применены.\n") {
+	if code != contract.ExitOK || stderr != msg.Text(msg.SyncDeferred)+"\n\n" ||
+		!strings.HasPrefix(stdout, msg.Text(msg.FlowApplied)+"\n") {
 		t.Errorf("apply offline: exit code %d, stderr %q, output:\n%s", code, stderr, stdout)
 	}
-	if _, _, stderr := clitest.Run("flow", "show"); stderr != "Синхронизация пропущена: удалённый репозиторий недоступен.\n\n" {
+	if _, _, stderr := clitest.Run("flow", "show"); stderr != msg.Text(msg.SyncSkipped)+"\n\n" {
 		t.Errorf("show offline: stderr %q", stderr)
 	}
 	_, stdout, _ = clitest.Run("process", "status")
-	if want := "\nНе отправлено:\n  флоу shop\n\nСинхронизировать: gentry process sync\n"; !strings.HasSuffix(stdout, want) {
+	if want := "\n" + clitest.Lines(msg.Text(msg.ProcessUnsent), "  "+flowShop, "", cli.HintText(msg.HintProcessSync)); !strings.HasSuffix(stdout, want) {
 		t.Errorf("status:\n%s", stdout)
 	}
 	code, stdout, stderr = clitest.Run("process", "sync")
-	if want := "Удалённый репозиторий недоступен: " + m.remote + "\n\nПроверить доступ: git ls-remote " + m.remote + "\n"; code != contract.ExitError || stdout != "" || stderr != want {
+	if want := clitest.Lines(msg.Text(msg.ErrRemoteUnavailable, m.remote), "", msg.Text(msg.HintRemoteAccess, m.remote)); code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("sync offline: exit code %d, stderr:\n%s", code, stderr)
 	}
 	if err := os.Rename(m.remote+"-away", m.remote); err != nil {
 		t.Fatal(err)
 	}
-	if _, stdout, _ := clitest.Run("process", "sync"); stdout != "Процесс синхронизирован.\n\nОтправлено:\n  флоу shop\n" {
+	if _, stdout, _ := clitest.Run("process", "sync"); stdout != synced+clitest.Lines("", msg.Text(msg.ProcessSent), "  "+flowShop) {
 		t.Errorf("sync online:\n%s", stdout)
 	}
 }
@@ -408,8 +419,7 @@ func TestSyncLaysOutFreeWorktrees(t *testing.T) {
 
 	m.onB()
 	_, stdout, _ := clitest.Run("process", "sync")
-	want := "Процесс синхронизирован.\n\nПолучено:\n  библиотека субагентов\n\n" +
-		"Субагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n"
+	want := synced + clitest.Lines("", msg.Text(msg.ProcessReceived), "  "+msg.Text(msg.KindLibrary), "") + laidOut
 	if stdout != want {
 		t.Errorf("process sync:\n%s\nwant:\n%s", stdout, want)
 	}
@@ -433,7 +443,7 @@ func TestImplicitSyncLaysOut(t *testing.T) {
 	// messages of the synchronization, before the output.
 	m.onB()
 	_, _, stderr := clitest.Run("flow", "show")
-	if !strings.Contains(stderr, "\nСубагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n") {
+	if !strings.Contains(stderr, "\n"+laidOut) {
 		t.Errorf("flow show, stderr:\n%s", stderr)
 	}
 	if !clitest.FileExists(file) {
@@ -451,7 +461,7 @@ func TestProjectAddWithFlow(t *testing.T) {
 	t.Setenv(home.EnvVar, filepath.Join(filepath.Dir(m.a), "home-c"))
 	clitest.MustRun(t, "process", "remote", m.remote)
 	_, stdout, _ := clitest.Run("project", "add", "--knowledge", "../shop-knowledge")
-	if !strings.Contains(stdout, "\n\nСубагенты разложены в свободные рабочие копии проекта shop.\nИзменения вступят в силу со следующей сессии агента.\n") {
+	if !strings.Contains(stdout, "\n\n"+laidOut) {
 		t.Errorf("project add:\n%s", stdout)
 	}
 	if !clitest.FileExists(file) {

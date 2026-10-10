@@ -439,8 +439,9 @@ func TestFlowBypass(t *testing.T) {
 	clitest.WriteDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexecutor: reviewer\n"})
 	gittest.Run(t, process, "commit", "--quiet", "-am", "by hand again")
 	code, stdout, stderr := clitest.Run("flow", "show", "--stage", "review")
-	want := "Изменение флоу проекта shop, внесённое без Gentry, содержит ошибки и сохранено как черновик.\n\nОшибки:\n" +
-		"  Этап review: не заполнено поле «exit».\n\nПосмотреть отличия: gentry flow diff --project shop\n\n"
+	want := clitest.Lines(msg.Text(msg.SyncFlowRestored, "shop"), "", msg.Text(msg.FlowProblems),
+		"  "+msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjStage, "review"), "exit"), "",
+		cli.HintFor(msg.HintFlowDiffProject, "project", "shop"), "")
 	if code != contract.ExitOK || stderr != want || !strings.Contains(stdout, msg.Text(msg.FlowExit, "замечания ревью записаны и разобраны")+"\n") {
 		t.Errorf("exit code %d, stderr:\n%s\nwant:\n%s\noutput:\n%s", code, stderr, want, stdout)
 	}

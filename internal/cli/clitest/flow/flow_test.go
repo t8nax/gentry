@@ -504,7 +504,7 @@ func TestFlowRefusals(t *testing.T) {
 		{"empty object", []string{"flow", "show", "--stage="}, contract.ExitUsage, msg.Text(msg.ErrFlagValueMissing, "--stage")},
 		{"argument", []string{"flow", "show", "feature"}, contract.ExitUsage, msg.Text(msg.ErrUnexpectedArgs, "flow show")},
 		{"unknown project", []string{"flow", "diff", "--project", "cart"}, contract.ExitError,
-			"Проект «cart» не подключён.\n\nПосмотреть перечень проектов: gentry project list"},
+			msg.Text(msg.ErrProjectNotFound, "cart") + "\n\n" + cli.HintText(msg.HintProjectNotFound)},
 		{"empty project", []string{"flow", "diff", "--project="}, contract.ExitUsage, msg.Text(msg.ErrFlagValueMissing, "--project")},
 		{"no action", []string{"flow"}, contract.ExitUsage, msg.Text(msg.ErrActionMissing, "flow") + "\n\n" + cli.HintText(msg.HintActions, "flow")},
 	}

@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/cli/clitest"
 	"github.com/t8nax/gentry/internal/git"
 	"github.com/t8nax/gentry/internal/gittest"
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // reviewerFile is the file of the subagent reviewer of the shop in worktree w.
@@ -32,7 +34,16 @@ func clean(t *testing.T, w string) {
 	}
 }
 
-const nextSession = "Изменения вступят в силу со следующей сессии агента."
+// The words of the layout are those of the catalog: the tests of the output
+// in package cli state them.
+var (
+	nextSession = msg.Text(msg.AgentsNextSession)
+	// conflictHeader is the header of the table of conflicts.
+	conflictHeader = []string{msg.Text(msg.ColWorktree), msg.Text(msg.ColAgent), msg.Text(msg.ColFile), msg.Text(msg.ColReason)}
+)
+
+// changed is the line of the subagents of one worktree changed.
+func changed(change string) string { return msg.Text(msg.AgentsWorktreeChanged, change) }
 
 // changeLibrary rewrites the instruction of reviewer in the library and
 // applies it.
@@ -54,13 +65,13 @@ func TestPoolIsLaidOut(t *testing.T) {
 	}
 }
 
-func TestWorktreeAddText(t *testing.T) {
+func TestWorktreeAddLayout(t *testing.T) {
 	shop, _ := clitest.TaskShop(t)
 	extra := gittest.Worktree(t, shop, filepath.Join(filepath.Dir(shop), "shop-extra"), "extra")
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
-		"Рабочая копия внесена в пул проекта shop: "+extra,
+		msg.Text(msg.WorktreeAdded, "shop", extra),
 		"",
-		"Субагенты в рабочей копии изменены: добавлен reviewer.",
+		changed(msg.Text(msg.AgentAdded, "reviewer")),
 		nextSession,
 	), "", "worktree", "add", extra)
 	clean(t, extra)
@@ -87,14 +98,14 @@ func TestWorktreeAddWarning(t *testing.T) {
 
 	code, stdout, stderr := clitest.Run("worktree", "add", extra)
 	want := clitest.Lines(
-		"Рабочая копия внесена в пул проекта shop: "+extra,
+		msg.Text(msg.WorktreeAdded, "shop", extra),
 		"",
-		"Часть субагентов не разложена: файлы с их именами уже есть.",
+		msg.Text(msg.AgentsConflictWarning),
 		"",
 	) + clitest.Table(
-		[]string{"РАБОЧАЯ КОПИЯ", "СУБАГЕНТ", "ФАЙЛ", "ПРИЧИНА"},
-		[]string{extra, "reviewer", ".claude/agents/reviewer.md", "файл отслеживается git проекта"},
-	) + clitest.Lines("", "Разложить субагентов после разбора файлов: gentry agents sync")
+		conflictHeader,
+		[]string{extra, "reviewer", ".claude/agents/reviewer.md", msg.Text(msg.AgentsReasonTracked)},
+	) + clitest.Lines("", cli.HintText(msg.HintAgentsConflictWarning))
 	if code != contract.ExitOK || stderr != "" || stdout != want {
 		t.Fatalf("exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}
@@ -113,10 +124,10 @@ func TestTakeConflict(t *testing.T) {
 	os.WriteFile(reviewerFile(fix), []byte("личный\n"), 0o644)
 
 	code, stdout, stderr := clitest.Run(clitest.TakeArgs("--worktree", fix)...)
-	want := clitest.Lines("Субагентов нельзя разложить: файлы с их именами уже есть.", "") + clitest.Table(
-		[]string{"РАБОЧАЯ КОПИЯ", "СУБАГЕНТ", "ФАЙЛ", "ПРИЧИНА"},
-		[]string{fix, "reviewer", ".claude/agents/reviewer.md", "файл разложен не Gentry"},
-	) + clitest.Lines("", "Необходимо переименовать субагента во флоу или удалить файл из рабочей копии, затем повторить команду.")
+	want := clitest.Lines(msg.Text(msg.ErrAgentsConflict), "") + clitest.Table(
+		conflictHeader,
+		[]string{fix, "reviewer", ".claude/agents/reviewer.md", msg.Text(msg.AgentsReasonForeign)},
+	) + clitest.Lines("", msg.Text(msg.HintAgentsConflict))
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Fatalf("exit code %d, stdout %q, stderr:\n%s\nwant:\n%s", code, stdout, stderr, want)
 	}
@@ -144,7 +155,7 @@ func TestTakeConflict(t *testing.T) {
 	// Once the file is gone, the task is taken and the subagent laid out.
 	os.Remove(reviewerFile(fix))
 	code, stdout, _ = clitest.Run(clitest.TakeArgs("--worktree", fix)...)
-	if code != contract.ExitOK || !strings.Contains(stdout, "\n\nСубагенты в рабочей копии изменены: добавлен reviewer.\n"+nextSession+"\n\n") {
+	if code != contract.ExitOK || !strings.Contains(stdout, "\n\n"+clitest.Lines(changed(msg.Text(msg.AgentAdded, "reviewer")), nextSession, "")) {
 		t.Errorf("take after the file is removed: exit code %d, output:\n%s", code, stdout)
 	}
 	clean(t, fix)
@@ -156,7 +167,7 @@ func TestApplyLaysOutFreeWorktreesOnly(t *testing.T) {
 	before := read(t, reviewerFile(fix))
 
 	stdout := changeLibrary(t, "Проверить изменения и тексты.\n")
-	if !strings.HasSuffix(clitest.Masked(stdout), "\n\nСубагенты разложены в свободные рабочие копии.\n"+nextSession+"\n") {
+	if !strings.HasSuffix(clitest.Masked(stdout), "\n\n"+clitest.Lines(msg.Text(msg.AgentsFreeSyncedAll), nextSession)) {
 		t.Errorf("library apply:\n%s", stdout)
 	}
 	if !strings.Contains(read(t, reviewerFile(shop)), "Проверить изменения и тексты.") {
@@ -168,7 +179,7 @@ func TestApplyLaysOutFreeWorktreesOnly(t *testing.T) {
 
 	// The worktree the task releases gets the active flow.
 	code, stdout, _ := clitest.Run("task", "cancel", "SHOP-1")
-	if code != contract.ExitOK || !strings.Contains(stdout, "\n\nСубагенты в рабочей копии изменены: обновлён reviewer.\n"+nextSession+"\n") {
+	if code != contract.ExitOK || !strings.Contains(stdout, "\n\n"+clitest.Lines(changed(msg.Text(msg.AgentUpdated, "reviewer")), nextSession)) {
 		t.Errorf("cancel: exit code %d, output:\n%s", code, stdout)
 	}
 	if !strings.Contains(read(t, reviewerFile(fix)), "Проверить изменения и тексты.") {
@@ -183,7 +194,7 @@ func TestFlowApplyRemoves(t *testing.T) {
 		"stages/review.yaml": "title: Ревью\nexit: замечания ревью записаны и разобраны\nexecutor: orchestrator\ninclude: [review-checklist]\n",
 	})
 	_, stdout, _ := clitest.Run("flow", "apply")
-	if !strings.HasSuffix(clitest.Masked(stdout), "\n\nСубагенты разложены в свободные рабочие копии проекта shop.\n"+nextSession+"\n") {
+	if !strings.HasSuffix(clitest.Masked(stdout), "\n\n"+clitest.Lines(msg.Text(msg.AgentsFreeSynced, "shop"), nextSession)) {
 		t.Errorf("flow apply:\n%s", stdout)
 	}
 	for _, w := range []string{shop, fix} {
@@ -194,7 +205,7 @@ func TestFlowApplyRemoves(t *testing.T) {
 	}
 }
 
-func TestAgentsSyncText(t *testing.T) {
+func TestAgentsSync(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	gone := filepath.Join(filepath.Dir(shop), "shop-gone")
@@ -202,18 +213,19 @@ func TestAgentsSyncText(t *testing.T) {
 	clitest.MustRun(t, "worktree", "add", gone)
 	os.RemoveAll(gone)
 
-	header := []string{"РАБОЧАЯ КОПИЯ", "ЗАДАЧА", "СУБАГЕНТЫ", "ИЗМЕНЕНИЯ"}
-	clitest.WantRun(t, contract.ExitOK, clitest.Lines("Субагенты в рабочих копиях проекта shop соответствуют флоу.", "")+clitest.Table(header,
-		[]string{shop, "—", "reviewer", "—"},
-		[]string{fix, "SHOP-1", "reviewer", "—"},
-		[]string{gone, "—", "—", "папки нет, копия пропущена"},
+	header := []string{msg.Text(msg.ColWorktree), msg.Text(msg.ColTask), msg.Text(msg.ColAgents), msg.Text(msg.ColChanges)}
+	none, missing := msg.Text(msg.ValueNone), msg.Text(msg.AgentsWorktreeMissing)
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.AgentsInPlace, "shop"), "")+clitest.Table(header,
+		[]string{shop, none, "reviewer", none},
+		[]string{fix, "SHOP-1", "reviewer", none},
+		[]string{gone, none, none, missing},
 	), "", "agents", "sync")
 
 	os.Remove(reviewerFile(shop))
-	clitest.WantRun(t, contract.ExitOK, clitest.Lines("Субагенты разложены в рабочие копии проекта shop.", nextSession, "")+clitest.Table(header,
-		[]string{shop, "—", "reviewer", "добавлен reviewer"},
-		[]string{fix, "SHOP-1", "reviewer", "—"},
-		[]string{gone, "—", "—", "папки нет, копия пропущена"},
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.AgentsSynced, "shop"), nextSession, "")+clitest.Table(header,
+		[]string{shop, none, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
+		[]string{fix, "SHOP-1", "reviewer", none},
+		[]string{gone, none, none, missing},
 	), "", "agents", "sync")
 
 	out := clitest.WantJSON(t, contract.ExitOK, "schemas/agents-sync.json", "agents", "sync")
@@ -262,7 +274,7 @@ func TestCloseAndFlowApplyWithTask(t *testing.T) {
 	t.Chdir(fix)
 	passScenario(t)
 	code, stdout, _ := clitest.Run("task", "close")
-	if code != contract.ExitOK || !strings.HasSuffix(stdout, "\n\nСубагенты в рабочей копии изменены: удалён reviewer.\n"+nextSession+"\n") {
+	if code != contract.ExitOK || !strings.HasSuffix(stdout, "\n\n"+clitest.Lines(changed(msg.Text(msg.AgentRemoved, "reviewer")), nextSession)) {
 		t.Errorf("close: exit code %d, output:\n%s", code, stdout)
 	}
 	if clitest.FileExists(reviewerFile(fix)) {
@@ -271,7 +283,7 @@ func TestCloseAndFlowApplyWithTask(t *testing.T) {
 	clean(t, fix)
 }
 
-func TestLayoutFailureText(t *testing.T) {
+func TestLayoutFailure(t *testing.T) {
 	shop, _ := clitest.TaskShop(t)
 	extra := gittest.Worktree(t, shop, filepath.Join(filepath.Dir(shop), "shop-broken"), "broken")
 	// A file where the directory of subagents must be.
@@ -280,9 +292,9 @@ func TestLayoutFailureText(t *testing.T) {
 	gittest.Run(t, extra, "commit", "--quiet", "-m", "file")
 
 	code, stdout, _ := clitest.Run("worktree", "add", extra)
-	head := clitest.Lines("Рабочая копия внесена в пул проекта shop: "+extra, "", "Субагентов не удалось разложить.")
-	tail := clitest.Lines("", "Повторить раскладку: gentry agents sync")
-	if code != contract.ExitOK || !strings.HasPrefix(stdout, head+"Причина: ") || !strings.HasSuffix(stdout, tail) {
+	head := clitest.Lines(msg.Text(msg.WorktreeAdded, "shop", extra), "", msg.Text(msg.AgentsSyncFailed))
+	tail := clitest.Lines("", cli.HintText(msg.HintAgentsSyncFailed))
+	if code != contract.ExitOK || !strings.HasPrefix(stdout, head+msg.Text(msg.AgentsSyncFailedReason, "")) || !strings.HasSuffix(stdout, tail) {
 		t.Errorf("exit code %d, output:\n%s", code, stdout)
 	}
 	out := clitest.WantJSON(t, contract.ExitOK, "schemas/worktree-add.json", "worktree", "add", extra)

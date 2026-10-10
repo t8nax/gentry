@@ -38,11 +38,9 @@ func security(t *testing.T, p flow.Places) {
 	})
 }
 
-// The words of the flow are those of the catalog: the tests of the output in
-// package cli state them.
-
 // flowHead is the head of flow show of the shop: its project, when its flow
-// was applied, and the flow directory.
+// was applied, and the flow directory. Its words are those of the catalog:
+// the tests of the output in package cli state them.
 func flowHead(applied, dir string) string {
 	return clitest.Lines(msg.Text(msg.FlowProject, "shop"), msg.Text(msg.FlowAppliedAt, applied), msg.Text(msg.FlowDir, dir))
 }

@@ -99,41 +99,45 @@ func TestColumnText(t *testing.T) {
 var noValue = msg.Text(msg.ValueNone)
 
 // TestValueText states the short values that the texts print in tables and
-// lines «Поле: значение»: the states, the outcomes, the kinds and the sources.
+// lines «Поле: значение»: the states, the outcomes, the kinds and the sources,
+// the round of a stage and the progress.
 // The other tests take them from the catalog, so a change of a value changes
 // this test alone.
 func TestValueText(t *testing.T) {
 	for _, c := range []struct {
 		k    msg.Key
+		args []any
 		want string
 	}{
-		{msg.ValueNone, "—"},
-		{msg.FlowEnd, "конец"},
-		{msg.StageFinished, "сценарий пройден"},
-		{msg.TaskStateActive, "в работе"},
-		{msg.TaskStateClosed, "закрыта"},
-		{msg.TaskStateCancelled, "отменена"},
-		{msg.StepStateDone, "выполнен"},
-		{msg.StepStateDropped, "снят"},
-		{msg.OutcomeCurrent, "идёт"},
-		{msg.OutcomeSkip, "пропуск"},
-		{msg.ExitKindResult, "результат"},
-		{msg.ArtifactKindFile, "файл"},
-		{msg.ArtifactKindLink, "ссылка"},
-		{msg.RecordedByAgent, "агентом"},
-		{msg.TaskSourceOperator, "оператором"},
-		{msg.TaskSourceAgent, "агентом со слов оператора"},
-		{msg.FlowSourceProject, "проект"},
-		{msg.FlowSourceLibrary, "библиотека"},
-		{msg.WorktreeMain, "основная"},
-		{msg.WorktreeFree, "свободна"},
-		{msg.WorktreeMissing, "папка не найдена"},
-		{msg.FlowChangeAdded, "добавлен"},
-		{msg.FlowChangeModified, "изменён"},
-		{msg.FlowChangeRemoved, "удалён"},
-		{msg.SchemaOperator, "оператор"},
+		{msg.ValueNone, nil, "—"},
+		{msg.FlowEnd, nil, "конец"},
+		{msg.StageFinished, nil, "сценарий пройден"},
+		{msg.TaskStateActive, nil, "в работе"},
+		{msg.TaskStateClosed, nil, "закрыта"},
+		{msg.TaskStateCancelled, nil, "отменена"},
+		{msg.StepStateDone, nil, "выполнен"},
+		{msg.StepStateDropped, nil, "снят"},
+		{msg.OutcomeCurrent, nil, "идёт"},
+		{msg.OutcomeSkip, nil, "пропуск"},
+		{msg.ExitKindResult, nil, "результат"},
+		{msg.ArtifactKindFile, nil, "файл"},
+		{msg.ArtifactKindLink, nil, "ссылка"},
+		{msg.RecordedByAgent, nil, "агентом"},
+		{msg.TaskSourceOperator, nil, "оператором"},
+		{msg.TaskSourceAgent, nil, "агентом со слов оператора"},
+		{msg.FlowSourceProject, nil, "проект"},
+		{msg.FlowSourceLibrary, nil, "библиотека"},
+		{msg.WorktreeMain, nil, "основная"},
+		{msg.WorktreeFree, nil, "свободна"},
+		{msg.WorktreeMissing, nil, "папка не найдена"},
+		{msg.FlowChangeAdded, nil, "добавлен"},
+		{msg.FlowChangeModified, nil, "изменён"},
+		{msg.FlowChangeRemoved, nil, "удалён"},
+		{msg.SchemaOperator, nil, "оператор"},
+		{msg.StageRound, []any{"Ветка (branch)", 1}, "Ветка (branch), круг 1"},
+		{msg.ProgressValue, []any{0, 5}, "0 из 5"},
 	} {
-		if got := msg.Text(c.k); got != c.want {
+		if got := msg.Text(c.k, c.args...); got != c.want {
 			t.Errorf("%s: %q, want %q", c.k, got, c.want)
 		}
 	}

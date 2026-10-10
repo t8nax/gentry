@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 // The tests of the output state the words of Gentry: each text of a command
@@ -100,3 +102,12 @@ func inUTC(t *testing.T) {
 	time.Local = time.UTC
 	t.Cleanup(func() { time.Local = local })
 }
+
+// round names a stage by its title and identifier with the round of its
+// pass, from the catalog: «Ветка (branch), круг 1».
+func round(title, stage string, n int) string {
+	return msg.Text(msg.StageRound, msg.Text(msg.TaskNamed, title, stage), n)
+}
+
+// progress is passed stages of total, from the catalog: «0 из 5».
+func progress(passed, total int) string { return msg.Text(msg.ProgressValue, passed, total) }

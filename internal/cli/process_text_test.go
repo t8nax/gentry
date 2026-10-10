@@ -158,7 +158,7 @@ func TestWriteSyncText(t *testing.T) {
 		), ""},
 		{"received", &contract.Sync{Received: []contract.ProcessItem{flowItem}}, syncExtra{}, lines(
 			"Получены изменения с другой машины:",
-			"  флоу shop",
+			"  "+msg.Text(msg.KindFlow, "shop"),
 			"",
 		), ""},
 		{"conflict", &contract.Sync{Conflicts: []contract.ProcessItem{flowItem}}, syncExtra{conflicts: []conflictExtra{conflict}}, lines(

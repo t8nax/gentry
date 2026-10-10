@@ -38,14 +38,14 @@ func TestTaskCancelText(t *testing.T) {
 	}{
 		{"with a reason", contract.TaskCancelOutput{Task: cancelled, Worktree: shopFix}, lines(
 			msg.Text(msg.TaskCancelled, "SHOP-1"),
-			msg.Text(msg.TaskStage, "Ветка (branch), круг 1"),
+			msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 			msg.Text(msg.ReasonLine, "Отложено до релиза каталога."),
 			msg.Text(msg.WorktreeReleased, shopFix),
 			"",
 			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			msg.Text(msg.TaskCancelled, "SHOP-1"),
-			msg.Text(msg.TaskStage, "Ветка (branch), круг 1"),
+			msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 			msg.Text(msg.ReasonLine, "Отложено до релиза каталога."),
 			msg.Text(msg.WorktreeReleased, shopFix),
 			"",
@@ -75,24 +75,24 @@ func TestNotFinishedText(t *testing.T) {
 	f := notFinished(v)
 	wantFail(t, "in the worktree", f, lines(
 		"Сценарий задачи SHOP-1 ещё не пройден.",
-		msg.Text(msg.TaskStage, "Ветка (branch), круг 1"),
+		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 		"",
 		hintLineOf(msg.HintStageShow, "gentry stage show"),
 	), lines(
 		"Сценарий задачи SHOP-1 ещё не пройден.",
-		msg.Text(msg.TaskStage, "Ветка (branch), круг 1"),
+		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 		"",
 		hintLineOf(msg.HintStageShow, "stage_show"),
 	))
 	f.hints = taskHints("SHOP-1", false, f.hints...)
 	wantFail(t, "outside the worktree", f, lines(
 		msg.Text(msg.ErrScenarioNotFinished, "SHOP-1"),
-		msg.Text(msg.TaskStage, "Ветка (branch), круг 1"),
+		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 		"",
 		hintLineOf(msg.HintStageShow, "gentry stage show --task SHOP-1"),
 	), lines(
 		msg.Text(msg.ErrScenarioNotFinished, "SHOP-1"),
-		msg.Text(msg.TaskStage, "Ветка (branch), круг 1"),
+		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 		"",
 		hintLineOf(msg.HintStageShow, "stage_show (task: SHOP-1)"),
 	))
@@ -202,21 +202,21 @@ func TestAttemptText(t *testing.T) {
 		msg.Text(msg.TaskProject, "shop"),
 		msg.Text(msg.TaskState, msg.Text(msg.TaskStateCancelled)),
 		msg.Text(msg.TaskScenario, "Фича (feature)"),
-		msg.Text(msg.TaskStage, "План фичи (plan-feature), круг 1"),
-		msg.Text(msg.ProgressLine, "1 из 5"),
+		msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
+		msg.Text(msg.ProgressLine, progress(1, 5)),
 		msg.Text(msg.TaskTakenAt, "2026-10-09 12:30"),
 		msg.Text(msg.TaskCancelledByOperator, "2026-10-09 12:30"),
 		msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
 		msg.Text(msg.CancelReasonLine, "Отложено."),
 		"",
-		"Ветка (branch), круг 1",
+		round("Ветка", "branch", 1),
 		msg.Text(msg.OutcomeLine, msg.Text(msg.ExitKindResult)),
 		msg.Text(msg.ExitTextLine, "Ветка создана"),
 		msg.Text(msg.TransitionLine, "plan"),
 		msg.Text(msg.RecordedLine, msg.Text(msg.RecordedByAgent)),
 		msg.Text(msg.ClosedLine, "2026-10-09 12:30"),
 		"",
-		"План фичи (plan-feature), круг 1",
+		round("План фичи", "plan-feature", 1),
 		msg.Text(msg.OutcomeLine, noValue),
 		"",
 		msg.Text(msg.StepsNone),
@@ -227,11 +227,11 @@ func TestAttemptText(t *testing.T) {
 	) + lines(
 		"",
 		"Заметки:",
-		"  1. Ветка (branch), круг 1:",
+		"  1. "+round("Ветка", "branch", 1)+":",
 		"     Промокоды в таблице promo.",
 		"",
 		msg.Text(msg.DecisionsHeading),
-		"  "+msg.Text(msg.DecisionHeading, 1, "Ветка (branch), круг 1", msg.Text(msg.TaskSourceOperator)),
+		"  "+msg.Text(msg.DecisionHeading, 1, round("Ветка", "branch", 1), msg.Text(msg.TaskSourceOperator)),
 		"     "+msg.Text(msg.DecisionAnswer)+": Только для карт.",
 	)
 	wantText(t, "attempt", func(p *page) { attemptText(p, out, shopNames()) }, text, "")

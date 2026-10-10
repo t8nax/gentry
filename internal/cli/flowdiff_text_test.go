@@ -355,7 +355,7 @@ flowchart TD
 Изменения:
 
 - Изменён этап «Ревью».
-- Изменён ` + msg.Text(msg.DiffReturn, "Ревью", "Реализация") + `: до 3 раз вместо 2.
+- Изменён ` + msg.Text(msg.DiffReturn, "Ревью", "Реализация") + `: ` + msg.Text(msg.DiffInstead, msg.Count(msg.DiffRounds, 3), 2) + `.
 
 ## Сценарий «Фича» (feature)
 

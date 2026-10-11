@@ -74,7 +74,7 @@ type InvalidError struct{ Path, Reason string }
 func (e *InvalidError) Error() string { return e.Path + ": " + e.Reason }
 
 // BusyError means another command of Gentry holds the repository longer than
-// LockWait.
+// the command waits: LockWait, or not at all for TryOpen.
 type BusyError struct{ Path string }
 
 func (e *BusyError) Error() string { return e.Path + ": busy" }
@@ -128,7 +128,7 @@ func Open(dir string) (*Repo, error) {
 		// A worktree or a submodule of another repository.
 		return nil, &InvalidError{Path: dir, Reason: ReasonNotProcess}
 	}
-	if err := r.takeLock(dotGit); err != nil {
+	if err := r.takeLock(dotGit, LockWait); err != nil {
 		return nil, err
 	}
 	if err := r.prepare(); err != nil {
@@ -136,6 +136,62 @@ func Open(dir string) (*Repo, error) {
 		return nil, err
 	}
 	return r, nil
+}
+
+// ErrNoRepo means the process directory has no repository yet.
+var ErrNoRepo = errors.New("no process repository")
+
+// TryOpen opens the process repository in directory dir to read it, if
+// another command does not hold it: it takes the repository at once or
+// returns BusyError. It never creates the repository and writes nothing but
+// its lock file, which it creates if there is none. A directory without a
+// repository returns ErrNoRepo. The caller closes it.
+func TryOpen(dir string) (*Repo, error) {
+	if err := git.Find(); err != nil {
+		return nil, err
+	}
+	dir, err := paths.Canonical(dir)
+	if err != nil {
+		return nil, err
+	}
+	dotGit := filepath.Join(dir, ".git")
+	fi, err := os.Stat(dotGit)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil, ErrNoRepo
+	case err != nil:
+		return nil, err
+	case !fi.IsDir():
+		return nil, &InvalidError{Path: dir, Reason: ReasonNotProcess}
+	}
+	r := &Repo{Dir: dir, blobs: map[string]string{}, trees: map[string]tree{}}
+	if err := r.takeLock(dotGit, 0); err != nil {
+		return nil, err
+	}
+	if err := r.checkFormat(); err != nil {
+		r.Close()
+		return nil, err
+	}
+	return r, nil
+}
+
+// checkFormat checks that the repository is a process repository of a format
+// this Gentry knows; one without commits is not.
+func (r *Repo) checkFormat() error {
+	head, err := r.head()
+	if err != nil {
+		return err
+	}
+	format, ok, err := r.formatAt(head)
+	switch {
+	case err != nil:
+		return err
+	case head == "" || !ok:
+		return &InvalidError{Path: r.Dir, Reason: ReasonNotProcess}
+	case format > Format:
+		return &InvalidError{Path: r.Dir, Reason: ReasonNewerFormat}
+	}
+	return nil
 }
 
 // Close releases the repository.
@@ -147,12 +203,14 @@ func (r *Repo) Close() {
 	}
 }
 
-func (r *Repo) takeLock(dotGit string) error {
+// takeLock takes the lock of the repository, waiting up to wait for another
+// command to release it.
+func (r *Repo) takeLock(dotGit string, wait time.Duration) error {
 	f, err := os.OpenFile(filepath.Join(dotGit, lockFile), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return err
 	}
-	deadline := time.Now().Add(LockWait)
+	deadline := time.Now().Add(wait)
 	for {
 		ok, err := filelock.TryLock(f)
 		if err != nil {
@@ -198,15 +256,8 @@ func (r *Repo) prepare() error {
 		}
 		return r.setChecked(c)
 	}
-	format, ok, err := r.formatAt(head)
-	if err != nil {
+	if err := r.checkFormat(); err != nil {
 		return err
-	}
-	switch {
-	case !ok:
-		return &InvalidError{Path: r.Dir, Reason: ReasonNotProcess}
-	case format > Format:
-		return &InvalidError{Path: r.Dir, Reason: ReasonNewerFormat}
 	}
 	if checked, err := r.checked(); err != nil {
 		return err

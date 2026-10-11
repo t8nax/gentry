@@ -477,3 +477,44 @@ func TestTaskSnapshot(t *testing.T) {
 		t.Errorf("the first task changed its flow: %s", stdout)
 	}
 }
+
+// TestTaskShowActiveFlow checks that task show marks a change of the active
+// flow after the take, for the task of the worktree and for one named from
+// another worktree, and not for a cancelled task.
+func TestTaskShowActiveFlow(t *testing.T) {
+	shop, fix := clitest.TaskShop(t)
+	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	if stdout := clitest.MustRun(t, "task", "show", "--json"); strings.Contains(stdout, `"active_flow"`) {
+		t.Errorf("no flow applied: %s", stdout)
+	}
+
+	clitest.WriteDraft(t, clitest.ShopPlaces(), map[string]string{"stages/merge.md": "Влить ветку задачи в main после ревью.\n"})
+	var applied contract.FlowApplyOutput
+	if err := json.Unmarshal([]byte(clitest.MustRun(t, "flow", "apply", "--json")), &applied); err != nil {
+		t.Fatal(err)
+	}
+	stdout := clitest.Masked(clitest.MustRun(t, "task", "show"))
+	if want := "\n" + msg.Text(msg.TaskFlowApplied, "<время>") + "\n" + msg.Text(msg.TaskActiveFlowChanged, "<время>") + "\n"; !strings.Contains(stdout, want) {
+		t.Errorf("task show:\n%s\nwant within:\n%s", stdout, want)
+	}
+	t.Chdir(shop)
+	out := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "SHOP-1")
+	if got := clitest.JSONAt(t, out, "task.active_flow.commit"); got != applied.Applied.Commit {
+		t.Errorf("active_flow.commit %q, want %q: %s", got, applied.Applied.Commit, out)
+	}
+	clitest.WantSameTime(t, "active_flow.time", clitest.JSONAt(t, out, "task.active_flow.time"), applied.Applied.Time.UTC().Format(contract.TimeFormat))
+
+	// --statement changes the text alone: JSON has the change too.
+	if statement := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "SHOP-1", "--statement"); statement != out {
+		t.Errorf("--statement --json:\n%s\nwant:\n%s", statement, out)
+	}
+
+	clitest.MustRun(t, "task", "cancel", "SHOP-1")
+	if stdout := clitest.MustRun(t, "task", "show", "SHOP-1", "--json"); strings.Contains(stdout, `"active_flow"`) {
+		t.Errorf("a cancelled task: %s", stdout)
+	}
+	if stdout := clitest.MustRun(t, "task", "show", "SHOP-1"); strings.Contains(stdout, msg.Text(msg.TaskActiveFlowChanged, "")) {
+		t.Errorf("a cancelled task:\n%s", stdout)
+	}
+}

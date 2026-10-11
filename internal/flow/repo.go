@@ -95,23 +95,21 @@ func Check(k process.Kind, files, library process.Files) ([]string, error) {
 	return messages, nil
 }
 
-// Active returns the active flow of a project, read and checked, and the
-// commit that applied it; ok is false if the project has no flow.
-func Active(r *process.Repo, project string) (res *Result, applied process.Applied, ok bool, err error) {
-	k := process.FlowOf(project)
-	files, err := r.Active(k)
+// Active returns the active flow of a project, read and checked; ok is false
+// if the project has no flow. The commit that applied it is r.Applied.
+func Active(r *process.Repo, project string) (res *Result, ok bool, err error) {
+	files, err := r.Active(process.FlowOf(project))
 	if err != nil || len(files) == 0 {
-		return nil, process.Applied{}, false, err
+		return nil, false, err
 	}
 	library, err := r.Active(process.Library)
 	if err != nil {
-		return nil, process.Applied{}, false, err
+		return nil, false, err
 	}
 	if res, err = Read(files, library, nil); err != nil {
-		return nil, process.Applied{}, false, err
+		return nil, false, err
 	}
-	applied, ok, err = r.Applied(k)
-	return res, applied, ok, err
+	return res, true, nil
 }
 
 // Draft returns the draft of the flow of a project, read and checked with

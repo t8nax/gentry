@@ -10,6 +10,7 @@ import (
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/agents"
 	"github.com/t8nax/gentry/internal/flow"
+	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/paths"
 	"github.com/t8nax/gentry/internal/process"
@@ -131,12 +132,16 @@ func runTaskTake(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	res, applied, ok, err := flow.Active(r, w.Project)
+	res, ok, err := flow.Active(r, w.Project)
 	if err != nil {
 		return fail(env, flowFailure(err, places))
 	}
 	if !ok {
 		return fail(env, flowFailure(&flow.NoFlowError{Project: w.Project, Dir: places.Dir}, places))
+	}
+	applied, _, err := r.Applied(process.FlowOf(w.Project))
+	if err != nil {
+		return fail(env, flowFailure(err, places))
 	}
 	if len(res.Problems) > 0 {
 		return fail(env, flowInvalid(places, res.Problems))
@@ -386,7 +391,15 @@ func runTaskShow(args []string, env Env) int {
 		}
 	}
 	x := taskShowExtra{names: namesOf(v), here: here, full: *full, statement: *onlyStatement}
-	return emit(env, taskShowJSON(v, notes, artifacts, decisions), func(p *page, out contract.TaskShowOutput) {
+	out := taskShowJSON(v, notes, artifacts, decisions)
+	// The output is one with --statement or without: --statement changes
+	// the text alone, and a command does not read --json (TestOneOutput).
+	if dir, err := home.Process(); err == nil {
+		if a := task.ActiveFlowAt(dir, v); a != nil {
+			out.Task.ActiveFlow = appliedJSON(a)
+		}
+	}
+	return emit(env, out, func(p *page, out contract.TaskShowOutput) {
 		taskShowText(p, out, x)
 	})
 }

@@ -83,8 +83,20 @@ func TestHelpText(t *testing.T) {
 		t.Errorf("flow --help:\n%s\nwant:\n%s", got, want)
 	}
 	flowShow, _ := lookup("flow show")
-	if usage := "  gentry flow show [--scenario <сценарий> | --stage <этап> | --agent <субагент> | --part <фрагмент>] [--draft] [--project <идентификатор>] [--json]\n"; !strings.Contains(describe(flowShow), usage) {
-		t.Errorf("flow show --help:\n%s\nwant within:\n%s", describe(flowShow), usage)
+	got = describe(flowShow)
+	for _, part := range []string{
+		lines(
+			"Показать сценарии, этапы и субагентов флоу проекта.",
+			"В рабочей копии с задачей выводится флоу задачи.",
+			"С флагом объекта выводится этот объект подробно.",
+			"Если во флоу есть ошибки, выводится их перечень.",
+		),
+		"  gentry flow show [--scenario <сценарий> | --stage <этап> | --agent <субагент> | --part <фрагмент>] [--active | --draft] [--project <идентификатор>] [--json]\n",
+		"  --active                    Показать действующий флоу проекта, а не флоу задачи рабочей копии.\n",
+	} {
+		if !strings.Contains(got, part) {
+			t.Errorf("flow show --help:\n%s\nwant within:\n%s", got, part)
+		}
 	}
 }
 

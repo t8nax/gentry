@@ -264,6 +264,36 @@ func TestDraft(t *testing.T) {
 	}
 }
 
+// TestLastApplied checks that the latest commit of several kinds is the one
+// applied last, though the commits fall within one second.
+func TestLastApplied(t *testing.T) {
+	t.Parallel()
+	m := open(t, filepath.Join(t.TempDir(), "process"))
+	if _, ok, err := m.LastApplied(shop, Library); ok || err != nil {
+		t.Errorf("nothing applied: %v, %v", ok, err)
+	}
+	m.write(shop, map[string]string{"flow.yaml": "a\n"})
+	m.apply(shop)
+	m.write(Library, map[string]string{"reviewer.yaml": "a\n"})
+	m.apply(Library)
+	library, _, _ := m.Applied(Library)
+	if a, ok, err := m.LastApplied(shop, Library); !ok || err != nil || !same(a, library) {
+		t.Errorf("after the library: %+v, %v, %v; want %+v", a, ok, err, library)
+	}
+	m.write(shop, map[string]string{"flow.yaml": "b\n"})
+	m.apply(shop)
+	flow, _, _ := m.Applied(shop)
+	if a, ok, err := m.LastApplied(shop, Library); !ok || err != nil || !same(a, flow) {
+		t.Errorf("after the flow: %+v, %v, %v; want %+v", a, ok, err, flow)
+	}
+	if a, ok, err := m.LastApplied(Library); !ok || err != nil || !same(a, library) {
+		t.Errorf("of the library alone: %+v, %v, %v; want %+v", a, ok, err, library)
+	}
+}
+
+// same reports whether a and b name one commit at one time.
+func same(a, b Applied) bool { return a.Commit == b.Commit && a.Time.Equal(b.Time) }
+
 func TestSyncReceiveAndSend(t *testing.T) {
 	t.Parallel()
 	a, b, _ := pair(t)

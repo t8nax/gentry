@@ -365,46 +365,57 @@ type View struct {
 	Round         int  // the round of the current pass
 	Finished      bool // the scenario is passed
 	Progress      Progress
-	Path          []state.Pass // the passes in the order entered, each with its stage
-	Flow          *flow.Flow   // nil if the snapshot cannot be read
+	Path          []state.Pass   // the passes in the order entered, each with its stage
+	Flow          *flow.Flow     // nil if the snapshot cannot be read
+	Snapshot      *flow.Snapshot // the snapshot of the flow as stored; nil if it cannot be decoded
 }
 
 // Views returns the tasks with the names from their snapshots and their
 // paths; each snapshot is read once.
 func Views(st *state.Store, tasks []state.Task) ([]View, error) {
-	flows := map[[2]string]*flow.Flow{}
+	type pinned struct {
+		flow *flow.Flow
+		snap *flow.Snapshot
+	}
+	flows := map[[2]string]pinned{}
 	views := make([]View, len(tasks))
 	for i, t := range tasks {
 		k := [2]string{t.Project, t.FlowCommit}
-		fl, ok := flows[k]
+		p, ok := flows[k]
 		if !ok {
 			var err error
-			if fl, err = snapshotFlow(st, t.Project, t.FlowCommit); err != nil {
+			if p.flow, p.snap, err = snapshotFlow(st, t.Project, t.FlowCommit); err != nil {
 				return nil, err
 			}
-			flows[k] = fl
+			flows[k] = p
 		}
 		passes, err := st.TaskPath(t)
 		if err != nil {
 			return nil, err
 		}
-		views[i] = view(t, fl, passes)
+		views[i] = view(t, p.flow, passes)
+		views[i].Snapshot = p.snap
 	}
 	return views, nil
 }
 
-// snapshotFlow reads the flow of a snapshot; nil if it cannot be read, as a
-// later Gentry may check more than the one that took the task.
-func snapshotFlow(st *state.Store, project, commit string) (*flow.Flow, error) {
+// snapshotFlow reads the snapshot of a flow and its flow; the flow is nil if
+// it cannot be read, as a later Gentry may check more than the one that took
+// the task, and the snapshot is nil too if it cannot be decoded.
+func snapshotFlow(st *state.Store, project, commit string) (*flow.Flow, *flow.Snapshot, error) {
 	s, ok, err := st.Snapshot(project, commit)
 	if err != nil || !ok {
-		return nil, err
+		return nil, nil, err
 	}
-	fl, err := readSnapshot(s.Content)
+	snap, err := flow.DecodeSnapshot([]byte(s.Content))
 	if err != nil {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return fl, nil
+	res, err := flow.ReadSnapshot(snap)
+	if err != nil || res.Flow == nil {
+		return nil, &snap, nil
+	}
+	return res.Flow, &snap, nil
 }
 
 // view names the scenario and the stage of t in its flow fl and counts its

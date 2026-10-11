@@ -3,6 +3,7 @@ package process
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -231,6 +232,51 @@ func TestLockWaits(t *testing.T) {
 	}
 }
 
+// TestTryOpen checks that a reading command neither creates the repository
+// nor waits for another command to release it.
+func TestTryOpen(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "process")
+	if _, err := TryOpen(dir); !errors.Is(err, ErrNoRepo) {
+		t.Errorf("no repository: %v", err)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the repository is created: %v", err)
+	}
+	m := open(t, dir)
+	m.write(shop, map[string]string{"flow.yaml": "a\n"})
+	m.apply(shop)
+	start := time.Now()
+	var be *BusyError
+	if _, err := TryOpen(dir); !errors.As(err, &be) {
+		t.Errorf("held by another command: %v", err)
+	}
+	if waited := time.Since(start); waited > LockWait/2 {
+		t.Errorf("waited %s for the repository", waited)
+	}
+	m.Close()
+	// Unlike Open, TryOpen does not mark what Gentry has checked: the
+	// reference stays missing.
+	gittest.Run(t, dir, "update-ref", "-d", checkedRef)
+	r, err := TryOpen(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if files, err := r.Active(shop); err != nil || !files.Equal(Files{"flow.yaml": "a\n"}) {
+		t.Errorf("active: %v, %v", files, err)
+	}
+	r.Close()
+	if out, err := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", checkedRef).Output(); err == nil {
+		t.Errorf("TryOpen wrote %s: %s", checkedRef, out)
+	}
+	other := filepath.Join(t.TempDir(), "other")
+	gittest.Repo(t, other)
+	var ie *InvalidError
+	if _, err := TryOpen(other); !errors.As(err, &ie) || ie.Reason != ReasonNotProcess {
+		t.Errorf("a repository of something else: %v", err)
+	}
+}
+
 func TestDraft(t *testing.T) {
 	t.Parallel()
 	m := open(t, filepath.Join(t.TempDir(), "process"))
@@ -263,6 +309,36 @@ func TestDraft(t *testing.T) {
 		t.Errorf("kinds: %v", kinds)
 	}
 }
+
+// TestLastApplied checks that the latest commit of several kinds is the one
+// applied last, though the commits fall within one second.
+func TestLastApplied(t *testing.T) {
+	t.Parallel()
+	m := open(t, filepath.Join(t.TempDir(), "process"))
+	if _, ok, err := m.LastApplied(shop, Library); ok || err != nil {
+		t.Errorf("nothing applied: %v, %v", ok, err)
+	}
+	m.write(shop, map[string]string{"flow.yaml": "a\n"})
+	m.apply(shop)
+	m.write(Library, map[string]string{"reviewer.yaml": "a\n"})
+	m.apply(Library)
+	library, _, _ := m.Applied(Library)
+	if a, ok, err := m.LastApplied(shop, Library); !ok || err != nil || !same(a, library) {
+		t.Errorf("after the library: %+v, %v, %v; want %+v", a, ok, err, library)
+	}
+	m.write(shop, map[string]string{"flow.yaml": "b\n"})
+	m.apply(shop)
+	flow, _, _ := m.Applied(shop)
+	if a, ok, err := m.LastApplied(shop, Library); !ok || err != nil || !same(a, flow) {
+		t.Errorf("after the flow: %+v, %v, %v; want %+v", a, ok, err, flow)
+	}
+	if a, ok, err := m.LastApplied(Library); !ok || err != nil || !same(a, library) {
+		t.Errorf("of the library alone: %+v, %v, %v; want %+v", a, ok, err, library)
+	}
+}
+
+// same reports whether a and b name one commit at one time.
+func same(a, b Applied) bool { return a.Commit == b.Commit && a.Time.Equal(b.Time) }
 
 func TestSyncReceiveAndSend(t *testing.T) {
 	t.Parallel()

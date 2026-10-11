@@ -60,6 +60,36 @@ func (r *Repo) Applied(k Kind) (a Applied, ok bool, err error) {
 	return parseApplied(out)
 }
 
+// LastApplied returns the latest of the commits that made the active content
+// of kinds ks: the last commit at HEAD that changed any of them. The order of
+// the history tells which is later, not the time of the commits: it is to the
+// second, and two kinds may be applied within one. ok is false if none of ks
+// has files at HEAD.
+func (r *Repo) LastApplied(ks ...Kind) (a Applied, ok bool, err error) {
+	head, err := r.head()
+	if err != nil {
+		return Applied{}, false, err
+	}
+	t, err := r.treeOf(head)
+	if err != nil {
+		return Applied{}, false, err
+	}
+	args := []string{"log", "-1", "--format=%H %cI", "HEAD", "--"}
+	for _, k := range ks {
+		if len(t.kind(k)) > 0 {
+			args = append(args, k.root())
+		}
+	}
+	if len(args) == 5 {
+		return Applied{}, false, nil
+	}
+	out, err := r.git(args...)
+	if err != nil {
+		return Applied{}, false, err
+	}
+	return parseApplied(out)
+}
+
 func parseApplied(out string) (Applied, bool, error) {
 	hash, at, ok := strings.Cut(strings.TrimSpace(out), " ")
 	if !ok {

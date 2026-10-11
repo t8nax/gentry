@@ -13,6 +13,7 @@ import (
 	"github.com/t8nax/gentry/internal/process"
 	"github.com/t8nax/gentry/internal/project"
 	"github.com/t8nax/gentry/internal/state"
+	"github.com/t8nax/gentry/internal/task"
 )
 
 // Objects of a flow the flags of flow show name, in the order of the spec.
@@ -109,14 +110,17 @@ func syncFlow(env Env, r *process.Repo) (*process.Sync, *contract.AgentsLayout, 
 	return s, syncDone(env, r, s, false), nil
 }
 
-// runFlowShow prints the active flow of a project or its draft, as a whole
-// or one object of it. It only reads: the flow is checked anew at each call.
+// runFlowShow prints a flow as a whole or one object of it: in a worktree
+// that holds a task, the flow of the task; otherwise, or with --active, the
+// active flow of the project; with --draft its draft. It only reads: the
+// flow is checked anew at each call.
 func runFlowShow(args []string, env Env) int {
 	f := newFlags("flow show")
 	objects := make([]*stringFlag, len(flowObjects))
 	for i, o := range flowObjects {
 		objects[i] = f.String(o.flag)
 	}
+	active := f.Bool("active")
 	draft := f.Bool("draft")
 	proj := f.String("project")
 	if code, done := f.parse(args, env); done {
@@ -138,6 +142,9 @@ func runFlowShow(args []string, env Env) int {
 	if len(given) > 1 {
 		return fail(env, conflictingFlags("flow show", given[:2]))
 	}
+	if *active && *draft {
+		return fail(env, conflictingFlags("flow show", []string{"--active", "--draft"}))
+	}
 	if proj.Set && proj.Value == "" {
 		return fail(env, flagValueMissing("--project"))
 	}
@@ -151,41 +158,108 @@ func runFlowShow(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
+	out := contract.FlowShowOutput{Project: places.Project, Sync: syncJSON(s, synced)}
+	var fl *flow.Flow
+	tf, ok, bad := copyTaskFlow(r, places.Project, *active || *draft)
+	switch {
+	case bad != nil:
+		return fail(env, *bad)
+	case ok:
+		fl = tf.Flow
+		out.Task = &contract.FlowShowTask{Id: tf.Key(), Flow: contract.Applied{Commit: tf.FlowCommit, Time: tf.FlowApplied}}
+		if tf.ActiveFlow != nil {
+			out.Task.ActiveFlow = appliedJSON(tf.ActiveFlow)
+		}
+	default:
+		if fl, bad = projectFlow(r, places, *draft, &out); bad != nil {
+			return fail(env, *bad)
+		}
+	}
+	x := flowShowExtra{draft: *draft}
+	if object >= 0 {
+		narrowed, uses, ok := flowObject(fl, flowObjects[object].flag, id)
+		if !ok {
+			return fail(env, objectNotFound(places.Project, object, id, *draft))
+		}
+		fl, x.object, x.uses = narrowed, flowObjects[object].flag, uses
+	}
+	return emit(env, flowJSON(out, fl), func(p *page, out contract.FlowShowOutput) { flowShowText(p, out, x) })
+}
+
+// copyTaskFlow returns the flow of the task that holds the worktree of the
+// current directory, if the task is of project; ok is false if the directory
+// holds no task of project, or if skip is set: --active and --draft show the
+// flow of the project. The state store is only read, and not created.
+func copyTaskFlow(r *process.Repo, project string, skip bool) (tf task.FlowView, ok bool, bad *failure) {
+	fail := func(f failure) (task.FlowView, bool, *failure) { return task.FlowView{}, false, &f }
+	if skip {
+		return task.FlowView{}, false, nil
+	}
+	st, bad := openTasks()
+	if bad != nil || st == nil {
+		return task.FlowView{}, false, bad
+	}
+	defer st.Close()
+	worktrees, bad := readWorktrees(st)
+	if bad != nil {
+		return task.FlowView{}, false, bad
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return fail(internal(err))
+	}
+	dir, err := paths.Canonical(wd)
+	if err != nil {
+		return fail(internal(err))
+	}
+	tf, ok, err = task.FlowIn(st, r, worktrees, dir, project)
+	if err != nil {
+		// A snapshot that cannot be read refuses as stage show does.
+		return fail(processFailure(err))
+	}
+	return tf, ok, nil
+}
+
+// projectFlow returns the active flow of the project at places, or with
+// draft its draft, and puts into out when the active flow was applied, the
+// flow directory and the draft.
+func projectFlow(r *process.Repo, places flow.Places, draft bool, out *contract.FlowShowOutput) (*flow.Flow, *failure) {
+	fail := func(f failure) (*flow.Flow, *failure) { return nil, &f }
 	k := process.FlowOf(places.Project)
 	hasDraft, err := r.HasDraft(k)
 	if err != nil {
-		return fail(env, flowFailure(err, places))
+		return fail(flowFailure(err, places))
 	}
-
-	var fl *flow.Flow
-	out := contract.FlowShowOutput{Project: places.Project, Dir: places.Dir, Sync: syncJSON(s, synced)}
+	dir := places.Dir
+	out.Dir = &dir
 	if a, ok, err := r.Applied(k); err != nil {
-		return fail(env, flowFailure(err, places))
+		return fail(flowFailure(err, places))
 	} else if ok {
 		out.Applied = appliedJSON(&a)
 	}
-	if *draft {
+	var fl *flow.Flow
+	if draft {
 		res, ok, err := flow.Draft(r, places)
 		if err != nil {
-			return fail(env, flowFailure(err, places))
+			return fail(flowFailure(err, places))
 		}
 		if !ok {
-			return fail(env, flowFailure(&flow.NoDraftError{Project: places.Project, Dir: places.Dir}, places))
+			return fail(flowFailure(&flow.NoDraftError{Project: places.Project, Dir: places.Dir}, places))
 		}
 		if len(res.Problems) > 0 {
-			return fail(env, flowFailure(&flow.DraftInvalidError{Dir: places.Dir, Problems: res.Problems}, places))
+			return fail(flowFailure(&flow.DraftInvalidError{Dir: places.Dir, Problems: res.Problems}, places))
 		}
 		fl = res.Flow
 	} else {
-		res, _, ok, err := flow.Active(r, places.Project)
+		res, ok, err := flow.Active(r, places.Project)
 		if err != nil {
-			return fail(env, flowFailure(err, places))
+			return fail(flowFailure(err, places))
 		}
 		if !ok {
-			return fail(env, flowFailure(&flow.NoFlowError{Project: places.Project, Dir: places.Dir}, places))
+			return fail(flowFailure(&flow.NoFlowError{Project: places.Project, Dir: places.Dir}, places))
 		}
 		if len(res.Problems) > 0 {
-			return fail(env, flowInvalid(places, res.Problems))
+			return fail(flowInvalid(places, res.Problems))
 		}
 		fl = res.Flow
 	}
@@ -193,7 +267,7 @@ func runFlowShow(args []string, env Env) int {
 		out.Draft = &contract.FlowDraftInfo{}
 		objects, conflict, err := flow.ConflictObjects(r, k)
 		if err != nil {
-			return fail(env, flowFailure(err, places))
+			return fail(flowFailure(err, places))
 		}
 		if conflict {
 			out.Draft.ConflictDir = &places.Conflict
@@ -208,15 +282,7 @@ func runFlowShow(args []string, env Env) int {
 			}
 		}
 	}
-	x := flowShowExtra{draft: *draft}
-	if object >= 0 {
-		narrowed, uses, ok := flowObject(fl, flowObjects[object].flag, id)
-		if !ok {
-			return fail(env, objectNotFound(places.Project, object, id, *draft))
-		}
-		fl, x.object, x.uses = narrowed, flowObjects[object].flag, uses
-	}
-	return emit(env, flowJSON(out, fl), func(p *page, out contract.FlowShowOutput) { flowShowText(p, out, x) })
+	return fl, nil
 }
 
 // flowShowExtra is what the text of flow show has apart from the contract:
@@ -261,56 +327,34 @@ func flowObject(fl *flow.Flow, flag, id string) (*flow.Flow, []string, bool) {
 }
 
 // flowShowText prints the object shown alone, or the summary of the flow,
-// or of the draft, and its scenarios, stages and subagents as tables.
+// or of the draft, and its scenarios, stages and subagents as tables. The
+// flow of a task is headed by the block of the task, and a change of the
+// active flow adds the hint to show it.
 func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 	b := &p.Builder
-	switch x.object {
-	case "scenario":
-		writeScenario(b, out, out.Scenarios[0])
-		return
-	case "stage":
-		st := out.Stages[0]
-		fmt.Fprintln(b, msg.Text(msg.FlowStage, st.Id))
-		fmt.Fprintln(b, msg.Text(msg.FlowTitle, oneLine(st.Title)))
-		fmt.Fprintln(b, msg.Text(msg.FlowExecutor, st.Executor))
-		fmt.Fprintln(b, msg.Text(msg.FlowExit, oneLine(st.Exit)))
-		fmt.Fprintln(b, msg.Text(msg.FlowParts, joined(st.Include)))
-		fmt.Fprintln(b, msg.Text(msg.FlowScenarios, joined(x.uses)))
-		b.WriteString("\n")
-		writeText(b, msg.Text(msg.FlowInstruction), st.Instruction)
-		return
-	case "agent":
-		a := out.Agents[0]
-		fmt.Fprintln(b, msg.Text(msg.FlowAgent, a.Id))
-		fmt.Fprintln(b, msg.Text(msg.FlowSource, agentSource(a)))
-		fmt.Fprintln(b, msg.Text(msg.FlowPurpose, oneLine(a.Purpose)))
-		var capabilities []string
-		for _, c := range a.Capabilities {
-			capabilities = append(capabilities, string(c))
+	changed := out.Task != nil && out.Task.ActiveFlow != nil
+	if x.object != "" {
+		if out.Task != nil {
+			writeFlowTask(b, out.Task)
+			b.WriteString("\n")
 		}
-		fmt.Fprintln(b, msg.Text(msg.FlowCapabilities, joined(capabilities)))
-		var model string
-		if a.Model != nil {
-			model = string(*a.Model)
+		writeFlowObject(b, out, x)
+		if changed {
+			p.hints(hintOf(msg.HintFlowActive))
 		}
-		fmt.Fprintln(b, msg.Text(msg.FlowModel, orNone(model)))
-		fmt.Fprintln(b, msg.Text(msg.FlowStages, joined(x.uses)))
-		b.WriteString("\n")
-		writeText(b, msg.Text(msg.FlowInstruction), a.Instruction)
-		return
-	case "part":
-		part := out.Parts[0]
-		fmt.Fprintln(b, msg.Text(msg.FlowPart, part.Id))
-		fmt.Fprintln(b, msg.Text(msg.FlowStages, joined(x.uses)))
-		b.WriteString("\n")
-		writeText(b, msg.Text(msg.FlowText), part.Text)
 		return
 	}
 	fmt.Fprintln(b, msg.Text(msg.FlowProject, out.Project))
-	writeFlowApplied(b, out.Applied)
-	fmt.Fprintln(b, msg.Text(msg.FlowDir, out.Dir))
-	if !x.draft && out.Draft != nil {
-		fmt.Fprintln(b, msg.Text(msg.FlowDraftOpened))
+	if out.Task != nil {
+		writeFlowTask(b, out.Task)
+	} else {
+		writeFlowApplied(b, out.Applied)
+		if out.Dir != nil {
+			fmt.Fprintln(b, msg.Text(msg.FlowDir, *out.Dir))
+		}
+		if !x.draft && out.Draft != nil {
+			fmt.Fprintln(b, msg.Text(msg.FlowDraftOpened))
+		}
 	}
 	b.WriteString("\n")
 	rows := [][]string{{msg.Text(msg.ColScenario), msg.Text(msg.ColTitle)}}
@@ -343,8 +387,64 @@ func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 		p.hints(hintOf(msg.HintFlowApply))
 	case out.Draft != nil:
 		p.hints(hintOf(msg.HintFlowShowDraft))
+	case changed:
+		p.hints(hintOf(msg.HintFlowStage), hintOf(msg.HintFlowActive))
 	default:
 		p.hints(hintOf(msg.HintFlowStage))
+	}
+}
+
+// writeFlowTask prints the block of the task whose flow is shown: the task,
+// when its flow was applied and, if the active flow changed after the task
+// was taken, when it last changed.
+func writeFlowTask(b *strings.Builder, t *contract.FlowShowTask) {
+	fmt.Fprintln(b, msg.Text(msg.FlowTask, t.Id))
+	fmt.Fprintln(b, msg.Text(msg.TaskFlowApplied, localTime(t.Flow.Time)))
+	if t.ActiveFlow != nil {
+		fmt.Fprintln(b, msg.Text(msg.TaskActiveFlowChanged, localTime(t.ActiveFlow.Time)))
+	}
+}
+
+// writeFlowObject prints the object shown alone: its fields, where it is
+// used and its text.
+func writeFlowObject(b *strings.Builder, out contract.FlowShowOutput, x flowShowExtra) {
+	switch x.object {
+	case "scenario":
+		writeScenario(b, out, out.Scenarios[0])
+	case "stage":
+		st := out.Stages[0]
+		fmt.Fprintln(b, msg.Text(msg.FlowStage, st.Id))
+		fmt.Fprintln(b, msg.Text(msg.FlowTitle, oneLine(st.Title)))
+		fmt.Fprintln(b, msg.Text(msg.FlowExecutor, st.Executor))
+		fmt.Fprintln(b, msg.Text(msg.FlowExit, oneLine(st.Exit)))
+		fmt.Fprintln(b, msg.Text(msg.FlowParts, joined(st.Include)))
+		fmt.Fprintln(b, msg.Text(msg.FlowScenarios, joined(x.uses)))
+		b.WriteString("\n")
+		writeText(b, msg.Text(msg.FlowInstruction), st.Instruction)
+	case "agent":
+		a := out.Agents[0]
+		fmt.Fprintln(b, msg.Text(msg.FlowAgent, a.Id))
+		fmt.Fprintln(b, msg.Text(msg.FlowSource, agentSource(a)))
+		fmt.Fprintln(b, msg.Text(msg.FlowPurpose, oneLine(a.Purpose)))
+		var capabilities []string
+		for _, c := range a.Capabilities {
+			capabilities = append(capabilities, string(c))
+		}
+		fmt.Fprintln(b, msg.Text(msg.FlowCapabilities, joined(capabilities)))
+		var model string
+		if a.Model != nil {
+			model = string(*a.Model)
+		}
+		fmt.Fprintln(b, msg.Text(msg.FlowModel, orNone(model)))
+		fmt.Fprintln(b, msg.Text(msg.FlowStages, joined(x.uses)))
+		b.WriteString("\n")
+		writeText(b, msg.Text(msg.FlowInstruction), a.Instruction)
+	case "part":
+		part := out.Parts[0]
+		fmt.Fprintln(b, msg.Text(msg.FlowPart, part.Id))
+		fmt.Fprintln(b, msg.Text(msg.FlowStages, joined(x.uses)))
+		b.WriteString("\n")
+		writeText(b, msg.Text(msg.FlowText), part.Text)
 	}
 }
 

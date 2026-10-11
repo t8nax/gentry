@@ -94,6 +94,9 @@ func writeTaskFields(b *strings.Builder, t contract.Task, n names) {
 		fmt.Fprintln(b, endedLine(t))
 	}
 	fmt.Fprintln(b, msg.Text(msg.TaskFlowApplied, localTime(t.Flow.Time)))
+	if t.ActiveFlow != nil {
+		fmt.Fprintln(b, msg.Text(msg.TaskActiveFlowChanged, localTime(t.ActiveFlow.Time)))
+	}
 	if t.Ended != nil && t.Ended.Reason != nil {
 		fmt.Fprintln(b, msg.Text(msg.CancelReasonLine, oneLine(*t.Ended.Reason)))
 	}

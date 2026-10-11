@@ -60,6 +60,10 @@
       "description": "The commit that applied the flow of the task: the task follows that flow to its end, whatever is applied later.",
       "$ref": "./applied.json"
     },
+    "active_flow": {
+      "description": "The last change of the active flow: the later of the commits that applied the flow of the project and the library. Present only in `gentry task show` for a task in work or waiting for the operator, if the active flow changed after the task was taken: the flow a task taken now would get differs from the flow of the task; line ends alone and library subagents no stage names do not count.",
+      "$ref": "./applied.json"
+    },
     "statement": {
       "title": "TaskStatement",
       "description": "Statement of the task as passed, with its source.",

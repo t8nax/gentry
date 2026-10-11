@@ -10,11 +10,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/paths"
+	"github.com/t8nax/gentry/internal/process"
 )
 
 // writers is the number of gentry processes that take tasks at once.
@@ -159,5 +161,34 @@ func TestTakeManyWorktreesAtOnce(t *testing.T) {
 	slices.Sort(want)
 	if !slices.Equal(ids, want) {
 		t.Errorf("numbers %v, want %v", ids, want)
+	}
+}
+
+// TestTaskShowWhileProcessBusy checks that task show of a task whose active
+// flow changed neither waits for another process holding the process
+// repository nor refuses: it shows the task without the change.
+func TestTaskShowWhileProcessBusy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("concurrent processes are skipped in short mode")
+	}
+	bin := buildGentry(t)
+	shop := takenShop(t, bin)
+	dir := filepath.Join(os.Getenv(home.EnvVar), "process")
+	if err := os.WriteFile(filepath.Join(dir, "shop", "flow", "stages", "merge.md"), []byte("Влить ветку после ревью.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gentry(t, bin, shop, "flow", "apply")
+	r, err := process.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	held := gentry(t, bin, shop, "task", "show", "--json")
+	if waited := time.Since(start); waited > process.LockWait/2 || strings.Contains(held, `"active_flow"`) {
+		t.Errorf("while the process is held, after %s: %s", waited, held)
+	}
+	r.Close()
+	if free := gentry(t, bin, shop, "task", "show", "--json"); !strings.Contains(free, `"active_flow"`) {
+		t.Errorf("once the process is free: %s", free)
 	}
 }

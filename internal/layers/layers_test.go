@@ -59,10 +59,10 @@ var exceptions = []exception{
 // TestImportDirection checks the non-test files of the packages of the
 // module against the table of layers: each package but the test helpers has
 // a layer; it imports no package of a higher layer but by an exception and
-// no test helper; each package of the table and each test helper is a
-// package of the module; each exception has a reason and lets through an
-// import of the code; each import it lets through has a comment that holds
-// the reason.
+// no test helper; each package of the table is there once and is not a test
+// helper; each package of the table and each test helper is a package of the
+// module; each exception has a reason and lets through an import of the
+// code; each import it lets through has a comment that holds the reason.
 func TestImportDirection(t *testing.T) {
 	root, module := moduleRoot(t)
 	pkgs, err := moduleImports(root, module)
@@ -82,8 +82,9 @@ func TestImportDirection(t *testing.T) {
 // check reports an import of a higher layer, a package with no layer, an
 // import of a test helper, a package of the table and a test helper that are
 // not in the code, an exception that lets no import through, an exception
-// with no reason and an import an exception lets through with no comment or
-// with a comment that does not hold the reason, and nothing else: not an
+// with no reason, an import an exception lets through with no comment or
+// with a comment that does not hold the reason, a package in the table twice
+// and a package in the table that is a test helper, and nothing else: not an
 // import of a lower layer, an import an exception lets through with the
 // reason in the comment before it, in parentheses or not, or after it, across
 // lines, the imports of a test helper and its subpackages. It checks that the
@@ -140,8 +141,8 @@ func TestImportDirectionCatches(t *testing.T) {
 	layers := []layer{
 		{"entry", []string{"internal/web"}},
 		{"scenarios", []string{"internal/order"}},
-		{"storage", []string{"internal/db", "internal/stock"}},
-		{"common", []string{"internal/text"}},
+		{"storage", []string{"internal/db", "internal/stock", "internal/dbtest"}},
+		{"common", []string{"internal/text", "internal/order"}},
 	}
 	helpers := []string{"internal/dbtest", "internal/mailtest"}
 	exceptions := []exception{
@@ -159,6 +160,8 @@ func TestImportDirectionCatches(t *testing.T) {
 		`internal/db/stock.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in internal/layers/layers_test.go`,
 		"internal/order imports internal/web: layer 2 (scenarios) must not import layer 1 (entry)",
 		"internal/stock is in the layer table but is not a package: remove it from internal/layers/layers_test.go",
+		"internal/dbtest is in the layer table and is a test helper: remove it from one of them in internal/layers/layers_test.go",
+		"internal/order is in the layer table twice: keep it in one layer in internal/layers/layers_test.go",
 		"test helper internal/mailtest is not a package: remove it from internal/layers/layers_test.go",
 		"exception internal/text imports internal/order has no reason: write it in internal/layers/layers_test.go",
 		"exception internal/text imports internal/web lets no import through: remove it from internal/layers/layers_test.go",
@@ -306,8 +309,10 @@ func collapse(s string) string {
 // with their imports: a package with no layer, an import of a higher layer
 // that no exception lets through, an import of a test helper, a use of an
 // import an exception lets through with no comment that holds the reason; a
-// package of the table or a test helper that is not in pkgs; an exception
-// with no reason; an exception that lets no import through.
+// package in the table twice, of which the first layer counts; a package of
+// the table that is a test helper; a package of the table or a test helper
+// that is not in pkgs; an exception with no reason; an exception that lets
+// no import through.
 func check(pkgs map[string]map[string][]use, layers []layer, helpers []string, exceptions []exception) []string {
 	isHelper := func(pkg string) bool {
 		return slices.ContainsFunc(helpers, func(h string) bool {
@@ -317,7 +322,9 @@ func check(pkgs map[string]map[string][]use, layers []layer, helpers []string, e
 	level := map[string]int{}
 	for i, l := range layers {
 		for _, p := range l.packages {
-			level[p] = i
+			if _, ok := level[p]; !ok {
+				level[p] = i
+			}
 		}
 	}
 	used := make([]bool, len(exceptions))
@@ -360,8 +367,17 @@ func check(pkgs map[string]map[string][]use, layers []layer, helpers []string, e
 				p, imp, from+1, layers[from].name, to+1, layers[to].name))
 		}
 	}
+	seen := map[string]bool{}
 	for _, l := range layers {
 		for _, p := range l.packages {
+			if seen[p] {
+				out = append(out, fmt.Sprintf("%s is in the layer table twice: keep it in one layer in %s", p, tableFile))
+				continue
+			}
+			seen[p] = true
+			if isHelper(p) {
+				out = append(out, fmt.Sprintf("%s is in the layer table and is a test helper: remove it from one of them in %s", p, tableFile))
+			}
 			if _, ok := pkgs[p]; !ok {
 				out = append(out, fmt.Sprintf("%s is in the layer table but is not a package: remove it from %s", p, tableFile))
 			}

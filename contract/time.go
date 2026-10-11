@@ -6,7 +6,9 @@ import (
 )
 
 // TimeFormat is the format of times in the output of commands and in events:
-// UTC, RFC 3339 with milliseconds.
+// UTC, RFC 3339 with exactly three fractional digits, as the description of
+// the package states. The generated types with a time write it by the
+// MarshalJSON methods below.
 const TimeFormat = "2006-01-02T15:04:05.000Z07:00"
 
 // MarshalJSON writes the time of the commit in TimeFormat.

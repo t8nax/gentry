@@ -10,6 +10,11 @@
 // result is printed as is, without an envelope; the exit code tells success (0)
 // from failure. Clients must ignore unknown fields: adding fields and commands
 // is a compatible change.
+//
+// Every time in the output of commands and in events is a string in UTC,
+// RFC 3339 with exactly three fractional digits and the suffix Z, such as
+// 2026-10-09T13:16:28.870Z: a moment is always the same string, so clients
+// may compare times as strings.
 package contract
 
 import "embed"

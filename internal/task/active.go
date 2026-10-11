@@ -35,10 +35,10 @@ func ActiveFlow(r *process.Repo, v View) (*process.Applied, error) {
 	return &last, nil
 }
 
-// TaskFlow is the flow of a task as flow show gives it in the worktree of
+// FlowView is the flow of a task as flow show gives it in the worktree of
 // the task: the task with its flow, which is never nil, and the last change
 // of the active flow, nil if it did not change.
-type TaskFlow struct {
+type FlowView struct {
 	View
 	ActiveFlow *process.Applied
 }
@@ -48,25 +48,25 @@ type TaskFlow struct {
 // false if dir holds no task of project. worktrees are the pool; st is nil
 // for a store not created yet, which has no tasks. A snapshot that cannot be
 // read refuses, as stage show does.
-func FlowIn(st *state.Store, r *process.Repo, worktrees []state.Worktree, dir, project string) (tf TaskFlow, ok bool, err error) {
+func FlowIn(st *state.Store, r *process.Repo, worktrees []state.Worktree, dir, project string) (tf FlowView, ok bool, err error) {
 	w, pooled := Pooled(worktrees, dir)
 	if st == nil || !pooled || w.Project != project {
-		return TaskFlow{}, false, nil
+		return FlowView{}, false, nil
 	}
 	t, held, err := st.TaskIn(w.Path)
 	if err != nil || !held {
-		return TaskFlow{}, false, err
+		return FlowView{}, false, err
 	}
 	views, err := Views(st, []state.Task{t})
 	if err != nil {
-		return TaskFlow{}, false, err
+		return FlowView{}, false, err
 	}
 	if views[0].Flow == nil {
-		return TaskFlow{}, false, errUnreadable
+		return FlowView{}, false, errUnreadable
 	}
 	tf.View = views[0]
 	if tf.ActiveFlow, err = ActiveFlow(r, tf.View); err != nil {
-		return TaskFlow{}, false, err
+		return FlowView{}, false, err
 	}
 	return tf, true, nil
 }

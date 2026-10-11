@@ -190,19 +190,19 @@ func runFlowShow(args []string, env Env) int {
 // current directory, if the task is of project; ok is false if the directory
 // holds no task of project, or if skip is set: --active and --draft show the
 // flow of the project. The state store is only read, and not created.
-func copyTaskFlow(r *process.Repo, project string, skip bool) (tf task.TaskFlow, ok bool, bad *failure) {
-	fail := func(f failure) (task.TaskFlow, bool, *failure) { return task.TaskFlow{}, false, &f }
+func copyTaskFlow(r *process.Repo, project string, skip bool) (tf task.FlowView, ok bool, bad *failure) {
+	fail := func(f failure) (task.FlowView, bool, *failure) { return task.FlowView{}, false, &f }
 	if skip {
-		return task.TaskFlow{}, false, nil
+		return task.FlowView{}, false, nil
 	}
 	st, bad := openTasks()
 	if bad != nil || st == nil {
-		return task.TaskFlow{}, false, bad
+		return task.FlowView{}, false, bad
 	}
 	defer st.Close()
 	worktrees, bad := readWorktrees(st)
 	if bad != nil {
-		return task.TaskFlow{}, false, bad
+		return task.FlowView{}, false, bad
 	}
 	wd, err := os.Getwd()
 	if err != nil {

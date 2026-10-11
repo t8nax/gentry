@@ -256,15 +256,8 @@ func (r *Repo) prepare() error {
 		}
 		return r.setChecked(c)
 	}
-	format, ok, err := r.formatAt(head)
-	if err != nil {
+	if err := r.checkFormat(); err != nil {
 		return err
-	}
-	switch {
-	case !ok:
-		return &InvalidError{Path: r.Dir, Reason: ReasonNotProcess}
-	case format > Format:
-		return &InvalidError{Path: r.Dir, Reason: ReasonNewerFormat}
 	}
 	if checked, err := r.checked(); err != nil {
 		return err

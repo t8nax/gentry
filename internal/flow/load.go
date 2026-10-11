@@ -718,8 +718,8 @@ func (l *loader) model(o object, m map[string]field) string {
 	return ""
 }
 
-// capabilities returns the required capabilities of subagent m, nil if they
-// are missing or invalid.
+// capabilities returns the required capabilities from fields m of the
+// subagent, nil if they are missing or invalid.
 func (l *loader) capabilities(o object, m map[string]field) []string {
 	caps, present := m["capabilities"]
 	if !present || caps.value.kind == null {

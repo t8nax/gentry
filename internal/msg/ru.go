@@ -795,6 +795,9 @@ var ru = catalog{
 		CheckCommandLine:          "Команда: %s",
 		ErrCheckNotFound:          "Программа команды проверки не найдена: %s",
 		PassCheckLogs:             "Вывод проверок:",
+		ReportChecks:              "Проверки: %s",
+		ReportFieldCheckTimeout:   "Время проверок",
+		ReportFieldChecks:         "Проверки",
 	},
 	plurals: map[Key][]string{
 		FlowRounds: {"не более %d возврата", "не более %d возвратов", "не более %d возвратов"},

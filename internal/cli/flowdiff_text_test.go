@@ -445,6 +445,39 @@ flowchart TD
 	}
 }
 
+// TestDiffReportChecks checks the commands of checks in the file of changes:
+// the rows of the table of a stage that got commands and of a stage whose
+// time changed, and the lines of a stage added with commands.
+func TestDiffReportChecks(t *testing.T) {
+	inUTC(t)
+	base := map[string]string{
+		"stages/merge.yaml": "title: Слияние\nexit: ветка задачи влита в main\nexecutor: operator\nchecks: [go build ./...]\n",
+	}
+	changes := security(t)
+	changes["stages/security.yaml"] = "title: Безопасность\nexit: проверка безопасности пройдена\nexecutor: auditor\n" +
+		"checks:\n  - govulncheck ./...\n  - gosec -exclude=G104 ./...\ntimeout: 1h30m\n"
+	changes["stages/review.yaml"] = "title: Ревью\nexit: замечания ревью записаны и разобраны\nexecutor: reviewer\ninclude: [review-checklist]\n" +
+		"checks:\n  - go vet ./...\n  - go test ./...\n"
+	changes["stages/merge.yaml"] = "title: Слияние\nexit: ветка задачи влита в main\nexecutor: operator\nchecks: [go build ./...]\ntimeout: 90s\n"
+	old := readFlow(t, testdataFiles(t, "shop/flow", base), nil)
+	cur := readFlow(t, testdataFiles(t, "shop/flow", changes), nil)
+	res := flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read, Changes: []flow.Change{
+		change(flow.ObjectStage, "merge", flow.Modified), change(flow.ObjectStage, "review", flow.Modified),
+		change(flow.ObjectStage, "security", flow.Added),
+	}}
+	report := diffView{project: "shop", res: res}.report(shopTime)
+	header := "| " + msg.Text(msg.ColField) + " | " + msg.Text(msg.ColWas) + " | " + msg.Text(msg.ColNow) + " |\n| --- | --- | --- |\n"
+	for _, part := range []string{
+		header + "| Время проверок | 10m | 90s |\n\n",
+		header + "| Время проверок | — | 10m |\n| Проверки | — | `go vet ./...`, `go test ./...` |\n",
+		lines(msg.Text(msg.FlowScenarios, "feature")+"  ", msg.Text(msg.FlowCheckTimeout, "1h30m")+"  ", "Проверки: `govulncheck ./...`, `gosec -exclude=G104 ./...`"),
+	} {
+		if !strings.Contains(report, part) {
+			t.Errorf("the file of changes:\n%s\nwant within:\n%s", report, part)
+		}
+	}
+}
+
 // TestDiffReportParts checks the parts of the file of changes of scenarios
 // added and removed, of a part changed and of a draft with problems.
 func TestDiffReportParts(t *testing.T) {

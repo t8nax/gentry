@@ -283,19 +283,45 @@ func (d diffView) writeStage(b *strings.Builder, c flow.Change) {
 			{msg.ReportFieldExit, oneLine(old.Exit), oneLine(cur.Exit)},
 			{msg.ReportFieldExecutor, old.Executor, cur.Executor},
 			{msg.ReportFieldParts, joined(old.Include), joined(cur.Include)},
+			{msg.ReportFieldCheckTimeout, checkTimeout(old), checkTimeout(cur)},
+			{msg.ReportFieldChecks, checkCommands(old), checkCommands(cur)},
 		})
 		writeTextDiff(b, msg.Text(msg.FlowInstruction), old.Instruction, cur.Instruction)
 	}
 }
 
-// writeStageFields prints the fields of stage st of flow fl.
+// writeStageFields prints the fields of stage st of flow fl; the commands
+// of checks and their time only if it has some.
 func writeStageFields(b *strings.Builder, st flow.Stage, fl *flow.Flow) {
-	writeLines(b, []string{
+	lines := []string{
 		msg.Text(msg.FlowExit, orNone(oneLine(st.Exit))),
 		msg.Text(msg.FlowExecutor, orNone(st.Executor)),
 		msg.Text(msg.FlowParts, joined(st.Include)),
 		msg.Text(msg.FlowScenarios, joined(fl.ScenariosOf(st.ID))),
-	})
+	}
+	if len(st.Checks) > 0 {
+		lines = append(lines, msg.Text(msg.FlowCheckTimeout, checkTimeout(st)), msg.Text(msg.ReportChecks, checkCommands(st)))
+	}
+	writeLines(b, lines)
+}
+
+// checkTimeout is the time of the commands of checks of stage st in the
+// file of changes: empty if it has none, as the time then means nothing.
+func checkTimeout(st flow.Stage) string {
+	if len(st.Checks) == 0 {
+		return ""
+	}
+	return st.CheckTimeout()
+}
+
+// checkCommands is the commands of checks of stage st in the file of
+// changes: each as code, separated by commas; empty if it has none.
+func checkCommands(st flow.Stage) string {
+	quoted := make([]string, len(st.Checks))
+	for i, c := range st.Checks {
+		quoted[i] = "`" + c + "`"
+	}
+	return strings.Join(quoted, ", ")
 }
 
 // writePart prints the section of a changed part.

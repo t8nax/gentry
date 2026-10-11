@@ -699,12 +699,23 @@ func (l *loader) loadAgent(o object, v *value, a *agent) {
 	}
 	a.purpose, _ = l.text(o, m, "purpose", 0)
 	a.capabilities = l.capabilities(o, m)
-	model, line, ok := l.optionalText(o, m, "model")
-	if ok && model != "" && !slices.Contains(Models, model) {
-		l.reportOn(o, contract.ProblemInvalidValue, line, msg.ProblemModel, o.name, strings.Join(Models, ", "))
-	} else if ok {
-		a.model = model
+	a.model = l.model(o, m)
+}
+
+// model returns the model level from fields m of the subagent, empty if the
+// field is absent or has no value. Any other value than a level, an empty
+// string or a value that is not a string among them, is reported with the
+// levels, as the capabilities are.
+func (l *loader) model(o object, m map[string]field) string {
+	f, present := m["model"]
+	if !present || f.value.kind == null {
+		return ""
 	}
+	if s, ok := f.value.scalar.(string); f.value.kind == scalar && ok && slices.Contains(Models, s) {
+		return s
+	}
+	l.reportOn(o, contract.ProblemInvalidValue, f.line, msg.ProblemModel, o.name, strings.Join(Models, ", "))
+	return ""
 }
 
 // capabilities returns the required capabilities of subagent m, nil if they

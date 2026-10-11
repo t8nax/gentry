@@ -95,10 +95,16 @@ func TestAgentProblems(t *testing.T) {
 		}, nil, []Problem{
 			{contract.ProblemInvalidValue, "agents/auditor.yaml", 3, msg.Text(msg.ProblemModel, msg.Text(msg.FlowObjAgent, "auditor"), "light, standard, strong")},
 		}},
-		{"model not a string", map[string]string{
-			"agents/auditor.yaml": "purpose: x\ncapabilities: [read]\nmodel: [strong]\n",
+		{"model not a level", map[string]string{
+			"agents/auditor.yaml":  "purpose: x\ncapabilities: [read]\nmodel: [strong]\n",
+			"agents/reviewer.yaml": "purpose: x\ncapabilities: [read]\nmodel: 1\n",
+			"agents/reviewer.md":   "x",
+			"agents/tester.yaml":   "purpose: x\ncapabilities: [read]\nmodel: \"\"\n",
+			"agents/tester.md":     "x",
 		}, nil, []Problem{
-			{contract.ProblemInvalidValue, "agents/auditor.yaml", 3, msg.Text(msg.ProblemNotString, msg.Text(msg.FlowObjAgent, "auditor"), "model")},
+			{contract.ProblemInvalidValue, "agents/auditor.yaml", 3, msg.Text(msg.ProblemModel, msg.Text(msg.FlowObjAgent, "auditor"), "light, standard, strong")},
+			{contract.ProblemInvalidValue, "agents/reviewer.yaml", 3, msg.Text(msg.ProblemModel, msg.Text(msg.FlowObjAgent, "reviewer"), "light, standard, strong")},
+			{contract.ProblemInvalidValue, "agents/tester.yaml", 3, msg.Text(msg.ProblemModel, msg.Text(msg.FlowObjAgent, "tester"), "light, standard, strong")},
 		}},
 		{"unknown capability", map[string]string{
 			"agents/auditor.yaml": "purpose: x\ncapabilities: [read, write]\n",

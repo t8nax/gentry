@@ -88,8 +88,8 @@ func TestImportDirection(t *testing.T) {
 // import of a lower layer, an import an exception lets through with the
 // reason in the comment before it, in parentheses or not, or after it, across
 // lines, the imports of a test helper and its subpackages. It checks that the
-// reading skips test files, files with //go:build ignore, testdata, vendor,
-// folders named with . or _ and nested modules.
+// reading skips test files, files with //go:build ignore, files and folders
+// named with . or _, testdata, vendor and nested modules.
 func TestImportDirectionCatches(t *testing.T) {
 	const module = "example.com/shop"
 	root := t.TempDir()
@@ -127,6 +127,9 @@ func TestImportDirectionCatches(t *testing.T) {
 	write("internal/text/text.go", imports("text", "internal/order"))
 	write("internal/text/text_test.go", imports("text", "internal/web"))
 	write("internal/text/gen.go", "//go:build ignore\n\n"+imports("main", "internal/web"))
+	write("internal/text/_x.go", imports("text", "internal/web"))
+	write("internal/text/.x.go", imports("text", "internal/web"))
+	write("internal/draft/_draft.go", imports("draft", "internal/web"))
 	write("internal/text/testdata/x.go", imports("x", "internal/web"))
 	write("internal/text/vendor/x/x.go", imports("x", "internal/web"))
 	write("internal/text/.cache/x.go", imports("x", "internal/web"))
@@ -212,9 +215,9 @@ type use struct {
 // moduleImports returns each package of the module under root with the
 // packages of the module its files import, both as paths from root, and the
 // uses of each import in the files of the package in the order of files. A
-// package is a folder with a Go file that is not a test file nor a file with
-// //go:build ignore; such files of all systems count, whatever their other
-// build constraints. Folders testdata and vendor, folders named with . or _
+// package is a folder with a Go file that is not a test file, a file named
+// with . or _, which the go tool ignores, nor a file with //go:build ignore;
+// such files of all systems count, whatever their other build constraints. Folders testdata and vendor, folders named with . or _
 // and folders with a go.mod of their own are skipped with all they hold.
 func moduleImports(root, module string) (map[string]map[string][]use, error) {
 	fset := token.NewFileSet()
@@ -223,11 +226,11 @@ func moduleImports(root, module string) (map[string]map[string][]use, error) {
 		if err != nil {
 			return err
 		}
+		name := d.Name()
 		if d.IsDir() {
 			if p == root {
 				return nil
 			}
-			name := d.Name()
 			if name == "testdata" || name == "vendor" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 				return filepath.SkipDir
 			}
@@ -236,7 +239,7 @@ func moduleImports(root, module string) (map[string]map[string][]use, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, p, nil, parser.ImportsOnly|parser.ParseComments)

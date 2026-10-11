@@ -4,12 +4,14 @@ package layers
 
 import (
 	"fmt"
+	"go/ast"
 	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -27,8 +29,9 @@ type layer struct {
 	packages []string
 }
 
-// An exception lets a package import a package of a higher layer. The
-// import carries a comment with the same reason.
+// An exception lets a package import a package of a higher layer for a
+// reason. Each import it lets through carries a comment that holds the
+// reason.
 type exception struct {
 	from, to string
 	reason   string
@@ -57,7 +60,9 @@ var exceptions = []exception{
 // module against the table of layers: each package but the test helpers has
 // a layer; it imports no package of a higher layer but by an exception and
 // no test helper; each package of the table and each test helper is a
-// package of the module; each exception lets through an import of the code.
+// package of the module; each exception has a reason and lets through an
+// import of the code; each import it lets through has a comment that holds
+// the reason.
 func TestImportDirection(t *testing.T) {
 	root, module := moduleRoot(t)
 	pkgs, err := moduleImports(root, module)
@@ -76,9 +81,12 @@ func TestImportDirection(t *testing.T) {
 // module made up for the test with a table of its own. It checks that the
 // check reports an import of a higher layer, a package with no layer, an
 // import of a test helper, a package of the table and a test helper that are
-// not in the code and an exception that lets no import through, and nothing
-// else: not an import of a lower layer, an import an exception lets through,
-// the imports of a test helper and its subpackages. It checks that the
+// not in the code, an exception that lets no import through, an exception
+// with no reason and an import an exception lets through with no comment or
+// with a comment that does not hold the reason, and nothing else: not an
+// import of a lower layer, an import an exception lets through with the
+// reason in the comment before it, in parentheses or not, or after it, across
+// lines, the imports of a test helper and its subpackages. It checks that the
 // reading skips test files, files with //go:build ignore, testdata, vendor,
 // folders named with . or _ and nested modules.
 func TestImportDirectionCatches(t *testing.T) {
@@ -105,10 +113,17 @@ func TestImportDirectionCatches(t *testing.T) {
 	write("internal/web/web.go", imports("web", "internal/order", "internal/cart"))
 	write("internal/cart/cart.go", imports("cart", "internal/web"))
 	write("internal/order/order.go", imports("order", "internal/web", "internal/db"))
-	write("internal/db/db.go", imports("db", "internal/order", "internal/dbtest"))
+	write("internal/db/db.go", "package db\n\nimport (\n"+
+		"\t// An exception: the\n\t// reason, kept.\n"+
+		"\t_ \""+module+"/internal/order\"\n"+
+		"\t_ \""+module+"/internal/dbtest\"\n)\n")
+	write("internal/db/cache.go", "package db\n\n// Kept for the reason.\nimport _ \""+module+"/internal/web\"\n")
+	write("internal/db/queue.go", "package db\n\nimport _ \""+module+"/internal/web\" // the reason\n")
+	write("internal/db/mail.go", imports("db", "internal/web"))
+	write("internal/db/stock.go", "package db\n\n// Another reason.\nimport _ \""+module+"/internal/web\"\n")
 	write("internal/dbtest/dbtest.go", imports("dbtest", "internal/web"))
 	write("internal/dbtest/fake/fake.go", imports("fake", "internal/web"))
-	write("internal/text/text.go", imports("text"))
+	write("internal/text/text.go", imports("text", "internal/order"))
 	write("internal/text/text_test.go", imports("text", "internal/web"))
 	write("internal/text/gen.go", "//go:build ignore\n\n"+imports("main", "internal/web"))
 	write("internal/text/testdata/x.go", imports("x", "internal/web"))
@@ -131,6 +146,8 @@ func TestImportDirectionCatches(t *testing.T) {
 	helpers := []string{"internal/dbtest", "internal/mailtest"}
 	exceptions := []exception{
 		{"internal/db", "internal/order", "the reason"},
+		{"internal/db", "internal/web", "the reason"},
+		{"internal/text", "internal/order", ""},
 		{"internal/text", "internal/web", "the reason"},
 		{"internal/order", "internal/db", "the reason"},
 	}
@@ -138,9 +155,12 @@ func TestImportDirectionCatches(t *testing.T) {
 	want := []string{
 		"internal/cart has no layer: add it to the layer table in internal/layers/layers_test.go",
 		"internal/db imports test helper internal/dbtest: only tests may import it",
+		`internal/db/mail.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in internal/layers/layers_test.go`,
+		`internal/db/stock.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in internal/layers/layers_test.go`,
 		"internal/order imports internal/web: layer 2 (scenarios) must not import layer 1 (entry)",
 		"internal/stock is in the layer table but is not a package: remove it from internal/layers/layers_test.go",
 		"test helper internal/mailtest is not a package: remove it from internal/layers/layers_test.go",
+		"exception internal/text imports internal/order has no reason: write it in internal/layers/layers_test.go",
 		"exception internal/text imports internal/web lets no import through: remove it from internal/layers/layers_test.go",
 		"exception internal/order imports internal/db lets no import through: remove it from internal/layers/layers_test.go",
 	}
@@ -179,15 +199,23 @@ func moduleRoot(t *testing.T) (string, string) {
 	}
 }
 
+// A use is an import in a file: the file as a path from the root of the
+// module and the comment on the import, before it and after it, with its
+// spaces collapsed.
+type use struct {
+	file, comment string
+}
+
 // moduleImports returns each package of the module under root with the
-// packages of the module its files import, both as paths from root. A
+// packages of the module its files import, both as paths from root, and the
+// uses of each import in the files of the package in the order of files. A
 // package is a folder with a Go file that is not a test file nor a file with
 // //go:build ignore; such files of all systems count, whatever their other
 // build constraints. Folders testdata and vendor, folders named with . or _
 // and folders with a go.mod of their own are skipped with all they hold.
-func moduleImports(root, module string) (map[string][]string, error) {
+func moduleImports(root, module string) (map[string]map[string][]use, error) {
 	fset := token.NewFileSet()
-	found := map[string]map[string]bool{}
+	pkgs := map[string]map[string][]use{}
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -229,38 +257,58 @@ func moduleImports(root, module string) (map[string][]string, error) {
 				}
 			}
 		}
-		rel, err := filepath.Rel(root, filepath.Dir(p))
+		rel, err := filepath.Rel(root, p)
 		if err != nil {
 			return err
 		}
-		pkg := filepath.ToSlash(rel)
-		if found[pkg] == nil {
-			found[pkg] = map[string]bool{}
+		file := filepath.ToSlash(rel)
+		pkg := path.Dir(file)
+		if pkgs[pkg] == nil {
+			pkgs[pkg] = map[string][]use{}
 		}
-		for _, spec := range f.Imports {
-			imp, err := strconv.Unquote(spec.Path.Value)
-			if err != nil {
-				return fmt.Errorf("%s: %w", p, err)
+		for _, decl := range f.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.IMPORT {
+				continue
 			}
-			if rest, ok := strings.CutPrefix(imp, module+"/"); ok {
-				found[pkg][rest] = true
+			for _, s := range gen.Specs {
+				spec := s.(*ast.ImportSpec)
+				imp, err := strconv.Unquote(spec.Path.Value)
+				if err != nil {
+					return fmt.Errorf("%s: %w", p, err)
+				}
+				rest, ok := strings.CutPrefix(imp, module+"/")
+				if !ok {
+					continue
+				}
+				doc := spec.Doc.Text()
+				if !gen.Lparen.IsValid() {
+					// The comment before an import with no parentheses
+					// belongs to the declaration.
+					doc = gen.Doc.Text()
+				}
+				comment := collapse(doc + " " + spec.Comment.Text())
+				pkgs[pkg][rest] = append(pkgs[pkg][rest], use{file, comment})
 			}
 		}
 		return nil
 	})
-	pkgs := map[string][]string{}
-	for pkg, imps := range found {
-		pkgs[pkg] = slices.Sorted(maps.Keys(imps))
-	}
 	return pkgs, err
+}
+
+// collapse returns s with each run of spaces and line breaks made one space
+// and none at the ends.
+func collapse(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // check returns what breaks the table of layers in the packages of pkgs
 // with their imports: a package with no layer, an import of a higher layer
-// that no exception lets through, an import of a test helper; a package of
-// the table or a test helper that is not in pkgs; an exception that lets no
-// import through.
-func check(pkgs map[string][]string, layers []layer, helpers []string, exceptions []exception) []string {
+// that no exception lets through, an import of a test helper, a use of an
+// import an exception lets through with no comment that holds the reason; a
+// package of the table or a test helper that is not in pkgs; an exception
+// with no reason; an exception that lets no import through.
+func check(pkgs map[string]map[string][]use, layers []layer, helpers []string, exceptions []exception) []string {
 	isHelper := func(pkg string) bool {
 		return slices.ContainsFunc(helpers, func(h string) bool {
 			return pkg == h || strings.HasPrefix(pkg, h+"/")
@@ -283,7 +331,7 @@ func check(pkgs map[string][]string, layers []layer, helpers []string, exception
 			out = append(out, fmt.Sprintf("%s has no layer: add it to the layer table in %s", p, tableFile))
 			continue
 		}
-		for _, imp := range pkgs[p] {
+		for _, imp := range slices.Sorted(maps.Keys(pkgs[p])) {
 			if isHelper(imp) {
 				out = append(out, fmt.Sprintf("%s imports test helper %s: only tests may import it", p, imp))
 				continue
@@ -295,6 +343,17 @@ func check(pkgs map[string][]string, layers []layer, helpers []string, exception
 			}
 			if i := slices.IndexFunc(exceptions, func(e exception) bool { return e.from == p && e.to == imp }); i >= 0 {
 				used[i] = true
+				reason := collapse(exceptions[i].reason)
+				if reason == "" {
+					// An exception with no reason is reported once, as itself.
+					continue
+				}
+				for _, u := range pkgs[p][imp] {
+					if !strings.Contains(u.comment, reason) {
+						out = append(out, fmt.Sprintf("%s imports %s without the reason of its exception: write %q in the comment on the import or fix the reason in %s",
+							u.file, imp, reason, tableFile))
+					}
+				}
 				continue
 			}
 			out = append(out, fmt.Sprintf("%s imports %s: layer %d (%s) must not import layer %d (%s)",
@@ -311,6 +370,11 @@ func check(pkgs map[string][]string, layers []layer, helpers []string, exception
 	for _, h := range helpers {
 		if _, ok := pkgs[h]; !ok {
 			out = append(out, fmt.Sprintf("test helper %s is not a package: remove it from %s", h, tableFile))
+		}
+	}
+	for _, e := range exceptions {
+		if collapse(e.reason) == "" {
+			out = append(out, fmt.Sprintf("exception %s imports %s has no reason: write it in %s", e.from, e.to, tableFile))
 		}
 	}
 	for i, e := range exceptions {

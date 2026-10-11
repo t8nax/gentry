@@ -79,17 +79,18 @@ func TestImportDirection(t *testing.T) {
 
 // TestImportDirectionCatches runs the reading of imports and the check on a
 // module made up for the test with a table of its own. It checks that the
-// check reports an import of a higher layer, a package with no layer, an
-// import of a test helper, a package of the table and a test helper that are
-// not in the code, an exception that lets no import through, an exception
-// with no reason, an import an exception lets through with no comment or
-// with a comment that does not hold the reason, a package in the table twice
-// and a package in the table that is a test helper, and nothing else: not an
-// import of a lower layer, an import an exception lets through with the
-// reason in the comment before it, in parentheses or not, or after it, across
-// lines, the imports of a test helper and its subpackages. It checks that the
-// reading skips test files, files with //go:build ignore, files and folders
-// named with . or _, testdata, vendor and nested modules.
+// check reports, in each file that has it, an import of a higher layer, an
+// import of a test helper and an import an exception lets through with no
+// comment or with a comment that does not hold the reason; a package with no
+// layer, a package of the table and a test helper that are not in the code,
+// an exception that lets no import through, an exception with no reason, a
+// package in the table twice and a package in the table that is a test
+// helper; and nothing else: not an import of a lower layer, an import an
+// exception lets through with the reason in the comment before it, in
+// parentheses or not, or after it, across lines, the imports of a test helper
+// and its subpackages. It checks that the reading skips test files, files
+// with //go:build ignore, files and folders named with . or _, testdata,
+// vendor and nested modules.
 func TestImportDirectionCatches(t *testing.T) {
 	const module = "example.com/shop"
 	root := t.TempDir()
@@ -114,6 +115,7 @@ func TestImportDirectionCatches(t *testing.T) {
 	write("internal/web/web.go", imports("web", "internal/order", "internal/cart"))
 	write("internal/cart/cart.go", imports("cart", "internal/web"))
 	write("internal/order/order.go", imports("order", "internal/web", "internal/db"))
+	write("internal/order/ship.go", imports("order", "internal/web"))
 	write("internal/db/db.go", "package db\n\nimport (\n"+
 		"\t// An exception: the\n\t// reason, kept.\n"+
 		"\t_ \""+module+"/internal/order\"\n"+
@@ -122,6 +124,7 @@ func TestImportDirectionCatches(t *testing.T) {
 	write("internal/db/queue.go", "package db\n\nimport _ \""+module+"/internal/web\" // the reason\n")
 	write("internal/db/mail.go", imports("db", "internal/web"))
 	write("internal/db/stock.go", "package db\n\n// Another reason.\nimport _ \""+module+"/internal/web\"\n")
+	write("internal/db/seed.go", imports("db", "internal/dbtest"))
 	write("internal/dbtest/dbtest.go", imports("dbtest", "internal/web"))
 	write("internal/dbtest/fake/fake.go", imports("fake", "internal/web"))
 	write("internal/text/text.go", imports("text", "internal/order"))
@@ -158,10 +161,12 @@ func TestImportDirectionCatches(t *testing.T) {
 	got := check(pkgs, layers, helpers, exceptions)
 	want := []string{
 		"internal/cart has no layer: add it to the layer table in internal/layers/layers_test.go",
-		"internal/db imports test helper internal/dbtest: only tests may import it",
+		"internal/db/db.go imports test helper internal/dbtest: only tests may import it",
+		"internal/db/seed.go imports test helper internal/dbtest: only tests may import it",
 		`internal/db/mail.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in internal/layers/layers_test.go`,
 		`internal/db/stock.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in internal/layers/layers_test.go`,
-		"internal/order imports internal/web: layer 2 (scenarios) must not import layer 1 (entry)",
+		"internal/order/order.go imports internal/web: layer 2 (scenarios) must not import layer 1 (entry)",
+		"internal/order/ship.go imports internal/web: layer 2 (scenarios) must not import layer 1 (entry)",
 		"internal/stock is in the layer table but is not a package: remove it from internal/layers/layers_test.go",
 		"internal/dbtest is in the layer table and is a test helper: remove it from one of them in internal/layers/layers_test.go",
 		"internal/order is in the layer table twice: keep it in one layer in internal/layers/layers_test.go",
@@ -310,13 +315,13 @@ func collapse(s string) string {
 }
 
 // check returns what breaks the table of layers in the packages of pkgs
-// with their imports: a package with no layer, an import of a higher layer
-// that no exception lets through, an import of a test helper, a use of an
-// import an exception lets through with no comment that holds the reason; a
-// package in the table twice, of which the first layer counts; a package of
-// the table that is a test helper; a package of the table or a test helper
-// that is not in pkgs; an exception with no reason; an exception that lets
-// no import through.
+// with their imports: a package with no layer; a use of an import of a
+// higher layer that no exception lets through, of an import of a test helper
+// and of an import an exception lets through with no comment that holds the
+// reason, each with the file of the use; a package in the table twice, of
+// which the first layer counts; a package of the table that is a test
+// helper; a package of the table or a test helper that is not in pkgs; an
+// exception with no reason; an exception that lets no import through.
 func check(pkgs map[string]map[string][]use, layers []layer, helpers []string, exceptions []exception) []string {
 	isHelper := func(pkg string) bool {
 		return slices.ContainsFunc(helpers, func(h string) bool {
@@ -344,7 +349,9 @@ func check(pkgs map[string]map[string][]use, layers []layer, helpers []string, e
 		}
 		for _, imp := range slices.Sorted(maps.Keys(pkgs[p])) {
 			if isHelper(imp) {
-				out = append(out, fmt.Sprintf("%s imports test helper %s: only tests may import it", p, imp))
+				for _, u := range pkgs[p][imp] {
+					out = append(out, fmt.Sprintf("%s imports test helper %s: only tests may import it", u.file, imp))
+				}
 				continue
 			}
 			to, ok := level[imp]
@@ -367,8 +374,10 @@ func check(pkgs map[string]map[string][]use, layers []layer, helpers []string, e
 				}
 				continue
 			}
-			out = append(out, fmt.Sprintf("%s imports %s: layer %d (%s) must not import layer %d (%s)",
-				p, imp, from+1, layers[from].name, to+1, layers[to].name))
+			for _, u := range pkgs[p][imp] {
+				out = append(out, fmt.Sprintf("%s imports %s: layer %d (%s) must not import layer %d (%s)",
+					u.file, imp, from+1, layers[from].name, to+1, layers[to].name))
+			}
 		}
 	}
 	seen := map[string]bool{}

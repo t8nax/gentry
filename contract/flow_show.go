@@ -244,12 +244,13 @@ func (j *FlowScenario) UnmarshalJSON(value []byte) error {
 
 // Output of `gentry flow show --json`: the active flow of the project with its
 // texts, or with --draft the draft: the flow directory with its changes. In a
-// worktree that holds a task in work or waiting for the operator, the flow of the
-// task instead, unless --active or --draft is given or --project names another
-// project: then task is present, and applied, dir and draft are absent. With an
-// object flag the arrays narrow to the object and what it refers to: for a
-// scenario its stages, their parts and subagents; for a stage its parts and
-// subagent; for a part or a subagent the object alone.
+// worktree that holds a task in work or waiting for the operator, without --active
+// and --draft, and without --project or with --project naming the project of the
+// task, the output is the flow of the task instead: task is present, and applied,
+// dir and draft are absent. --project naming another project shows the active flow
+// of that project. With an object flag the arrays narrow to the object and what it
+// refers to: for a scenario its stages, their parts and subagents; for a stage its
+// parts and subagent; for a part or a subagent the object alone.
 type FlowShowOutput struct {
 	// Subagents by identifier: those of the project and those of the library the
 	// stages name. A project subagent replaces a library one of the same identifier.

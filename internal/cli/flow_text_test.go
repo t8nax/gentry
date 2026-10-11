@@ -269,6 +269,8 @@ func TestFlowShowTaskText(t *testing.T) {
 	)
 	stageHint := hintLineOf(msg.HintFlowStage, "gentry flow show --stage "+msg.Text(msg.ArgStage))
 	stageTool := hintLineOf(msg.HintFlowStage, "flow_show (stage)")
+	activeHint := hintLineOf(msg.HintFlowActive, "gentry flow show --active")
+	activeTool := hintLineOf(msg.HintFlowActive, "flow_show (active)")
 	tests := []struct {
 		name       string
 		changed    bool
@@ -278,14 +280,14 @@ func TestFlowShowTaskText(t *testing.T) {
 		{"flow", false, "", lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageHint),
 			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageTool)},
 		{"flow changed", true, "", lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
-			tables + "\n" + lines(stageHint, "Посмотреть действующий флоу: gentry flow show --active"),
+			tables + "\n" + lines(stageHint, activeHint),
 			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
-				tables + "\n" + lines(stageTool, "Посмотреть действующий флоу: flow_show (active)")},
+				tables + "\n" + lines(stageTool, activeTool)},
 		{"stage", false, "merge", lines("Задача: SHOP-1", applied, "") + merge, ""},
 		{"stage changed", true, "merge", lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
-			lines("Посмотреть действующий флоу: gentry flow show --active"),
+			lines(activeHint),
 			lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
-				lines("Посмотреть действующий флоу: flow_show (active)")},
+				lines(activeTool)},
 	}
 	for _, tt := range tests {
 		out, x := shown(tt.changed, tt.object)

@@ -66,15 +66,17 @@ func TestGuideExamples(t *testing.T) {
 }
 
 // TestGuideFields checks that the guide names every field the flow is read
-// with, every executor and capability, and the fields of later versions.
+// with, every executor, capability and model level, and the fields of later
+// versions.
 func TestGuideFields(t *testing.T) {
 	guide := agenttext.FlowGuide()
 	words := []string{
 		"title", "start", "nodes", "stage", "next", "to", "if", "max_rounds", "exit", "executor", "include",
-		"purpose", "capabilities", Finish, Orchestrator, Operator, commonFile,
+		"purpose", "capabilities", "model", Finish, Orchestrator, Operator, commonFile,
 		scenariosDir + "/", stagesDir + "/", partsDir + "/", agentsDir + "/",
 	}
 	words = append(words, Capabilities...)
+	words = append(words, Models...)
 	words = append(words, laterTaskFields...)
 	words = append(words, laterStageFields...)
 	for _, w := range words {

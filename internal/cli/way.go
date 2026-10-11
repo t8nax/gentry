@@ -236,6 +236,9 @@ func wayFailure(cmd string, err error) failure {
 		closed     *task.StepClosedError
 		noArtifact *task.ArtifactNotFoundError
 		file       *task.FileError
+		failed     *task.ChecksFailedError
+		timeout    *task.ChecksTimeoutError
+		noProgram  *task.CheckProgramError
 	)
 	switch {
 	case errors.As(err, &finished):
@@ -331,6 +334,32 @@ func wayFailure(cmd string, err error) failure {
 			hints:   []hint{hintOf(msg.HintArtifactSave).set("name", noArtifact.Name)},
 			details: map[string]any{"artifact": noArtifact.Name},
 		}
+	case errors.As(err, &failed):
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeChecksFailed,
+			message: msg.Text(msg.ErrCheckFailed, failed.Command),
+			more: msg.Text(msg.CheckExitCodeLine, failed.Code) + "\n" + msg.Text(msg.CheckLogLine, failed.Log) + "\n" +
+				checkOutput(failed.Output),
+			details: map[string]any{"node": failed.Node, "command": failed.Command, "exit_code": failed.Code, "log": failed.Log},
+		}
+	case errors.As(err, &timeout):
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeChecksTimeout,
+			message: msg.Text(msg.ErrChecksTimeout, timeout.Timeout),
+			more: msg.Text(msg.CheckCommandLine, timeout.Command) + "\n" + msg.Text(msg.CheckLogLine, timeout.Log) + "\n" +
+				checkOutput(timeout.Output),
+			details: map[string]any{"node": timeout.Node, "timeout": timeout.Timeout, "command": timeout.Command, "log": timeout.Log},
+		}
+	case errors.As(err, &noProgram):
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeCheckProgramNotFound,
+			message: msg.Text(msg.ErrCheckNotFound, noProgram.Program),
+			more:    msg.Text(msg.CheckCommandLine, noProgram.Command) + "\n",
+			details: map[string]any{"node": noProgram.Node, "command": noProgram.Command, "program": noProgram.Program},
+		}
 	case errors.As(err, &file) && file.Reason == task.FileTooLarge:
 		return fieldInvalid("file", file.Reason, msg.Text(msg.ErrArtifactFileTooLarge, file.Path), hintOf(msg.HintArtifactLink))
 	case errors.As(err, &file):
@@ -342,6 +371,17 @@ func wayFailure(cmd string, err error) failure {
 		return stateFailure(err)
 	}
 	return internal(err)
+}
+
+// checkOutput is the block of the output of a command of checks under the
+// lines of Gentry in a refusal: an empty line, then the output as it is. An
+// empty output has no block. The refusal has no hint: what the agent does
+// next is to fix the cause, not to call a command.
+func checkOutput(output string) string {
+	if output == "" {
+		return ""
+	}
+	return "\n" + output + "\n"
 }
 
 // stageName names a stage for the operator: by its title, or by its

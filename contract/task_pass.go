@@ -11,6 +11,11 @@ import "unicode/utf8"
 // A pass of a task through a node of its scenario: one per entry into the node.
 // The current pass has no fields of closing.
 type TaskPass struct {
+	// Files with the output of the commands of checks run on the pass, as paths, in
+	// the order of the commands: those of the last attempt to close the pass by an
+	// exit. Absent if no command of checks ran on the pass.
+	ChecksLogs []string `json:"checks_logs,omitempty,omitzero"`
+
 	// Time the pass was closed in UTC, RFC 3339 with milliseconds.
 	Closed *time.Time `json:"closed,omitempty,omitzero"`
 
@@ -202,6 +207,9 @@ func (j *TaskPass) UnmarshalJSON(value []byte) error {
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
+	}
+	if plain.ChecksLogs != nil && len(plain.ChecksLogs) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "checks_logs", 1)
 	}
 	if utf8.RuneCountInString(string(plain.Node)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "node", 1)

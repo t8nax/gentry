@@ -112,6 +112,10 @@ func TestStageCloseText(t *testing.T) {
 	result := func(text string) *contract.TaskPassExit {
 		return &contract.TaskPassExit{Kind: contract.TaskPassExitKindResult, Text: text}
 	}
+	withLogs := func(p contract.TaskPass, logs ...string) contract.TaskPass {
+		p.ChecksLogs = logs
+		return p
+	}
 	finished := shopTask()
 	finished.Stage, finished.Finished, finished.Progress.Passed = nil, true, 5
 	show := []hint{hintOf(msg.HintStageShow)}
@@ -161,6 +165,51 @@ func TestStageCloseText(t *testing.T) {
 				"Переход: implementation",
 				msg.Text(msg.TaskStage, round("Реализация", "implementation", 1)),
 				msg.Text(msg.ProgressLine, progress(2, 5)),
+				"",
+				hintLineOf(msg.HintStageShow, "stage_show"),
+			)},
+		{"exited after checks", contract.StageCloseOutput{Task: at("review", "review", "Ревью", 1, 3),
+			Closed: withLogs(closed("implementation", "implementation", 1, "review", result("Тесты проходят"), ""),
+				"/work/checks/implementation-1-1.log", "/work/checks/implementation-1-2.log")},
+			stageCloseExtra{title: "Реализация", hints: show}, lines(
+				"Этап «Реализация» закрыт.",
+				"Вид выхода: "+msg.Text(msg.ExitKindResult),
+				"Выход: Тесты проходят",
+				"Пройдено проверок: 2",
+				"Переход: review",
+				msg.Text(msg.TaskStage, round("Ревью", "review", 1)),
+				msg.Text(msg.ProgressLine, progress(3, 5)),
+				"",
+				hintLineOf(msg.HintStageShow, "gentry stage show"),
+			), lines(
+				"Этап «Реализация» закрыт.",
+				"Вид выхода: "+msg.Text(msg.ExitKindResult),
+				"Выход: Тесты проходят",
+				"Пройдено проверок: 2",
+				"Переход: review",
+				msg.Text(msg.TaskStage, round("Ревью", "review", 1)),
+				msg.Text(msg.ProgressLine, progress(3, 5)),
+				"",
+				hintLineOf(msg.HintStageShow, "stage_show"),
+			)},
+		// A skip runs no command: the files of a refused exit are not checks
+		// passed.
+		{"skipped after checks", contract.StageCloseOutput{Task: at("review", "review", "Ревью", 1, 3),
+			Closed: withLogs(closed("implementation", "implementation", 1, "review", nil, "Изменений нет"), "/work/checks/implementation-1-1.log")},
+			stageCloseExtra{title: "Реализация", hints: show}, lines(
+				msg.Text(msg.StageSkipped, "Реализация"),
+				msg.Text(msg.ReasonLine, "Изменений нет"),
+				msg.Text(msg.TransitionLine, "review"),
+				msg.Text(msg.TaskStage, round("Ревью", "review", 1)),
+				msg.Text(msg.ProgressLine, progress(3, 5)),
+				"",
+				hintLineOf(msg.HintStageShow, "gentry stage show"),
+			), lines(
+				msg.Text(msg.StageSkipped, "Реализация"),
+				msg.Text(msg.ReasonLine, "Изменений нет"),
+				msg.Text(msg.TransitionLine, "review"),
+				msg.Text(msg.TaskStage, round("Ревью", "review", 1)),
+				msg.Text(msg.ProgressLine, progress(3, 5)),
 				"",
 				hintLineOf(msg.HintStageShow, "stage_show"),
 			)},
@@ -518,6 +567,37 @@ func TestWayFailureText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintArtifactSave, "artifact_save (name: plan, file)"),
 		)},
+		// The output of a command of checks follows the lines of Gentry as
+		// it is; the refusals of checks have no hint.
+		{"check failed", "stage exit", &task.ChecksFailedError{Node: "implementation", Command: "go test ./...", Code: 1,
+			Log: "/work/checks/implementation-1-1.log", Output: "--- FAIL: TestTotal (0.00s)\n    cart_test.go:7: Total = 5, want 6\nFAIL"}, true, lines(
+			"Команда проверки завершилась с ошибкой: go test ./...",
+			"Код выхода: 1",
+			"Полный вывод: /work/checks/implementation-1-1.log",
+			"",
+			"--- FAIL: TestTotal (0.00s)",
+			"    cart_test.go:7: Total = 5, want 6",
+			"FAIL",
+		), ""},
+		{"check failed without output", "stage exit", &task.ChecksFailedError{Node: "implementation", Command: "go vet ./...", Code: 2,
+			Log: "/work/checks/implementation-1-1.log"}, true, lines(
+			msg.Text(msg.ErrCheckFailed, "go vet ./..."),
+			msg.Text(msg.CheckExitCodeLine, 2),
+			msg.Text(msg.CheckLogLine, "/work/checks/implementation-1-1.log"),
+		), ""},
+		{"checks timed out", "stage exit", &task.ChecksTimeoutError{Node: "implementation", Timeout: "20m", Command: "go test ./...",
+			Log: "/work/checks/implementation-1-2.log", Output: "=== RUN   TestTotal"}, true, lines(
+			"Проверки этапа не завершились за 20m.",
+			"Команда: go test ./...",
+			"Полный вывод: /work/checks/implementation-1-2.log",
+			"",
+			"=== RUN   TestTotal",
+		), ""},
+		{"check program not found", "stage exit", &task.CheckProgramError{Node: "implementation", Program: "golangci-lint",
+			Command: "golangci-lint run"}, true, lines(
+			"Программа команды проверки не найдена: golangci-lint",
+			msg.Text(msg.CheckCommandLine, "golangci-lint run"),
+		), ""},
 		{"file too large", "artifact save", &task.FileError{Path: "big.bin", Reason: task.FileTooLarge}, false, lines(
 			"Файл артефакта больше 10 МБ: big.bin",
 		), lines(

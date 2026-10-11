@@ -1,0 +1,183 @@
+package checks
+
+import (
+	"context"
+	"errors"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+)
+
+// NotFoundError means the program of a command is not found: by the path of
+// the worktree if the program names a path, or else on PATH.
+type NotFoundError struct{ Program string }
+
+func (e *NotFoundError) Error() string { return e.Program + ": program not found" }
+
+// Command is a command of checks to run.
+type Command struct {
+	Dir  string   // the worktree the command runs in
+	Args []string // the program and its arguments, as Split gives them
+	Log  string   // the file of the output of the command; replaced if it exists
+	// Progress, if set, is called when the command starts and then every
+	// ProgressEvery while it runs.
+	Progress func()
+}
+
+// ProgressEvery is how often Run reports that a command goes on; tests set
+// it.
+var ProgressEvery = 5 * time.Second
+
+// Run runs the command c without a shell and returns its exit code. The
+// command writes its standard output and error, in the order it writes
+// them, to the file c.Log; its standard input is empty and its environment
+// is that of Gentry. When ctx is done, the command is ended with every
+// process it started, and Run returns the error of ctx; the processes the
+// command leaves behind when it ends are ended too. The file of the output
+// is made only once the program is found.
+func Run(ctx context.Context, c Command) (code int, err error) {
+	program, err := lookPath(c.Dir, c.Args[0])
+	if err != nil {
+		return 0, err
+	}
+	if err := os.MkdirAll(filepath.Dir(c.Log), 0o755); err != nil {
+		return 0, err
+	}
+	out, err := os.Create(c.Log)
+	if err != nil {
+		return 0, err
+	}
+	defer out.Close()
+
+	cmd := exec.CommandContext(ctx, program, c.Args[1:]...)
+	cmd.Args[0] = c.Args[0]
+	cmd.Dir = c.Dir
+	cmd.Stdout, cmd.Stderr = out, out
+	tree := newTree(cmd)
+	defer tree.close()
+	cmd.Cancel = tree.kill
+	if err := tree.start(); err != nil {
+		return 0, err
+	}
+	done := make(chan struct{})
+	if c.Progress != nil {
+		c.Progress()
+		go func() {
+			t := time.NewTicker(ProgressEvery)
+			defer t.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-t.C:
+					c.Progress()
+				}
+			}
+		}()
+	}
+	err = cmd.Wait()
+	close(done)
+	tree.kill()
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode(), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return 0, nil
+}
+
+// lookPath finds the program of a command: a name without a path on PATH,
+// as the command line does, and a path relative to the worktree dir. A
+// program found in the current directory of Gentry only is not found: that
+// directory is not the worktree.
+func lookPath(dir, program string) (string, error) {
+	seps := "/"
+	if runtime.GOOS == "windows" {
+		seps = `/\`
+	}
+	name := program
+	if strings.ContainsAny(program, seps) && !filepath.IsAbs(program) {
+		name = filepath.Join(dir, program)
+	}
+	path, err := exec.LookPath(name)
+	if err != nil {
+		var ee *exec.Error
+		if errors.As(err, &ee) && (errors.Is(ee.Err, exec.ErrNotFound) || errors.Is(ee.Err, exec.ErrDot) ||
+			errors.Is(ee.Err, os.ErrNotExist) || errors.Is(ee.Err, os.ErrPermission)) {
+			return "", &NotFoundError{Program: program}
+		}
+		return "", err
+	}
+	return path, nil
+}
+
+// TailLines is how many last lines of the output Tail gives.
+const TailLines = 100
+
+// tailMax limits what Tail reads from the end of a file: lines longer than
+// that are cut.
+const tailMax = 4 << 20
+
+// Tail returns the last n lines of the file at path as they are: the bytes
+// from the start of the n-th line from the end to the end of the file,
+// without the line end of the last line. An empty file gives "".
+func Tail(path string, n int) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	size, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
+		return "", err
+	}
+	const block = 64 << 10
+	var buf []byte
+	pos := size
+	for pos > 0 && len(buf) < tailMax {
+		step := min(int64(block), pos)
+		pos -= step
+		chunk := make([]byte, step)
+		if _, err := f.ReadAt(chunk, pos); err != nil && !errors.Is(err, io.EOF) {
+			return "", err
+		}
+		buf = append(chunk, buf...)
+		// The line end before the first of n lines and the one after the
+		// last are enough.
+		if countLines(buf) > n+1 {
+			break
+		}
+	}
+	text := string(buf)
+	text = strings.TrimSuffix(text, "\n")
+	text = strings.TrimSuffix(text, "\r")
+	i := len(text)
+	for k := 0; k < n; k++ {
+		j := strings.LastIndexByte(text[:i], '\n')
+		if j < 0 {
+			return text, nil
+		}
+		i = j
+	}
+	return text[i+1:], nil
+}
+
+// countLines counts the line ends in b.
+func countLines(b []byte) int {
+	n := 0
+	for _, c := range b {
+		if c == '\n' {
+			n++
+		}
+	}
+	return n
+}

@@ -8,11 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/state"
 )
 
@@ -58,13 +56,9 @@ func (e *FileError) Error() string { return e.Path + ": " + e.Reason }
 // first attempt of the task, …/<task>/attempts/<attempt>/artifacts/<name>
 // for a later one.
 func ArtifactPath(t state.Task, name string) (string, error) {
-	root, err := home.Root()
+	dir, err := taskDir(t)
 	if err != nil {
 		return "", err
-	}
-	dir := filepath.Join(root, "state", t.Project, "tasks", t.Key())
-	if t.Attempt > 1 {
-		dir = filepath.Join(dir, "attempts", strconv.Itoa(t.Attempt))
 	}
 	return filepath.Join(dir, "artifacts", name), nil
 }

@@ -67,6 +67,9 @@ const (
 	CodeStepNotFound         = "step_not_found"          // the current stage has no step of that number; details: step
 	CodeStepClosed           = "step_closed"             // the step is done or dropped already; details: step, state
 	CodeArtifactNotFound     = "artifact_not_found"      // the exit names an artifact the task has not saved; details: artifact
+	CodeChecksFailed         = "checks_failed"           // a command of checks of the stage ended with an exit code other than 0; details: node, command, exit_code, log
+	CodeChecksTimeout        = "checks_timeout"          // the commands of checks of the stage did not end in its time; details: node, timeout, command (the one ended), log
+	CodeCheckProgramNotFound = "check_program_not_found" // the program of a command of checks is not found; details: node, command, program
 	CodeScenarioNotFinished  = "scenario_not_finished"   // the scenario of the task is not passed, so it cannot be closed; details: task, node
 	CodeTaskEnded            = "task_ended"              // the task is closed or cancelled and changes no more; details: task, state
 	CodeTaskInWork           = "task_in_work"            // the task named to take anew is in work; details: task, worktree

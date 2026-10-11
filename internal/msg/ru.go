@@ -787,6 +787,13 @@ var ru = catalog{
 		ProblemTimeout:            "%s: значение поля «timeout» должно быть временем с единицей s, m или h, например 10m.",
 		FlowCheckTimeout:          "Время проверок: %s",
 		FlowChecks:                "Проверки:",
+		ChecksPassedLine:          "Пройдено проверок: %d",
+		ErrCheckFailed:            "Команда проверки завершилась с ошибкой: %s",
+		CheckExitCodeLine:         "Код выхода: %d",
+		CheckLogLine:              "Полный вывод: %s",
+		ErrChecksTimeout:          "Проверки этапа не завершились за %s.",
+		CheckCommandLine:          "Команда: %s",
+		ErrCheckNotFound:          "Программа команды проверки не найдена: %s",
 	},
 	plurals: map[Key][]string{
 		FlowRounds: {"не более %d возврата", "не более %d возвратов", "не более %d возвратов"},

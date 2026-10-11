@@ -1,6 +1,7 @@
 package task
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -80,6 +81,9 @@ type Close struct {
 	To       string // the node to go to; required at a fork
 	Reason   string // why the transition; why the skip
 	Source   string
+	// Progress, if set, is called while the commands of checks of the stage
+	// run: when each starts and then every checks.ProgressEvery.
+	Progress func()
 }
 
 // Closed is the result of closing a stage.
@@ -89,84 +93,162 @@ type Closed struct {
 	Returns int        // which return by the transition this was; 0 if not a return
 }
 
+// closeAttempts limits how many times CloseStage starts anew when another
+// command closed the stage while the commands of checks ran.
+const closeAttempts = 10
+
+// errChecksNeeded rolls back the closing of a stage whose commands of checks
+// have not run for its pass yet.
+var errChecksNeeded = errors.New("the commands of checks of the stage have not run")
+
+// errPassChanged rolls back the closing of a stage whose current pass is not
+// the one the commands of checks ran for.
+var errPassChanged = errors.New("the current pass of the task changed")
+
 // CloseStage closes the current stage of a task by an exit or a skip and moves
 // the task by the transition, in one transaction with its event. The steps,
 // the artifact and the limit of returns are checked in the transaction, so
 // that of two commands closing one stage only one does.
-func CloseStage(st *state.Store, req Close) (Closed, error) {
-	var res Closed
-	err := st.Write(func(tx *state.Tx) error {
-		t, err := active(tx, req.Task)
-		if err != nil {
-			return err
-		}
-		fl, err := txFlow(tx, t)
-		if err != nil {
-			return err
-		}
-		sc, node, stage, pass, err := current(tx, t, fl)
-		if err != nil {
-			return err
-		}
-		tr, err := pick(node, stage, req)
-		if err != nil {
-			return err
-		}
-		passes, err := tx.TaskPath(t.ID)
-		if err != nil {
-			return err
-		}
-		loops := sc.Loops()
-		counts := countReturns(loops, passes)
-		returns := 0
-		if l, ok := loopOf(loops, node.ID, tr.To); ok {
-			ds, err := tx.Decisions(t.ID)
+//
+// An exit of a stage with commands of checks runs them first, outside the
+// transaction, in the worktree of the task: the transaction would hold the
+// store for their whole time. The refusals that need no command come before
+// them. The stage is then closed if its pass is still the current one;
+// otherwise another command closed it, and the closing starts anew with the
+// pass that is current now, as an exit right after that command would. When
+// ctx is done, the command that runs is ended and the stage is not closed.
+func CloseStage(ctx context.Context, st *state.Store, req Close) (Closed, error) {
+	var checked int64 // the pass the commands of checks ran for
+	for range closeAttempts {
+		var res Closed
+		var need closing
+		err := st.Write(func(tx *state.Tx) error {
+			c, err := prepare(tx, req)
 			if err != nil {
 				return err
 			}
-			allowed := allowedReturns(ds)[loopKey(l)]
-			if counts[loopKey(l)] >= l.Max+allowed {
-				return &ReturnLimitError{Node: node.ID, To: tr.To, Limit: l.Max + allowed, Allowed: allowed}
+			switch {
+			case checked != 0 && c.pass.ID != checked:
+				return errPassChanged
+			case !req.Skip && len(c.stage.Checks) > 0 && checked == 0:
+				need = c
+				return errChecksNeeded
 			}
-			returns = counts[loopKey(l)] + 1
-		}
-		if err := checkSteps(pass, stage, req.Skip); err != nil {
+			res, err = c.close(tx, req)
 			return err
-		}
-		if !req.Skip && req.Kind == state.ExitArtifact {
-			if _, ok, err := tx.Artifact(t.ID, req.Artifact); err != nil {
-				return err
-			} else if !ok {
-				return &ArtifactNotFoundError{Name: req.Artifact}
+		})
+		switch {
+		case errors.Is(err, errPassChanged):
+			checked = 0
+			continue
+		case errors.Is(err, errChecksNeeded):
+			if err := runChecks(ctx, need.task, need.pass, need.stage, req.Progress); err != nil {
+				return Closed{}, err
 			}
+			checked = need.pass.ID
+			continue
+		case err != nil:
+			return Closed{}, err
 		}
+		return res, nil
+	}
+	return Closed{}, errPassChanged
+}
 
-		pass.Next, pass.Reason, pass.Source = tr.To, req.Reason, req.Source
-		if req.Skip {
-			pass.Outcome = state.OutcomeSkip
-		} else {
-			pass.Outcome, pass.ExitKind, pass.ExitText = state.OutcomeExit, req.Kind, req.Text
-			if req.Kind == state.ExitArtifact {
-				pass.Artifact = req.Artifact
-			}
+// closing is the closing of the current stage of a task as checked in a
+// transaction.
+type closing struct {
+	task    state.Task
+	sc      flow.Scenario
+	node    flow.Node
+	stage   flow.Stage
+	pass    state.Pass
+	passes  []state.Pass
+	to      string // the node the transition goes to
+	returns int    // which return by the transition this is; 0 if not a return
+}
+
+// prepare checks in tx that the current stage of the task of req can be
+// closed as req asks: the task is active, the transition exists and its
+// returns are not used up, the steps are done or dropped and the artifact of
+// the exit is saved.
+func prepare(tx *state.Tx, req Close) (closing, error) {
+	t, err := active(tx, req.Task)
+	if err != nil {
+		return closing{}, err
+	}
+	fl, err := txFlow(tx, t)
+	if err != nil {
+		return closing{}, err
+	}
+	sc, node, stage, pass, err := current(tx, t, fl)
+	if err != nil {
+		return closing{}, err
+	}
+	tr, err := pick(node, stage, req)
+	if err != nil {
+		return closing{}, err
+	}
+	passes, err := tx.TaskPath(t.ID)
+	if err != nil {
+		return closing{}, err
+	}
+	loops := sc.Loops()
+	counts := countReturns(loops, passes)
+	returns := 0
+	if l, ok := loopOf(loops, node.ID, tr.To); ok {
+		ds, err := tx.Decisions(t.ID)
+		if err != nil {
+			return closing{}, err
 		}
-		if pass, err = tx.ClosePass(pass); err != nil {
-			return err
+		allowed := allowedReturns(ds)[loopKey(l)]
+		if counts[loopKey(l)] >= l.Max+allowed {
+			return closing{}, &ReturnLimitError{Node: node.ID, To: tr.To, Limit: l.Max + allowed, Allowed: allowed}
 		}
-		if err := enter(tx, t, sc, passes, tr.To); err != nil {
-			return err
+		returns = counts[loopKey(l)] + 1
+	}
+	if err := checkSteps(pass, stage, req.Skip); err != nil {
+		return closing{}, err
+	}
+	if !req.Skip && req.Kind == state.ExitArtifact {
+		if _, ok, err := tx.Artifact(t.ID, req.Artifact); err != nil {
+			return closing{}, err
+		} else if !ok {
+			return closing{}, &ArtifactNotFoundError{Name: req.Artifact}
 		}
-		if t, err = tx.Task(t.ID); err != nil {
-			return err
+	}
+	return closing{task: t, sc: sc, node: node, stage: stage, pass: pass, passes: passes, to: tr.To, returns: returns}, nil
+}
+
+// close closes the pass of c as req asks, moves the task by the transition
+// and records the event.
+func (c closing) close(tx *state.Tx, req Close) (Closed, error) {
+	pass := c.pass
+	pass.Next, pass.Reason, pass.Source = c.to, req.Reason, req.Source
+	if req.Skip {
+		pass.Outcome = state.OutcomeSkip
+	} else {
+		pass.Outcome, pass.ExitKind, pass.ExitText = state.OutcomeExit, req.Kind, req.Text
+		if req.Kind == state.ExitArtifact {
+			pass.Artifact = req.Artifact
 		}
-		res = Closed{Task: t, Pass: pass, Returns: returns}
-		_, err = tx.AddEvent(closeEvent(req.Skip), t.Project, t.Key(), closeData(pass, returns, t.Node == state.Finish))
-		return err
-	})
+	}
+	pass, err := tx.ClosePass(pass)
 	if err != nil {
 		return Closed{}, err
 	}
-	return res, nil
+	if err := enter(tx, c.task, c.sc, c.passes, c.to); err != nil {
+		return Closed{}, err
+	}
+	t, err := tx.Task(c.task.ID)
+	if err != nil {
+		return Closed{}, err
+	}
+	_, err = tx.AddEvent(closeEvent(req.Skip), t.Project, t.Key(), closeData(pass, c.returns, t.Node == state.Finish))
+	if err != nil {
+		return Closed{}, err
+	}
+	return Closed{Task: t, Pass: pass, Returns: c.returns}, nil
 }
 
 // enter moves the task to node: a new pass of the node, or the end of the

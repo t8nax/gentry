@@ -468,7 +468,7 @@ func taskShowJSON(v task.View, notes []state.Note, artifacts []state.Artifact, d
 	out := contract.TaskShowOutput{Task: taskJSON(v), Path: []contract.TaskPass{}, Notes: []contract.TaskNote{},
 		Artifacts: []contract.TaskArtifact{}, OperatorDecisions: []contract.OperatorDecision{}}
 	for _, p := range v.Path {
-		out.Path = append(out.Path, passJSON(p))
+		out.Path = append(out.Path, passJSON(p, task.CheckLogs(v.Task, p)))
 	}
 	for _, n := range notes {
 		out.Notes = append(out.Notes, noteJSON(n))

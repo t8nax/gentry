@@ -803,4 +803,11 @@ const (
 	ProblemTimeout    Key = "problem.timeout"
 	FlowCheckTimeout  Key = "flow.check_timeout"
 	FlowChecks        Key = "flow.checks"
+	ChecksPassedLine  Key = "stage.checks_passed"
+	ErrCheckFailed    Key = "err.check_failed"
+	CheckExitCodeLine Key = "check.exit_code"
+	CheckLogLine      Key = "check.log"
+	ErrChecksTimeout  Key = "err.checks_timeout"
+	CheckCommandLine  Key = "check.command"
+	ErrCheckNotFound  Key = "err.check_program_not_found"
 )

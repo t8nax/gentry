@@ -86,6 +86,15 @@
       "type": "string",
       "format": "date-time"
     },
+    "checks_logs": {
+      "description": "Files with the output of the commands of checks run on the pass, as paths, in the order of the commands: those of the last attempt to close the pass by an exit. Absent if no command of checks ran on the pass.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "steps": {
       "description": "Steps of the pass in the order added.",
       "type": "array",

@@ -703,9 +703,9 @@ func (l *loader) loadAgent(o object, v *value, a *agent) {
 }
 
 // model returns the model level from fields m of the subagent, empty if the
-// field is absent or has no value. Any other value than a level, an empty
-// string or a value that is not a string among them, is reported with the
-// levels, as the capabilities are.
+// field is absent or null. Any other value that is not a level, including an
+// empty string and a value that is not a string, is reported with the
+// levels, as for the capabilities.
 func (l *loader) model(o object, m map[string]field) string {
 	f, present := m["model"]
 	if !present || f.value.kind == null {

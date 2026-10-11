@@ -94,6 +94,7 @@ func TestOperatorRecord(t *testing.T) {
 		strings.Contains(out, `"question"`) || !strings.Contains(out, `"source":"operator"`) {
 		t.Errorf("operator record --json: %s", out)
 	}
+	written := clitest.JSONAt(t, out, "decision.recorded")
 	t.Chdir(fix)
 
 	out = clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "--statement", "--json")
@@ -104,6 +105,8 @@ func TestOperatorRecord(t *testing.T) {
 		ds[1].Question != nil || ds[1].Source != "agent" || ds[1].Stage != "plan-feature" || ds[2].Number != 3 {
 		t.Errorf("task show --json: %s", out)
 	}
+	clitest.WantSameTime(t, "the time of the decision in operator record and task show --json",
+		written, clitest.JSONAt(t, out, "operator_decisions.2.recorded"))
 
 	_, events, _ := clitest.Run("events")
 	n := 0

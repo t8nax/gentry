@@ -146,13 +146,15 @@ func writePath(b *strings.Builder, t contract.Task, path []contract.TaskPass, n 
 }
 
 // writePasses prints the path of task t in full, each pass a block: its
-// outcome, exit, transition, reason, who closed it and its steps.
+// outcome, exit, transition, reason, who closed it, the files of the output
+// of its commands of checks and its steps.
 func writePasses(b *strings.Builder, t contract.Task, path []contract.TaskPass, n names) {
 	for _, p := range path {
 		b.WriteString("\n")
 		fmt.Fprintln(b, msg.Text(msg.StageRound, named(n.title(p.Stage), p.Stage), p.Round))
 		fmt.Fprintln(b, msg.Text(msg.OutcomeLine, outcomeWord(t, p)))
 		if passCurrent(p) {
+			writeCheckLogs(b, p.ChecksLogs)
 			b.WriteString("\n")
 			writeStepTable(b, p.Steps)
 			continue
@@ -166,10 +168,19 @@ func writePasses(b *strings.Builder, t contract.Task, path []contract.TaskPass, 
 		}
 		fmt.Fprintln(b, msg.Text(msg.RecordedLine, recordedWord(p, n)))
 		fmt.Fprintln(b, msg.Text(msg.ClosedLine, localTime(*p.Closed)))
+		writeCheckLogs(b, p.ChecksLogs)
 		if len(p.Steps) > 0 {
 			b.WriteString("\n")
 			writeStepTable(b, p.Steps)
 		}
+	}
+}
+
+// writeCheckLogs prints the files of the output of the commands of checks
+// of a pass, one a line; nothing if no command ran.
+func writeCheckLogs(b *strings.Builder, logs []string) {
+	if len(logs) > 0 {
+		writeList(b, msg.Text(msg.PassCheckLogs), logs)
 	}
 }
 

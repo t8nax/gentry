@@ -794,6 +794,7 @@ var ru = catalog{
 		ErrChecksTimeout:          "Проверки этапа не завершились за %s.",
 		CheckCommandLine:          "Команда: %s",
 		ErrCheckNotFound:          "Программа команды проверки не найдена: %s",
+		PassCheckLogs:             "Вывод проверок:",
 	},
 	plurals: map[Key][]string{
 		FlowRounds: {"не более %d возврата", "не более %d возвратов", "не более %d возвратов"},

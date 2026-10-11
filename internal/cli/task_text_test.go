@@ -216,6 +216,7 @@ func TestTaskShowText(t *testing.T) {
 		pass("merge", "merge", flow.Finish, result("Ветка влита в main"), contract.TaskPassSourceOperator),
 	}
 	path[4].Source = ptr(agent)
+	path[2].ChecksLogs = []string{"/work/checks/implementation-1-1.log", "/work/checks/implementation-1-2.log"}
 	passed := shopTask()
 	passed.Stage, passed.Finished, passed.Progress.Passed = nil, true, 5
 	artifacts := []contract.TaskArtifact{{Name: "plan", Kind: contract.TaskArtifactKindLink, Url: ptr("https://claude.ai/code/artifact/plan"),
@@ -270,6 +271,9 @@ func TestTaskShowText(t *testing.T) {
 		msg.Text(msg.TransitionLine, "review"),
 		"Записано: "+msg.Text(msg.RecordedByAgent),
 		"Закрыт: 2026-10-09 12:30",
+		"Вывод проверок:",
+		"  /work/checks/implementation-1-1.log",
+		"  /work/checks/implementation-1-2.log",
 		"",
 	) + steps + lines(
 		"",

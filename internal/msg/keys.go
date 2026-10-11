@@ -810,4 +810,5 @@ const (
 	ErrChecksTimeout  Key = "err.checks_timeout"
 	CheckCommandLine  Key = "check.command"
 	ErrCheckNotFound  Key = "err.check_program_not_found"
+	PassCheckLogs     Key = "pass.check_logs"
 )

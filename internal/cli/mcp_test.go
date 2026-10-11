@@ -165,3 +165,23 @@ func TestFieldDescription(t *testing.T) {
 		t.Errorf("help of task take:\n%s", b.String())
 	}
 }
+
+// TestStageExitDescription states the description of the tool stage_exit,
+// which only the agent has: the stage closes once its steps are done and its
+// commands of checks pass.
+func TestStageExitDescription(t *testing.T) {
+	c, _ := lookup("stage exit")
+	tl, err := newTool(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Join([]string{
+		"Закрыть текущий этап выходом и перейти к следующему.",
+		"Этап закрывается, когда все его шаги выполнены или сняты.",
+		"Этап с командами проверки закрывается, только когда все они завершились успешно.",
+		"На развилке укажите переход и обоснование.",
+	}, "\n")
+	if got := tl.description(); got != want {
+		t.Errorf("description %q, want %q", got, want)
+	}
+}

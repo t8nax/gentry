@@ -60,9 +60,9 @@ func libraryChange(id, change string, old, cur process.Files, projects ...string
 var applied = &process.Applied{Commit: "c0ffee", Time: shopTime}
 
 // reviewerRuns is the change of the library of the example of the plan: the
-// reviewer runs the tests.
+// reviewer runs the tests on the strong model.
 var reviewerRuns = map[string]string{
-	"reviewer.yaml": "purpose: ревью изменений задачи — поведение и текст\ncapabilities: [read, search, run]\n",
+	"reviewer.yaml": "purpose: ревью изменений задачи — поведение и текст\ncapabilities: [read, search, run]\nmodel: strong\n",
 	"reviewer.md":   "Проверить изменения задачи: поведение, тесты и тексты для оператора.\nЗапустить тесты проекта и приложить результат к замечаниям.\n",
 }
 
@@ -417,7 +417,7 @@ flowchart TD
 ` + msg.Text(msg.ReportHeadingChange, msg.Text(msg.FlowObjAgent, "auditor"), added) + `
 
 ` + lines(msg.Text(msg.FlowPurpose, "проверка безопасности изменений")+"  ",
-		msg.Text(msg.FlowCapabilities, "read, search")+"  ", msg.Text(msg.FlowStages, "security")) + `
+		msg.Text(msg.FlowCapabilities, "read, search")+"  ", msg.Text(msg.FlowModel, noValue)+"  ", msg.Text(msg.FlowStages, "security")) + `
 ` + msg.Text(msg.FlowInstruction) + `
 
 > Найти уязвимости в изменениях задачи.
@@ -431,6 +431,7 @@ flowchart TD
 | ` + msg.Text(msg.ColField) + ` | ` + msg.Text(msg.ColWas) + ` | ` + msg.Text(msg.ColNow) + ` |
 | --- | --- | --- |
 | Возможности | read, search | read, search, run |
+| Модель | — | strong |
 
 ` + msg.Text(msg.FlowInstruction) + `
 

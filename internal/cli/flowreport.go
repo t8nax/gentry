@@ -335,6 +335,7 @@ func (d diffView) writeAgent(b *strings.Builder, change string, old, cur *flow.A
 		writeLines(b, []string{
 			msg.Text(msg.FlowPurpose, orNone(oneLine(a.Purpose))),
 			msg.Text(msg.FlowCapabilities, joined(a.Capabilities)),
+			msg.Text(msg.FlowModel, orNone(a.Model)),
 			lead(fl),
 		})
 		writeQuoted(b, msg.Text(msg.FlowInstruction), a.Instruction)
@@ -349,6 +350,7 @@ func (d diffView) writeAgent(b *strings.Builder, change string, old, cur *flow.A
 		writeFieldChanges(b, []fieldChange{
 			{msg.ReportFieldPurpose, oneLine(old.Purpose), oneLine(cur.Purpose)},
 			{msg.ReportFieldCapabilities, joined(old.Capabilities), joined(cur.Capabilities)},
+			{msg.ReportFieldModel, old.Model, cur.Model},
 		})
 		writeTextDiff(b, msg.Text(msg.FlowInstruction), old.Instruction, cur.Instruction)
 	default:

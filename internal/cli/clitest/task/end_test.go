@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -41,45 +40,6 @@ func lastEvent(t *testing.T) (string, string) {
 		t.Fatal(err)
 	}
 	return e.Type, string(e.Data)
-}
-
-// jsonAt returns the string at path of the JSON output out: names of fields
-// and indexes of arrays apart by dots, such as attempts.0.taken; "" if there
-// is none.
-func jsonAt(t *testing.T, out, path string) string {
-	t.Helper()
-	var v any
-	if err := json.Unmarshal([]byte(out), &v); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range strings.Split(path, ".") {
-		switch x := v.(type) {
-		case map[string]any:
-			v = x[name]
-		case []any:
-			i, err := strconv.Atoi(name)
-			if err != nil || i >= len(x) {
-				return ""
-			}
-			v = x[i]
-		default:
-			return ""
-		}
-	}
-	s, _ := v.(string)
-	return s
-}
-
-// wantSameTime checks that the times are in the format of the output and are
-// the same string: a moment is always the same string.
-func wantSameTime(t *testing.T, what string, times ...string) {
-	t.Helper()
-	for _, tm := range times {
-		if !clitest.OutputTime.MatchString(tm) || tm != times[0] {
-			t.Errorf("%s: %q, want the same time in the format of the output", what, times)
-			return
-		}
-	}
 }
 
 // The words are those of the catalog: the tests of the output in package
@@ -127,7 +87,7 @@ func TestTaskClose(t *testing.T) {
 	if !strings.Contains(out, `"ended":{"source":"agent","time":"`) || strings.Contains(out, `"worktree"`) {
 		t.Errorf("task show --json of a closed task: %s", out)
 	}
-	wantSameTime(t, "the time of closing in task show --json", jsonAt(t, out, "task.ended.time"))
+	clitest.WantSameTime(t, "the time of closing in task show --json", clitest.JSONAt(t, out, "task.ended.time"))
 	// Closed, the task is not in the list of open ones; the worktree takes
 	// the next task.
 	if _, stdout, _ := clitest.Run("task", "list"); stdout != msg.Text(msg.TasksNoneOpen)+"\n" {
@@ -298,10 +258,10 @@ func TestTaskCancel(t *testing.T) {
 	// The times of the cancelling are read back as written.
 	show := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "SHOP-3")
 	attempts := clitest.WantJSON(t, contract.ExitOK, "schemas/task-attempts.json", "task", "attempts", "SHOP-3")
-	wantSameTime(t, "the time of cancelling in task cancel, task show and task attempts --json",
-		jsonAt(t, out, "task.ended.time"), jsonAt(t, show, "task.ended.time"), jsonAt(t, attempts, "attempts.0.ended.time"))
-	wantSameTime(t, "the time of taking in task cancel and task attempts --json",
-		jsonAt(t, out, "task.taken"), jsonAt(t, attempts, "attempts.0.taken"))
+	clitest.WantSameTime(t, "the time of cancelling in task cancel, task show and task attempts --json",
+		clitest.JSONAt(t, out, "task.ended.time"), clitest.JSONAt(t, show, "task.ended.time"), clitest.JSONAt(t, attempts, "attempts.0.ended.time"))
+	clitest.WantSameTime(t, "the time of taking in task cancel and task attempts --json",
+		clitest.JSONAt(t, out, "task.taken"), clitest.JSONAt(t, attempts, "attempts.0.taken"))
 	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--reason", "--input"), "", cli.HintText(msg.HintCommandHelp, "task cancel")),
 		"task", "cancel", "SHOP-3", "--reason", "Причина", "--input", input)
 }
@@ -407,7 +367,7 @@ func TestTaskTakeAgain(t *testing.T) {
 	if !strings.Contains(out, `"attempt":2,`) || strings.Contains(out, `"ended"`) {
 		t.Errorf("task show --json: %s", out)
 	}
-	taken := jsonAt(t, out, "task.taken")
+	taken := clitest.JSONAt(t, out, "task.taken")
 
 	// An artifact of the same name lies apart from the one of the first.
 	if err := os.WriteFile(plan, []byte("План 2"), 0o644); err != nil {
@@ -437,7 +397,7 @@ func TestTaskTakeAgain(t *testing.T) {
 		t.Errorf("task attempts:\n%s\nwant:\n%s", stdout, want)
 	}
 	attempts := clitest.WantJSON(t, contract.ExitOK, "schemas/task-attempts.json", "task", "attempts", "SHOP-1")
-	wantSameTime(t, "the time of taking the second attempt in task show and task attempts --json", taken, jsonAt(t, attempts, "attempts.1.taken"))
+	clitest.WantSameTime(t, "the time of taking the second attempt in task show and task attempts --json", taken, clitest.JSONAt(t, attempts, "attempts.1.taken"))
 	_, stdout, _ = clitest.Run("task", "attempts", "SHOP-1", "1")
 	for _, part := range []string{
 		clitest.Lines(msg.Text(msg.AttemptHeading, "SHOP-1", 1, "Частичный возврат по карте"), "", msg.Text(msg.TaskProject, "shop"),
@@ -458,10 +418,10 @@ func TestTaskTakeAgain(t *testing.T) {
 		t.Errorf("task attempts SHOP-1 1 has hints:\n%s", stdout)
 	}
 	first := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "attempts", "SHOP-1", "1")
-	wantSameTime(t, "the time of cancelling the first attempt in task attempts --json",
-		jsonAt(t, attempts, "attempts.0.ended.time"), jsonAt(t, first, "task.ended.time"))
-	wantSameTime(t, "the time of taking the first attempt in task attempts --json",
-		jsonAt(t, attempts, "attempts.0.taken"), jsonAt(t, first, "task.taken"))
+	clitest.WantSameTime(t, "the time of cancelling the first attempt in task attempts --json",
+		clitest.JSONAt(t, attempts, "attempts.0.ended.time"), clitest.JSONAt(t, first, "task.ended.time"))
+	clitest.WantSameTime(t, "the time of taking the first attempt in task attempts --json",
+		clitest.JSONAt(t, attempts, "attempts.0.taken"), clitest.JSONAt(t, first, "task.taken"))
 	// The refusal of an attempt that the task has not is built from the
 	// attempts of the store: no test of package cli reaches it, this test
 	// states its words.

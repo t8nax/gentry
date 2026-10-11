@@ -94,14 +94,7 @@ func TestOperatorRecord(t *testing.T) {
 		strings.Contains(out, `"question"`) || !strings.Contains(out, `"source":"operator"`) {
 		t.Errorf("operator record --json: %s", out)
 	}
-	// The time of the decision is compared as the strings of the output: a
-	// moment is always the same string.
-	var written struct {
-		Decision struct {
-			Recorded string `json:"recorded"`
-		} `json:"decision"`
-	}
-	json.Unmarshal([]byte(out), &written)
+	written := clitest.JSONAt(t, out, "decision.recorded")
 	t.Chdir(fix)
 
 	out = clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "--statement", "--json")
@@ -112,15 +105,8 @@ func TestOperatorRecord(t *testing.T) {
 		ds[1].Question != nil || ds[1].Source != "agent" || ds[1].Stage != "plan-feature" || ds[2].Number != 3 {
 		t.Errorf("task show --json: %s", out)
 	}
-	var read struct {
-		Decisions []struct {
-			Recorded string `json:"recorded"`
-		} `json:"operator_decisions"`
-	}
-	json.Unmarshal([]byte(out), &read)
-	if r := written.Decision.Recorded; !clitest.OutputTime.MatchString(r) || len(read.Decisions) != 3 || read.Decisions[2].Recorded != r {
-		t.Errorf("operator record --json recorded %q, want it in the format of the output and the same in task show --json: %s", r, out)
-	}
+	clitest.WantSameTime(t, "the time of the decision in operator record and task show --json",
+		written, clitest.JSONAt(t, out, "operator_decisions.2.recorded"))
 
 	_, events, _ := clitest.Run("events")
 	n := 0

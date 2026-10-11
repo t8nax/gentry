@@ -505,6 +505,11 @@ func TestTaskShowActiveFlow(t *testing.T) {
 	}
 	clitest.WantSameTime(t, "active_flow.time", clitest.JSONAt(t, out, "task.active_flow.time"), applied.Applied.Time.UTC().Format(contract.TimeFormat))
 
+	// --statement changes the text alone: JSON has the change too.
+	if statement := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "SHOP-1", "--statement"); statement != out {
+		t.Errorf("--statement --json:\n%s\nwant:\n%s", statement, out)
+	}
+
 	clitest.MustRun(t, "task", "cancel", "SHOP-1")
 	if stdout := clitest.MustRun(t, "task", "show", "SHOP-1", "--json"); strings.Contains(stdout, `"active_flow"`) {
 		t.Errorf("a cancelled task: %s", stdout)

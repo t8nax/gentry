@@ -392,12 +392,11 @@ func runTaskShow(args []string, env Env) int {
 	}
 	x := taskShowExtra{names: namesOf(v), here: here, full: *full, statement: *onlyStatement}
 	out := taskShowJSON(v, notes, artifacts, decisions)
-	// The statement alone has no fields of the task to read the process for.
-	if !*onlyStatement {
-		if dir, err := home.Process(); err == nil {
-			if a := task.ActiveFlowAt(dir, v); a != nil {
-				out.Task.ActiveFlow = appliedJSON(a)
-			}
+	// The output is one with --statement or without: --statement changes
+	// the text alone, and a command does not read --json (TestOneOutput).
+	if dir, err := home.Process(); err == nil {
+		if a := task.ActiveFlowAt(dir, v); a != nil {
+			out.Task.ActiveFlow = appliedJSON(a)
 		}
 	}
 	return emit(env, out, func(p *page, out contract.TaskShowOutput) {

@@ -320,6 +320,10 @@ func TestFlowJSON(t *testing.T) {
 	if len(out.Scenarios) != 0 || len(out.Stages) != 1 || len(out.Parts) != 0 || len(out.Agents) != 1 || out.Agents[0].Source != "project" {
 		t.Errorf("show --draft --stage security: %s", stdout)
 	}
+	_, stdout, _ = clitest.Run("flow", "show", "--scenario", "feature", "--json")
+	if strings.Contains(stdout, `"plan-bug"`) || !strings.Contains(stdout, `"id":"reviewer"`) {
+		t.Errorf("show --scenario feature: %s", stdout)
+	}
 
 	// A subagent that sees the task and leads its progress passes the
 	// contract too.
@@ -338,10 +342,6 @@ func TestFlowJSON(t *testing.T) {
 	if want := []contract.FlowShowOutputAgentsElemCapabilitiesElem{"read", "edit", "task", "progress"}; len(out.Agents) != 1 ||
 		!slices.Equal(out.Agents[0].Capabilities, want) {
 		t.Errorf("show --draft --agent auditor: %s", stdout)
-	}
-	_, stdout, _ = clitest.Run("flow", "show", "--scenario", "feature", "--json")
-	if strings.Contains(stdout, `"plan-bug"`) || !strings.Contains(stdout, `"id":"reviewer"`) {
-		t.Errorf("show --scenario feature: %s", stdout)
 	}
 
 	_, stdout, _ = clitest.Run("flow", "discard", "--json")

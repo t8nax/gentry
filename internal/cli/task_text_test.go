@@ -315,6 +315,12 @@ func TestTaskShowText(t *testing.T) {
 		msg.Text(msg.StepsNone),
 		"",
 	)
+	// The active flow changed after the take: the line of the change follows
+	// the line of the flow of the task.
+	changed := shopTask()
+	changed.ActiveFlow = &contract.Applied{Commit: "decade", Time: shopTime.Add(10 * time.Minute)}
+	flowLine := msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30") + "\n"
+	changedCurrent := strings.Replace(current, flowLine, flowLine+msg.Text(msg.TaskActiveFlowChanged, "2026-10-09 12:40")+"\n", 1)
 	closedTask := passed
 	closedTask.State, closedTask.Worktree = contract.TaskStateClosed, nil
 	closedTask.Ended = &contract.TaskEnded{Time: shopTime, Source: contract.EndedSourceAgent}
@@ -452,6 +458,10 @@ func TestTaskShowText(t *testing.T) {
 			hintLineOf(msg.HintStatement, "task_show (task: SHOP-1, statement)"),
 			hintLineOf(msg.HintTaskAgain, "task_take (task: SHOP-1, scenario)"),
 		)},
+		{"active flow changed", contract.TaskShowOutput{Task: changed, Path: []contract.TaskPass{currentPass()}},
+			taskShowExtra{names: shopNames(), here: true},
+			changedCurrent + lines(hintLineOf(msg.HintStatement, "gentry task show --statement")),
+			changedCurrent + lines(hintLineOf(msg.HintStatement, "task_show (statement)"))},
 		{"hint to the decisions", contract.TaskShowOutput{Task: shopTask(), Path: []contract.TaskPass{currentPass()}, OperatorDecisions: decisions},
 			taskShowExtra{names: shopNames(), here: true},
 			current + lines(hintLineOf(msg.HintStatementDecisions, "gentry task show --statement")),

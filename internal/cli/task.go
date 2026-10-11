@@ -377,6 +377,10 @@ func runTaskShow(args []string, env Env) int {
 	if err != nil {
 		return fail(env, stateFailure(err))
 	}
+	activeFlow, bad := taskActiveFlow(st, t)
+	if bad != nil {
+		return fail(env, *bad)
+	}
 
 	// task show without a number finds the task only from its worktree.
 	here := false
@@ -386,9 +390,34 @@ func runTaskShow(args []string, env Env) int {
 		}
 	}
 	x := taskShowExtra{names: namesOf(v), here: here, full: *full, statement: *onlyStatement}
-	return emit(env, taskShowJSON(v, notes, artifacts, decisions), func(p *page, out contract.TaskShowOutput) {
+	out := taskShowJSON(v, notes, artifacts, decisions)
+	if activeFlow != nil {
+		out.Task.ActiveFlow = appliedJSON(activeFlow)
+	}
+	return emit(env, out, func(p *page, out contract.TaskShowOutput) {
 		taskShowText(p, out, x)
 	})
+}
+
+// taskActiveFlow returns the last change of the active flow if it changed
+// since the task t was taken; nil if it did not, and for a task closed or
+// cancelled, which follows no flow. The process repository is only read: it
+// is not synchronized.
+func taskActiveFlow(st *state.Store, t state.Task) (*process.Applied, *failure) {
+	if t.IsEnded() {
+		return nil, nil
+	}
+	r, bad := openProcess()
+	if bad != nil {
+		return nil, bad
+	}
+	defer r.Close()
+	a, err := task.ActiveFlow(st, r, t)
+	if err != nil {
+		f := processFailure(err)
+		return nil, &f
+	}
+	return a, nil
 }
 
 // taskShowExtra is what the text of task show has apart from the contract:

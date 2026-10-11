@@ -5,8 +5,12 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"sync"
+	"sync/atomic"
 )
 
 // Tool is a tool of the server.
@@ -16,8 +20,10 @@ type Tool struct {
 	// InputSchema is the JSON schema of the arguments, an object.
 	InputSchema json.RawMessage
 	// Call runs the tool with its arguments, a JSON object, and returns the
-	// text for the model and whether the call failed.
-	Call func(args json.RawMessage) (text string, failed bool)
+	// text for the model and whether the call failed. ctx is done when the
+	// client cancels the call. progress tells the client that the call goes
+	// on, if the client asked to be told; otherwise it does nothing.
+	Call func(ctx context.Context, args json.RawMessage, progress func()) (text string, failed bool)
 }
 
 // Server is a server with its name, version and tools.
@@ -61,44 +67,131 @@ type response struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
+type notification struct {
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params"`
+}
+
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
+// request is a request of the client waiting for its turn or served.
+type request struct {
+	m      message
+	err    *rpcError // the message could not be read: the answer is this error
+	ctx    context.Context
+	cancel context.CancelFunc
+	// cancelled is set when the client cancels the request: it gets no
+	// answer then.
+	cancelled atomic.Bool
+}
+
+// output writes the messages of the server one at a time: the answers and
+// the notifications of the progress of a call.
+type output struct {
+	mu  sync.Mutex
+	enc *json.Encoder
+}
+
+func (o *output) write(v any) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.enc.Encode(v)
+}
+
 // Serve reads messages from in and answers the requests on out until in
-// ends. Calls run one at a time, in the order they come.
+// ends. Calls run one at a time, in the order they come. The input is read
+// while a call runs, so that the client can cancel a call that runs or waits
+// by notifications/cancelled: its context is done, and it gets no answer.
 func (s *Server) Serve(in io.Reader, out io.Writer) error {
-	enc := json.NewEncoder(out)
-	enc.SetEscapeHTML(false)
-	sc := bufio.NewScanner(in)
-	sc.Buffer(make([]byte, 64*1024), maxMessage)
-	for sc.Scan() {
-		line := sc.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var m message
-		if err := json.Unmarshal(line, &m); err != nil {
-			if err := enc.Encode(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{codeParse, err.Error()}}); err != nil {
-				return err
+	o := &output{enc: json.NewEncoder(out)}
+	o.enc.SetEscapeHTML(false)
+	var mu sync.Mutex
+	pending := map[string]*request{} // by id
+	queue := make(chan *request, 64)
+	stop := make(chan struct{})
+	defer close(stop)
+	var readErr error
+	go func() {
+		defer close(queue)
+		sc := bufio.NewScanner(in)
+		sc.Buffer(make([]byte, 64*1024), maxMessage)
+		for sc.Scan() {
+			line := sc.Bytes()
+			if len(line) == 0 {
+				continue
 			}
+			r := &request{}
+			switch err := json.Unmarshal(line, &r.m); {
+			case err != nil:
+				r.m, r.err = message{ID: json.RawMessage("null")}, &rpcError{codeParse, err.Error()}
+			case r.m.Method == "notifications/cancelled":
+				cancelRequest(&mu, pending, r.m.Params)
+				continue
+			case len(r.m.ID) == 0 || r.m.Method == "":
+				// A notification has no id, and a response of the client
+				// has no method: neither gets an answer.
+				continue
+			}
+			r.ctx, r.cancel = context.WithCancel(context.Background())
+			if r.err == nil {
+				mu.Lock()
+				pending[idKey(r.m.ID)] = r
+				mu.Unlock()
+			}
+			select {
+			case queue <- r:
+			case <-stop:
+				return
+			}
+		}
+		readErr = sc.Err()
+	}()
+	for r := range queue {
+		var res any
+		rerr := r.err
+		if rerr == nil {
+			res, rerr = s.handle(r.ctx, r.m, o)
+			mu.Lock()
+			delete(pending, idKey(r.m.ID))
+			mu.Unlock()
+		}
+		r.cancel()
+		if r.cancelled.Load() {
 			continue
 		}
-		// A notification has no id, and a response of the client has no
-		// method: neither gets an answer.
-		if len(m.ID) == 0 || m.Method == "" {
-			continue
-		}
-		result, rerr := s.handle(m)
-		if err := enc.Encode(response{JSONRPC: "2.0", ID: m.ID, Result: result, Error: rerr}); err != nil {
+		if err := o.write(response{JSONRPC: "2.0", ID: r.m.ID, Result: res, Error: rerr}); err != nil {
 			return err
 		}
 	}
-	return sc.Err()
+	return readErr
 }
 
-func (s *Server) handle(m message) (any, *rpcError) {
+// idKey is the id of a request as a key: the JSON of a number or a string.
+func idKey(id json.RawMessage) string { return string(bytes.TrimSpace(id)) }
+
+// cancelRequest cancels the request that params of notifications/cancelled
+// name, if it waits or runs.
+func cancelRequest(mu *sync.Mutex, pending map[string]*request, params json.RawMessage) {
+	var p struct {
+		RequestID json.RawMessage `json:"requestId"`
+	}
+	if json.Unmarshal(params, &p) != nil || len(p.RequestID) == 0 {
+		return
+	}
+	mu.Lock()
+	r, ok := pending[idKey(p.RequestID)]
+	mu.Unlock()
+	if ok {
+		r.cancelled.Store(true)
+		r.cancel()
+	}
+}
+
+func (s *Server) handle(ctx context.Context, m message, o *output) (any, *rpcError) {
 	switch m.Method {
 	case "initialize":
 		var p struct {
@@ -126,6 +219,9 @@ func (s *Server) handle(m message) (any, *rpcError) {
 		var p struct {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
+			Meta      struct {
+				ProgressToken json.RawMessage `json:"progressToken"`
+			} `json:"_meta"`
 		}
 		if err := json.Unmarshal(m.Params, &p); err != nil {
 			return nil, &rpcError{codeInvalidParams, err.Error()}
@@ -138,7 +234,7 @@ func (s *Server) handle(m message) (any, *rpcError) {
 			if len(args) == 0 || string(args) == "null" {
 				args = json.RawMessage("{}")
 			}
-			text, failed := t.Call(args)
+			text, failed := t.Call(ctx, args, progress(o, p.Meta.ProgressToken))
 			return map[string]any{
 				"content": []any{map[string]any{"type": "text", "text": text}},
 				"isError": failed,
@@ -147,4 +243,19 @@ func (s *Server) handle(m message) (any, *rpcError) {
 		return nil, &rpcError{codeInvalidParams, "unknown tool: " + p.Name}
 	}
 	return nil, &rpcError{codeMethodNotFound, "method not found: " + m.Method}
+}
+
+// progress returns the function that tells the client that a call with the
+// progress token goes on: notifications/progress with a progress that grows
+// by one each time. Without a token it does nothing. A notification that
+// cannot be written is lost: the answer tells the rest.
+func progress(o *output, token json.RawMessage) func() {
+	if len(token) == 0 || string(token) == "null" {
+		return func() {}
+	}
+	var n atomic.Int64
+	return func() {
+		o.write(notification{JSONRPC: "2.0", Method: "notifications/progress",
+			Params: map[string]any{"progressToken": token, "progress": n.Add(1)}})
+	}
 }

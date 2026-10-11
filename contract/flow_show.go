@@ -283,9 +283,11 @@ type FlowShowOutput struct {
 type FlowShowOutputAgentsElemCapabilitiesElem string
 
 const FlowShowOutputAgentsElemCapabilitiesElemEdit FlowShowOutputAgentsElemCapabilitiesElem = "edit"
+const FlowShowOutputAgentsElemCapabilitiesElemProgress FlowShowOutputAgentsElemCapabilitiesElem = "progress"
 const FlowShowOutputAgentsElemCapabilitiesElemRead FlowShowOutputAgentsElemCapabilitiesElem = "read"
 const FlowShowOutputAgentsElemCapabilitiesElemRun FlowShowOutputAgentsElemCapabilitiesElem = "run"
 const FlowShowOutputAgentsElemCapabilitiesElemSearch FlowShowOutputAgentsElemCapabilitiesElem = "search"
+const FlowShowOutputAgentsElemCapabilitiesElemTask FlowShowOutputAgentsElemCapabilitiesElem = "task"
 const FlowShowOutputAgentsElemCapabilitiesElemWeb FlowShowOutputAgentsElemCapabilitiesElem = "web"
 
 var enumValues_FlowShowOutputAgentsElemCapabilitiesElem = []interface{}{
@@ -294,6 +296,8 @@ var enumValues_FlowShowOutputAgentsElemCapabilitiesElem = []interface{}{
 	"edit",
 	"run",
 	"web",
+	"task",
+	"progress",
 }
 
 // UnmarshalJSON implements json.Unmarshaler.

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -318,6 +319,25 @@ func TestFlowJSON(t *testing.T) {
 	}
 	if len(out.Scenarios) != 0 || len(out.Stages) != 1 || len(out.Parts) != 0 || len(out.Agents) != 1 || out.Agents[0].Source != "project" {
 		t.Errorf("show --draft --stage security: %s", stdout)
+	}
+
+	// A subagent that sees the task and leads its progress passes the
+	// contract too.
+	clitest.WriteDraft(t, p, map[string]string{
+		"agents/auditor.yaml": "purpose: проверка безопасности изменений\ncapabilities: [read, edit, task, progress]\n",
+	})
+	code, stdout, _ = clitest.Run("flow", "show", "--draft", "--agent", "auditor", "--json")
+	if code != contract.ExitOK {
+		t.Fatalf("show --draft --agent auditor: exit code %d: %s", code, stdout)
+	}
+	clitest.Validate(t, "schemas/flow-show.json", stdout)
+	out = contract.FlowShowOutput{}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	if want := []contract.FlowShowOutputAgentsElemCapabilitiesElem{"read", "edit", "task", "progress"}; len(out.Agents) != 1 ||
+		!slices.Equal(out.Agents[0].Capabilities, want) {
+		t.Errorf("show --draft --agent auditor: %s", stdout)
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--scenario", "feature", "--json")
 	if strings.Contains(stdout, `"plan-bug"`) || !strings.Contains(stdout, `"id":"reviewer"`) {

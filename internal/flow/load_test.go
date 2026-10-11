@@ -1,11 +1,13 @@
 package flow
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -147,6 +149,39 @@ func TestLoadShop(t *testing.T) {
 	}
 	if only := f.OnlyAgent(f.Agents[0]); len(only.Stages) != 0 || len(only.Agents) != 1 || only.Parts == nil {
 		t.Errorf("only reviewer: %+v", only)
+	}
+}
+
+// TestCapabilitiesInContract checks that the schema of flow show allows the
+// capabilities a subagent may have, in the same order: a capability added to
+// the flow and not to the schema makes the output of flow show fail the
+// contract for the panel.
+func TestCapabilitiesInContract(t *testing.T) {
+	const name = "schemas/flow-show.json"
+	data, err := contract.Schemas.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties struct {
+			Agents struct {
+				Items struct {
+					Properties struct {
+						Capabilities struct {
+							Items struct {
+								Enum []string `json:"enum"`
+							} `json:"items"`
+						} `json:"capabilities"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"agents"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if enum := schema.Properties.Agents.Items.Properties.Capabilities.Items.Enum; !slices.Equal(enum, Capabilities) {
+		t.Errorf("%s allows the capabilities %v of a subagent, the flow accepts %v", name, enum, Capabilities)
 	}
 }
 

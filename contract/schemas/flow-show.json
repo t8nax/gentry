@@ -219,7 +219,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": ["read", "search", "edit", "run", "web"]
+              "enum": ["read", "search", "edit", "run", "web", "task", "progress"]
             }
           },
           "instruction": {

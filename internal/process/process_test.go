@@ -3,6 +3,7 @@ package process
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -254,13 +255,19 @@ func TestTryOpen(t *testing.T) {
 		t.Errorf("waited %s for the repository", waited)
 	}
 	m.Close()
+	// Unlike Open, TryOpen does not mark what Gentry has checked: the
+	// reference stays missing.
+	gittest.Run(t, dir, "update-ref", "-d", checkedRef)
 	r, err := TryOpen(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
 	if files, err := r.Active(shop); err != nil || !files.Equal(Files{"flow.yaml": "a\n"}) {
 		t.Errorf("active: %v, %v", files, err)
+	}
+	r.Close()
+	if out, err := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", checkedRef).Output(); err == nil {
+		t.Errorf("TryOpen wrote %s: %s", checkedRef, out)
 	}
 	other := filepath.Join(t.TempDir(), "other")
 	gittest.Repo(t, other)

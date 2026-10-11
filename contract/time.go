@@ -90,9 +90,7 @@ func (a TaskAttempt) MarshalJSON() ([]byte, error) {
 	return withTime(plain(a), "taken", a.Taken)
 }
 
-// MarshalJSON writes the time of the event in TimeFormat. gentry events
-// prints its lines by a structure of its own; the method keeps the type of
-// the contract to the same rule.
+// MarshalJSON writes the time of the event in TimeFormat.
 func (e Event) MarshalJSON() ([]byte, error) {
 	type plain Event
 	return withTime(plain(e), "time", e.Time)

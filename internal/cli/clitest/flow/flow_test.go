@@ -295,7 +295,7 @@ func TestFlowJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.Project != "shop" || out.Applied == nil || out.Applied.Commit != applied.Applied.Commit || out.Dir != p.Dir ||
+	if out.Project != "shop" || out.Applied == nil || out.Applied.Commit != applied.Applied.Commit || out.Dir == nil || *out.Dir != p.Dir || out.Task != nil ||
 		out.Draft == nil || out.Draft.ConflictDir != nil || len(out.Scenarios) != 2 || len(out.Stages) != 6 || len(out.Parts) != 2 || len(out.Agents) != 1 {
 		t.Errorf("show: %s", stdout)
 	}
@@ -593,7 +593,7 @@ func TestFlowHelp(t *testing.T) {
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--help")
 	if usage := "  gentry flow show [--scenario " + msg.Text(msg.ArgScenario) + " | --stage " + msg.Text(msg.ArgStage) + " | --agent " + msg.Text(msg.ArgAgent) +
-		" | --part " + msg.Text(msg.ArgPart) + "] [--draft] [--project " + msg.Text(msg.ArgProjectID) + "] [--json]\n"; !strings.Contains(stdout, usage) {
+		" | --part " + msg.Text(msg.ArgPart) + "] [--active | --draft] [--project " + msg.Text(msg.ArgProjectID) + "] [--json]\n"; !strings.Contains(stdout, usage) {
 		t.Errorf("flow show --help:\n%s\nwant within:\n%s", stdout, usage)
 	}
 }

@@ -50,6 +50,7 @@ var hintSpecs = map[msg.Key]hint{
 	msg.HintProjectAdd:            {cmd: "project add"},
 	msg.HintFlowShowDraft:         {cmd: "flow show", params: []param{flag("draft")}},
 	msg.HintFlowStage:             {cmd: "flow show", params: []param{flag("stage")}},
+	msg.HintFlowActive:            {cmd: "flow show", params: []param{flag("active")}},
 	msg.HintFlowApply:             {cmd: "flow apply"},
 	msg.HintFlowObjects:           {cmd: "flow show"},
 	msg.HintDraftObjects:          {cmd: "flow show", params: []param{flag("draft")}},

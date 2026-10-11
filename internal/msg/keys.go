@@ -784,3 +784,11 @@ const (
 	ExcludeBlockStart         Key = "agents.exclude_start"
 	ExcludeBlockEnd           Key = "agents.exclude_end"
 )
+
+// Texts of the flow of a task in flow show and task show (GNT-9).
+const (
+	FlagShowActive        Key = "flag.flow_show.active"
+	FlowTask              Key = "flow.task"
+	TaskActiveFlowChanged Key = "task.active_flow_changed"
+	HintFlowActive        Key = "hint.flow_active"
+)

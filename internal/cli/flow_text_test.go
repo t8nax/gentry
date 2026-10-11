@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/flow"
@@ -68,7 +69,7 @@ func security(t *testing.T) map[string]string {
 func TestFlowShowText(t *testing.T) {
 	inUTC(t)
 	shown := func(changes map[string]string, applied bool, draft *contract.FlowDraftInfo) contract.FlowShowOutput {
-		out := contract.FlowShowOutput{Project: "shop", Dir: shopFlowDir, Draft: draft}
+		out := contract.FlowShowOutput{Project: "shop", Dir: ptr(shopFlowDir), Draft: draft}
 		if applied {
 			out.Applied = &contract.Applied{Commit: "c0ffee", Time: shopTime}
 		}
@@ -111,7 +112,7 @@ func TestFlowShowText(t *testing.T) {
 	conditional := map[string]string{"scenarios/bug.yaml": "title: Баг\nstart: triage\nnodes:\n" +
 		"  triage:\n    stage: plan-bug\n    next:\n      - to: merge\n        if: срочно\n      - to: finish\n        if: |\n          не воспроизводится\n          на main\n" +
 		"  merge: { stage: merge, next: finish }\n"}
-	base := contract.FlowShowOutput{Project: "shop", Dir: shopFlowDir, Applied: &contract.Applied{Commit: "c0ffee", Time: shopTime}}
+	base := contract.FlowShowOutput{Project: "shop", Dir: ptr(shopFlowDir), Applied: &contract.Applied{Commit: "c0ffee", Time: shopTime}}
 	feature, featureX := object(base, nil, "scenario", "feature")
 	bugFork, bugForkX := object(base, conditional, "scenario", "bug")
 	review, reviewX := object(base, nil, "stage", "review")
@@ -229,6 +230,66 @@ func TestFlowShowText(t *testing.T) {
 	}
 	for _, tt := range tests {
 		wantText(t, tt.name, func(p *page) { flowShowText(p, tt.out, tt.x) }, tt.cli, tt.agent)
+	}
+}
+
+// TestFlowShowTaskText states the block of the task that heads the flow of
+// a task in its worktree, and the hint to the active flow once it changed.
+// When the flow of the task was applied, task show states.
+func TestFlowShowTaskText(t *testing.T) {
+	inUTC(t)
+	fl := readShopFlow(t, nil).Flow
+	shown := func(changed bool, object string) (contract.FlowShowOutput, flowShowExtra) {
+		out := contract.FlowShowOutput{Project: "shop", Task: &contract.FlowShowTask{Id: "SHOP-1", Flow: contract.Applied{Commit: "c0ffee", Time: shopTime}}}
+		if changed {
+			out.Task.ActiveFlow = &contract.Applied{Commit: "decade", Time: shopTime.Add(10 * time.Minute)}
+		}
+		if object == "" {
+			return flowJSON(out, fl), flowShowExtra{}
+		}
+		narrowed, uses, _ := flowObject(fl, "stage", object)
+		return flowJSON(out, narrowed), flowShowExtra{object: "stage", uses: uses}
+	}
+	applied := msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30")
+	tables := render(cliChannel, func(p *page) {
+		out, x := shown(false, "")
+		flowShowText(p, out, x)
+	})
+	tables = tables[strings.Index(tables, "\n\n")+2 : strings.LastIndex(tables, "\n\n")+1]
+	merge := lines(
+		msg.Text(msg.FlowStage, "merge"),
+		msg.Text(msg.FlowTitle, "Слияние"),
+		msg.Text(msg.FlowExecutor, "operator"),
+		msg.Text(msg.FlowExit, "ветка задачи влита в main"),
+		msg.Text(msg.FlowParts, noValue),
+		msg.Text(msg.FlowScenarios, "bug, feature"),
+		"",
+		msg.Text(msg.FlowInstruction),
+		"  Влить ветку задачи в main.",
+	)
+	stageHint := hintLineOf(msg.HintFlowStage, "gentry flow show --stage "+msg.Text(msg.ArgStage))
+	stageTool := hintLineOf(msg.HintFlowStage, "flow_show (stage)")
+	tests := []struct {
+		name       string
+		changed    bool
+		object     string
+		cli, agent string
+	}{
+		{"flow", false, "", lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageHint),
+			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageTool)},
+		{"flow changed", true, "", lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
+			tables + "\n" + lines(stageHint, "Посмотреть действующий флоу: gentry flow show --active"),
+			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
+				tables + "\n" + lines(stageTool, "Посмотреть действующий флоу: flow_show (active)")},
+		{"stage", false, "merge", lines("Задача: SHOP-1", applied, "") + merge, ""},
+		{"stage changed", true, "merge", lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
+			lines("Посмотреть действующий флоу: gentry flow show --active"),
+			lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
+				lines("Посмотреть действующий флоу: flow_show (active)")},
+	}
+	for _, tt := range tests {
+		out, x := shown(tt.changed, tt.object)
+		wantText(t, tt.name, func(p *page) { flowShowText(p, out, x) }, tt.cli, tt.agent)
 	}
 }
 

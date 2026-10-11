@@ -109,7 +109,7 @@ func (p *layoutPool) taskAgents(t state.Task) ([]flow.Agent, bool, error) {
 // the project has no flow. ok is false if the active flow has problems with
 // this Gentry: its worktrees are left as they are.
 func activeAgents(r *process.Repo, project string) ([]flow.Agent, bool, error) {
-	res, _, ok, err := flow.Active(r, project)
+	res, ok, err := flow.Active(r, project)
 	if err != nil {
 		return nil, false, err
 	}

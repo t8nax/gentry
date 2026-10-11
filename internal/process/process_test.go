@@ -231,6 +231,45 @@ func TestLockWaits(t *testing.T) {
 	}
 }
 
+// TestTryOpen checks that a reading command neither creates the repository
+// nor waits for another command to release it.
+func TestTryOpen(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "process")
+	if _, err := TryOpen(dir); !errors.Is(err, ErrNoRepo) {
+		t.Errorf("no repository: %v", err)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the repository is created: %v", err)
+	}
+	m := open(t, dir)
+	m.write(shop, map[string]string{"flow.yaml": "a\n"})
+	m.apply(shop)
+	start := time.Now()
+	var be *BusyError
+	if _, err := TryOpen(dir); !errors.As(err, &be) {
+		t.Errorf("held by another command: %v", err)
+	}
+	if waited := time.Since(start); waited > LockWait/2 {
+		t.Errorf("waited %s for the repository", waited)
+	}
+	m.Close()
+	r, err := TryOpen(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if files, err := r.Active(shop); err != nil || !files.Equal(Files{"flow.yaml": "a\n"}) {
+		t.Errorf("active: %v, %v", files, err)
+	}
+	other := filepath.Join(t.TempDir(), "other")
+	gittest.Repo(t, other)
+	var ie *InvalidError
+	if _, err := TryOpen(other); !errors.As(err, &ie) || ie.Reason != ReasonNotProcess {
+		t.Errorf("a repository of something else: %v", err)
+	}
+}
+
 func TestDraft(t *testing.T) {
 	t.Parallel()
 	m := open(t, filepath.Join(t.TempDir(), "process"))

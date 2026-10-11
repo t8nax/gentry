@@ -251,7 +251,7 @@ func projectFlow(r *process.Repo, places flow.Places, draft bool, out *contract.
 		}
 		fl = res.Flow
 	} else {
-		res, _, ok, err := flow.Active(r, places.Project)
+		res, ok, err := flow.Active(r, places.Project)
 		if err != nil {
 			return fail(flowFailure(err, places))
 		}

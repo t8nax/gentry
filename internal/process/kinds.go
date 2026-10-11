@@ -66,13 +66,17 @@ func (r *Repo) Applied(k Kind) (a Applied, ok bool, err error) {
 // second, and two kinds may be applied within one. ok is false if none of ks
 // has files at HEAD.
 func (r *Repo) LastApplied(ks ...Kind) (a Applied, ok bool, err error) {
+	head, err := r.head()
+	if err != nil {
+		return Applied{}, false, err
+	}
+	t, err := r.treeOf(head)
+	if err != nil {
+		return Applied{}, false, err
+	}
 	args := []string{"log", "-1", "--format=%H %cI", "HEAD", "--"}
 	for _, k := range ks {
-		active, err := r.Active(k)
-		if err != nil {
-			return Applied{}, false, err
-		}
-		if len(active) > 0 {
+		if len(t.kind(k)) > 0 {
 			args = append(args, k.root())
 		}
 	}

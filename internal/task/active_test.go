@@ -1,9 +1,11 @@
 package task
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/paths"
@@ -101,9 +103,13 @@ func (s activeShop) apply(k process.Kind) process.Applied {
 // the active flow.
 func (s activeShop) take() state.Task {
 	s.t.Helper()
-	res, applied, _, err := flow.Active(s.r, "shop")
+	res, _, err := flow.Active(s.r, "shop")
 	if err != nil || res.Flow == nil {
 		s.t.Fatalf("active flow: %v, %+v", err, res)
+	}
+	applied, _, err := s.r.Applied(process.FlowOf("shop"))
+	if err != nil {
+		s.t.Fatal(err)
 	}
 	library, _, err := s.r.Applied(process.Library)
 	if err != nil {
@@ -120,10 +126,15 @@ func (s activeShop) take() state.Task {
 	return t
 }
 
-// active returns the last change of the active flow for t.
+// active returns the last change of the active flow for t, viewed with its
+// snapshot as Views reads it.
 func (s activeShop) active(t state.Task) *process.Applied {
 	s.t.Helper()
-	a, err := ActiveFlow(s.st, s.r, t)
+	views, err := Views(s.st, []state.Task{t})
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	a, err := ActiveFlow(s.r, views[0])
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -218,5 +229,39 @@ func TestFlowIn(t *testing.T) {
 	}
 	if _, ok, err := FlowIn(nil, s.r, worktrees, src, "shop"); ok || err != nil {
 		t.Errorf("no store: %v, %v", ok, err)
+	}
+}
+
+// TestActiveFlowAt checks that a task is shown without the change of the
+// active flow while the process repository cannot be read at once: another
+// command holds it, or there is none, which is not created.
+func TestActiveFlowAt(t *testing.T) {
+	t.Parallel()
+	s := newActiveShop(t)
+	task := s.take()
+	s.write(process.FlowOf("shop"), map[string]string{"stages/merge.md": "Влить ветку после ревью.\n"})
+	applied := s.apply(process.FlowOf("shop"))
+	views, err := Views(s.st, []state.Task{task})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// s holds the repository as a command of Gentry does.
+	start := time.Now()
+	if a := ActiveFlowAt(s.r.Dir, views[0]); a != nil {
+		t.Errorf("held by another command: %+v", *a)
+	}
+	if waited := time.Since(start); waited > process.LockWait/2 {
+		t.Errorf("waited %s for the repository", waited)
+	}
+	s.r.Close()
+	if a := ActiveFlowAt(s.r.Dir, views[0]); a == nil || a.Commit != applied.Commit {
+		t.Errorf("free: %+v, want %s", a, applied.Commit)
+	}
+	missing := filepath.Join(t.TempDir(), "process")
+	if a := ActiveFlowAt(missing, views[0]); a != nil {
+		t.Errorf("no repository: %+v", *a)
+	}
+	if _, err := os.Stat(missing); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the repository is created: %v", err)
 	}
 }

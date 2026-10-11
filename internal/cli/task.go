@@ -10,6 +10,7 @@ import (
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/agents"
 	"github.com/t8nax/gentry/internal/flow"
+	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/paths"
 	"github.com/t8nax/gentry/internal/process"
@@ -131,12 +132,16 @@ func runTaskTake(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	res, applied, ok, err := flow.Active(r, w.Project)
+	res, ok, err := flow.Active(r, w.Project)
 	if err != nil {
 		return fail(env, flowFailure(err, places))
 	}
 	if !ok {
 		return fail(env, flowFailure(&flow.NoFlowError{Project: w.Project, Dir: places.Dir}, places))
+	}
+	applied, _, err := r.Applied(process.FlowOf(w.Project))
+	if err != nil {
+		return fail(env, flowFailure(err, places))
 	}
 	if len(res.Problems) > 0 {
 		return fail(env, flowInvalid(places, res.Problems))
@@ -377,10 +382,6 @@ func runTaskShow(args []string, env Env) int {
 	if err != nil {
 		return fail(env, stateFailure(err))
 	}
-	activeFlow, bad := taskActiveFlow(st, t)
-	if bad != nil {
-		return fail(env, *bad)
-	}
 
 	// task show without a number finds the task only from its worktree.
 	here := false
@@ -391,33 +392,17 @@ func runTaskShow(args []string, env Env) int {
 	}
 	x := taskShowExtra{names: namesOf(v), here: here, full: *full, statement: *onlyStatement}
 	out := taskShowJSON(v, notes, artifacts, decisions)
-	if activeFlow != nil {
-		out.Task.ActiveFlow = appliedJSON(activeFlow)
+	// The statement alone has no fields of the task to read the process for.
+	if !*onlyStatement {
+		if dir, err := home.Process(); err == nil {
+			if a := task.ActiveFlowAt(dir, v); a != nil {
+				out.Task.ActiveFlow = appliedJSON(a)
+			}
+		}
 	}
 	return emit(env, out, func(p *page, out contract.TaskShowOutput) {
 		taskShowText(p, out, x)
 	})
-}
-
-// taskActiveFlow returns the last change of the active flow if it changed
-// since the task t was taken; nil if it did not, and for a task closed or
-// cancelled, which follows no flow. The process repository is only read: it
-// is not synchronized.
-func taskActiveFlow(st *state.Store, t state.Task) (*process.Applied, *failure) {
-	if t.IsEnded() {
-		return nil, nil
-	}
-	r, bad := openProcess()
-	if bad != nil {
-		return nil, bad
-	}
-	defer r.Close()
-	a, err := task.ActiveFlow(st, r, t)
-	if err != nil {
-		f := processFailure(err)
-		return nil, &f
-	}
-	return a, nil
 }
 
 // taskShowExtra is what the text of task show has apart from the contract:

@@ -143,8 +143,9 @@ var ErrNoRepo = errors.New("no process repository")
 
 // TryOpen opens the process repository in directory dir to read it, if
 // another command does not hold it: it takes the repository at once or
-// returns BusyError, and never creates it nor writes to it. A directory
-// without a repository returns ErrNoRepo. The caller closes it.
+// returns BusyError. It never creates the repository and writes nothing but
+// its lock file, which it creates if there is none. A directory without a
+// repository returns ErrNoRepo. The caller closes it.
 func TryOpen(dir string) (*Repo, error) {
 	if err := git.Find(); err != nil {
 		return nil, err

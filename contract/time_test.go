@@ -75,8 +75,9 @@ func marshalsInTimeFormat(t *testing.T, at time.Time, want string) {
 
 // TestTimeFieldsHaveMarshaler checks by the sources of the package that every
 // struct with a field of time declares MarshalJSON: without it the standard
-// marshaling writes the time out of TimeFormat. A schema with a new time
-// fails here until its type gets the method.
+// marshaling writes the time out of TimeFormat. It checks only that the
+// method is there; that the method writes each time of its type in
+// TimeFormat is for TestTimesMarshalInTimeFormat.
 func TestTimeFieldsHaveMarshaler(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -101,7 +102,9 @@ func TestTimeFieldsHaveMarshaler(t *testing.T) {
 					if star, ok := recv.(*ast.StarExpr); ok {
 						recv = star.X
 					}
-					marshalers[recv.(*ast.Ident).Name] = true
+					if name, ok := recv.(*ast.Ident); ok {
+						marshalers[name.Name] = true
+					}
 				}
 			case *ast.GenDecl:
 				for _, spec := range d.Specs {

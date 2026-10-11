@@ -61,6 +61,11 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 	defer tree.close()
 	cmd.Cancel = tree.kill
 	if err := tree.start(); err != nil {
+		// The context may end the command while it starts: on Windows a
+		// command ended before it is resumed fails to resume.
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
 		return 0, err
 	}
 	done := make(chan struct{})

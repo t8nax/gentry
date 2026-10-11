@@ -29,6 +29,37 @@ func TestAgentFile(t *testing.T) {
 	}
 }
 
+// TestAgentFileModel checks that the model of Claude Code for the level of a
+// subagent comes after its tools, and that every level has a model.
+func TestAgentFileModel(t *testing.T) {
+	a := flow.Agent{ID: "reviewer", Purpose: "ревью корзины", Capabilities: []string{"read", "search"}, Model: "strong", Instruction: "Проверить корзину.\n"}
+	want := "---\n" +
+		"# Gentry: файл разложен из флоу проекта и перезаписывается при раскладке субагентов.\n" +
+		"name: reviewer\n" +
+		"description: \"ревью корзины\"\n" +
+		"tools: Read, Grep, Glob\n" +
+		"model: opus\n" +
+		"---\n\nПроверить корзину.\n"
+	if got := string(Agents{}.File(a)); got != want {
+		t.Errorf("File =\n%s\nwant\n%s", got, want)
+	}
+	for level, model := range map[string]string{"light": "haiku", "standard": "sonnet"} {
+		a.Model = level
+		if got := string(Agents{}.File(a)); !strings.Contains(got, "\ntools: Read, Grep, Glob\nmodel: "+model+"\n---\n") {
+			t.Errorf("%s: %q", level, got)
+		}
+	}
+	for _, level := range flow.Models {
+		if models[level] == "" {
+			t.Errorf("the level %s of the flow has no model of Claude Code", level)
+		}
+	}
+	a.Model = ""
+	if got := string(Agents{}.File(a)); strings.Contains(got, "\nmodel:") {
+		t.Errorf("no level: %q", got)
+	}
+}
+
 func TestAgentMarked(t *testing.T) {
 	l := Agents{}
 	for _, c := range []struct {

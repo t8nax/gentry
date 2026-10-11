@@ -222,6 +222,11 @@
               "enum": ["read", "search", "edit", "run", "web", "task", "progress"]
             }
           },
+          "model": {
+            "description": "Model level of the subagent; absent if the flow does not name one, and the subagent runs on the model of the main session.",
+            "type": "string",
+            "enum": ["light", "standard", "strong"]
+          },
           "instruction": {
             "description": "Instruction of the subagent in markdown, as written.",
             "type": "string"

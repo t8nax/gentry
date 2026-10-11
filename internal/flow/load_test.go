@@ -185,6 +185,35 @@ func TestCapabilitiesInContract(t *testing.T) {
 	}
 }
 
+// TestModelsInContract checks that the schema of flow show allows the model
+// levels a subagent may have, in the same order.
+func TestModelsInContract(t *testing.T) {
+	const name = "schemas/flow-show.json"
+	data, err := contract.Schemas.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties struct {
+			Agents struct {
+				Items struct {
+					Properties struct {
+						Model struct {
+							Enum []string `json:"enum"`
+						} `json:"model"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"agents"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if enum := schema.Properties.Agents.Items.Properties.Model.Enum; !slices.Equal(enum, Models) {
+		t.Errorf("%s allows the model levels %v of a subagent, the flow accepts %v", name, enum, Models)
+	}
+}
+
 func TestReadDirMissing(t *testing.T) {
 	p := shop(t, nil)
 	var pe *fs.PathError

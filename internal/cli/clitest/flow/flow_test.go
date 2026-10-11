@@ -103,6 +103,7 @@ func TestFlowShow(t *testing.T) {
 			msg.Text(msg.FlowSource, msg.Text(msg.FlowSourceLibrary)),
 			msg.Text(msg.FlowPurpose, "ревью изменений задачи — поведение и текст"),
 			msg.Text(msg.FlowCapabilities, "read, search"),
+			msg.Text(msg.FlowModel, clitest.None),
 			msg.Text(msg.FlowStages, "review"),
 			"",
 			msg.Text(msg.FlowInstruction),
@@ -342,6 +343,20 @@ func TestFlowJSON(t *testing.T) {
 	if want := []contract.FlowShowOutputAgentsElemCapabilitiesElem{"read", "edit", "task", "progress"}; len(out.Agents) != 1 ||
 		!slices.Equal(out.Agents[0].Capabilities, want) {
 		t.Errorf("show --draft --agent auditor: %s", stdout)
+	}
+
+	// The model level of a subagent passes the contract; the model of the AI
+	// tool is not shown.
+	clitest.WriteDraft(t, p, map[string]string{
+		"agents/auditor.yaml": "purpose: проверка безопасности изменений\ncapabilities: [read, search]\nmodel: strong\n",
+	})
+	code, stdout, _ = clitest.Run("flow", "show", "--draft", "--agent", "auditor", "--json")
+	if code != contract.ExitOK {
+		t.Fatalf("show --draft --agent auditor: exit code %d: %s", code, stdout)
+	}
+	clitest.Validate(t, "schemas/flow-show.json", stdout)
+	if !strings.Contains(stdout, `"instruction":"Найти уязвимости в изменениях задачи.\n","model":"strong","purpose":`) {
+		t.Errorf("show --draft --agent auditor with a model: %s", stdout)
 	}
 
 	_, stdout, _ = clitest.Run("flow", "discard", "--json")

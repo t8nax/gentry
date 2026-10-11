@@ -48,6 +48,10 @@ const (
 // Capabilities a subagent may have (section 10.2).
 var Capabilities = []string{"read", "search", "edit", "run", "web", "task", "progress"}
 
+// Models a subagent may run on, from the lightest: the adapter of each AI
+// tool turns them into models of its own.
+var Models = []string{"light", "standard", "strong"}
+
 // Fields that come with later versions of Gentry: tracker actions with stage
 // 8, procedures of the knowledge with stage 7. Until then they are refused, so
 // that the operator does not take them for working.
@@ -108,6 +112,7 @@ type Agent struct {
 	Library      bool // from the library of subagents, not of the project
 	Purpose      string
 	Capabilities []string // in the order of the file
+	Model        string   // one of Models; empty without the field
 	Instruction  string   // markdown
 }
 
@@ -394,6 +399,7 @@ type agent struct {
 	library      bool
 	purpose      string
 	capabilities []string
+	model        string
 	instruction  string
 }
 
@@ -687,15 +693,38 @@ func (l *loader) loadStage(id string) {
 
 // loadAgent reads the fields of subagent a from v (section 10.2).
 func (l *loader) loadAgent(o object, v *value, a *agent) {
-	m, ok := l.mapping(o, v, 0, []string{"purpose", "capabilities"}, nil)
+	m, ok := l.mapping(o, v, 0, []string{"purpose", "capabilities", "model"}, nil)
 	if !ok {
 		return
 	}
 	a.purpose, _ = l.text(o, m, "purpose", 0)
+	a.capabilities = l.capabilities(o, m)
+	a.model = l.model(o, m)
+}
+
+// model returns the model level from fields m of the subagent, empty if the
+// field is absent or null. Any other value that is not a level, including an
+// empty string and a value that is not a string, is reported with the
+// levels, as for the capabilities.
+func (l *loader) model(o object, m map[string]field) string {
+	f, present := m["model"]
+	if !present || f.value.kind == null {
+		return ""
+	}
+	if s, ok := f.value.scalar.(string); f.value.kind == scalar && ok && slices.Contains(Models, s) {
+		return s
+	}
+	l.reportOn(o, contract.ProblemInvalidValue, f.line, msg.ProblemModel, o.name, strings.Join(Models, ", "))
+	return ""
+}
+
+// capabilities returns the required capabilities from fields m of the
+// subagent, nil if they are missing or invalid.
+func (l *loader) capabilities(o object, m map[string]field) []string {
 	caps, present := m["capabilities"]
 	if !present || caps.value.kind == null {
 		l.reportOn(o, contract.ProblemMissingField, caps.line, msg.ProblemMissingField, o.name, "capabilities")
-		return
+		return nil
 	}
 	valid := caps.value.kind == sequence
 	for _, item := range caps.value.items {
@@ -704,12 +733,13 @@ func (l *loader) loadAgent(o object, v *value, a *agent) {
 	}
 	if !valid {
 		l.reportOn(o, contract.ProblemInvalidValue, caps.line, msg.ProblemCapabilities, o.name, strings.Join(Capabilities, ", "))
-		return
+		return nil
 	}
-	a.capabilities = []string{}
+	out := []string{}
 	for _, item := range caps.value.items {
-		a.capabilities = append(a.capabilities, item.scalar.(string))
+		out = append(out, item.scalar.(string))
 	}
+	return out
 }
 
 // object is what problems are about: the name messages give it and its file.
@@ -856,7 +886,7 @@ func (l *loader) flow() *Flow {
 	for _, a := range agents {
 		f.Agents = append(f.Agents, Agent{
 			ID: a.id, Library: a.library, Purpose: a.purpose,
-			Capabilities: append([]string{}, a.capabilities...), Instruction: a.instruction,
+			Capabilities: append([]string{}, a.capabilities...), Model: a.model, Instruction: a.instruction,
 		})
 	}
 	return f

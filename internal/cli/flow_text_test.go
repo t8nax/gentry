@@ -117,6 +117,10 @@ func TestFlowShowText(t *testing.T) {
 	review, reviewX := object(base, nil, "stage", "review")
 	merge, mergeX := object(base, nil, "stage", "merge")
 	reviewer, reviewerX := object(base, nil, "agent", "reviewer")
+	strongReviewer, strongReviewerX := object(base, map[string]string{
+		"agents/reviewer.yaml": "purpose: ревью изменений задачи\ncapabilities: [read, search]\nmodel: strong\n",
+		"agents/reviewer.md":   "Проверить изменения и вернуть замечания.\n",
+	}, "agent", "reviewer")
 	checklist, checklistX := object(base, nil, "part", "review-checklist")
 	securityText := head + "\n" + table(
 		[]string{msg.Text(msg.ColScenario), msg.Text(msg.ColTitle)},
@@ -211,10 +215,22 @@ func TestFlowShowText(t *testing.T) {
 			"Источник: "+msg.Text(msg.FlowSourceLibrary),
 			"Назначение: ревью изменений задачи — поведение и текст",
 			"Возможности: read, search",
+			msg.Text(msg.FlowModel, noValue),
 			"Этапы: review",
 			"",
 			msg.Text(msg.FlowInstruction),
 			"  Проверить изменения задачи: поведение, тесты и тексты для оператора.",
+		), ""},
+		{"subagent with a model", strongReviewer, strongReviewerX, lines(
+			msg.Text(msg.FlowAgent, "reviewer"),
+			msg.Text(msg.FlowSource, projectWord),
+			msg.Text(msg.FlowPurpose, "ревью изменений задачи"),
+			msg.Text(msg.FlowCapabilities, "read, search"),
+			"Модель: strong",
+			msg.Text(msg.FlowStages, "review"),
+			"",
+			msg.Text(msg.FlowInstruction),
+			"  Проверить изменения и вернуть замечания.",
 		), ""},
 		{"part", checklist, checklistX, lines(
 			"Фрагмент: review-checklist",

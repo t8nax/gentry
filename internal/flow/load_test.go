@@ -355,6 +355,23 @@ func TestFileProblems(t *testing.T) {
 			{contract.ProblemInvalidValue, "stages/review.yaml", 2, msg.Text(msg.ProblemNotString, msg.Text(msg.FlowObjStage, "review"), "exit")},
 			{contract.ProblemInvalidValue, "stages/review.yaml", 4, msg.Text(msg.ProblemInclude, msg.Text(msg.FlowObjStage, "review"))},
 		}},
+		// A command of checks is a string with a command; the time is whole
+		// numbers with units above zero.
+		{"checks", map[string]string{
+			"stages/plan-bug.yaml":       stage("checks: go test ./...\ntimeout: 600\n"),
+			"stages/review.yaml":         "title: Ревью\nexit: x\nexecutor: reviewer\nchecks: [go vet, 5]\ntimeout: 1.5m\n",
+			"stages/merge.yaml":          "title: Слияние\nexit: x\nexecutor: orchestrator\nchecks:\n  - \"  \"\ntimeout: 0s\n",
+			"stages/implementation.yaml": "title: Реализация\nexit: x\nexecutor: orchestrator\nchecks:\n  - go vet ./...\n  - go test -run \"TestTotal ./...\ntimeout: 500ms\n",
+		}, []Problem{
+			{contract.ProblemInvalidValue, "stages/implementation.yaml", 6, msg.Text(msg.ProblemCheckQuote, msg.Text(msg.FlowObjStage, "implementation"), `go test -run "TestTotal ./...`)},
+			{contract.ProblemInvalidValue, "stages/implementation.yaml", 7, msg.Text(msg.ProblemTimeout, msg.Text(msg.FlowObjStage, "implementation"))},
+			{contract.ProblemInvalidValue, "stages/merge.yaml", 4, msg.Text(msg.ProblemChecks, msg.Text(msg.FlowObjStage, "merge"))},
+			{contract.ProblemInvalidValue, "stages/merge.yaml", 6, msg.Text(msg.ProblemTimeout, msg.Text(msg.FlowObjStage, "merge"))},
+			{contract.ProblemInvalidValue, "stages/plan-bug.yaml", 4, msg.Text(msg.ProblemChecks, msg.Text(msg.FlowObjStage, "plan-bug"))},
+			{contract.ProblemInvalidValue, "stages/plan-bug.yaml", 5, msg.Text(msg.ProblemTimeout, msg.Text(msg.FlowObjStage, "plan-bug"))},
+			{contract.ProblemInvalidValue, "stages/review.yaml", 4, msg.Text(msg.ProblemChecks, msg.Text(msg.FlowObjStage, "review"))},
+			{contract.ProblemInvalidValue, "stages/review.yaml", 5, msg.Text(msg.ProblemTimeout, msg.Text(msg.FlowObjStage, "review"))},
+		}},
 		{"invalid ids", map[string]string{
 			"stages/Plan_Bug.yaml":   stage(""),
 			"stages/Plan_Bug.md":     "x",
@@ -402,6 +419,35 @@ func TestFileProblems(t *testing.T) {
 				t.Errorf("problems:\n%s\nwant:\n%s", dump(got), dump(tt.want))
 			}
 		})
+	}
+}
+
+// TestStageChecks checks that a stage reads its commands of checks in order
+// and the time of them as written, and that a stage without them, with an
+// empty list or with null fields has none and the default time.
+func TestStageChecks(t *testing.T) {
+	res := readShop(t, shop(t, map[string]string{
+		"stages/implementation.yaml": "title: Реализация\nexit: тесты проходят\nexecutor: orchestrator\n" +
+			"checks:\n  - go vet ./...\n  - go test -run 'Total|Sum' ./...\ntimeout: 1h30m\n",
+		"stages/review.yaml": "title: Ревью\nexit: x\nexecutor: reviewer\nchecks: []\ntimeout: 90s\n",
+		"stages/merge.yaml":  "title: Слияние\nexit: x\nexecutor: orchestrator\nchecks:\ntimeout:\n",
+	}))
+	if len(res.Problems) > 0 {
+		t.Fatal(dump(res.Problems))
+	}
+	st, _ := res.Flow.Stage("implementation")
+	if want := []string{"go vet ./...", "go test -run 'Total|Sum' ./..."}; !slices.Equal(st.Checks, want) || st.CheckTimeout() != "1h30m" {
+		t.Errorf("implementation: checks %q, timeout %q", st.Checks, st.CheckTimeout())
+	}
+	st, _ = res.Flow.Stage("review")
+	if st.Checks != nil || st.Timeout != "90s" {
+		t.Errorf("review: checks %q, timeout %q", st.Checks, st.Timeout)
+	}
+	for _, id := range []string{"merge", "branch"} {
+		st, _ = res.Flow.Stage(id)
+		if st.Checks != nil || st.Timeout != "" || st.CheckTimeout() != "10m" {
+			t.Errorf("%s: checks %q, timeout %q, time %q", id, st.Checks, st.Timeout, st.CheckTimeout())
+		}
 	}
 }
 

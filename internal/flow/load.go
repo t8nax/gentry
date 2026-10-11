@@ -21,6 +21,7 @@ import (
 	"github.com/goccy/go-yaml/parser"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/checks"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/process"
 )
@@ -97,7 +98,18 @@ type Stage struct {
 	Exit        string
 	Executor    string   // Orchestrator, Operator or a subagent
 	Include     []string // parts, in the order of the stage file
+	Checks      []string // commands of checks, in the order of the stage file
+	Timeout     string   // the time of the commands of checks as written; empty without the field
 	Instruction string   // markdown
+}
+
+// CheckTimeout returns the time of the commands of checks of the stage as the
+// flow writes it: the field timeout, or the default without it.
+func (s Stage) CheckTimeout() string {
+	if s.Timeout == "" {
+		return checks.DefaultTimeout
+	}
+	return s.Timeout
 }
 
 // Part is a part included in the instructions of stages.
@@ -391,6 +403,8 @@ type stage struct {
 	executorLine int
 	include      []string
 	includeLines []int
+	checks       []string
+	timeout      string
 }
 
 // agent is a subagent as read.
@@ -665,13 +679,21 @@ func (l *loader) loadStage(id string) {
 	if !ok {
 		return
 	}
-	m, ok := l.mapping(o, v, 0, []string{"title", "exit", "executor", "include"}, laterStageFields)
+	m, ok := l.mapping(o, v, 0, []string{"title", "exit", "executor", "include", "checks", "timeout"}, laterStageFields)
 	if !ok {
 		return
 	}
 	st.title, _ = l.text(o, m, "title", 0)
 	st.exit, _ = l.text(o, m, "exit", 0)
 	st.executor, st.executorLine = l.text(o, m, "executor", 0)
+	l.include(o, m, st)
+	st.checks = l.checkCommands(o, m)
+	st.timeout = l.checkTimeout(o, m)
+}
+
+// include reads field include of stage st from its fields m: a list of
+// identifiers of parts.
+func (l *loader) include(o object, m map[string]field, st *stage) {
 	inc, present := m["include"]
 	if !present || inc.value.kind == null {
 		return
@@ -689,6 +711,53 @@ func (l *loader) loadStage(id string) {
 		st.include = append(st.include, item.scalar.(string))
 		st.includeLines = append(st.includeLines, item.line)
 	}
+}
+
+// checkCommands returns the commands of checks from fields m of a stage, nil
+// if the field is absent, null or an empty list. A value that is not a list
+// of strings with a command each is reported on the line of the field, and a
+// command with a quote not closed on its own line.
+func (l *loader) checkCommands(o object, m map[string]field) []string {
+	f, present := m["checks"]
+	if !present || f.value.kind == null {
+		return nil
+	}
+	valid := f.value.kind == sequence
+	for _, item := range f.value.items {
+		s, ok := item.scalar.(string)
+		valid = valid && item.kind == scalar && ok && strings.TrimSpace(s) != ""
+	}
+	if !valid {
+		l.reportOn(o, contract.ProblemInvalidValue, f.line, msg.ProblemChecks, o.name)
+		return nil
+	}
+	var out []string
+	for _, item := range f.value.items {
+		s := item.scalar.(string)
+		if _, err := checks.Split(s); err != nil {
+			l.reportOn(o, contract.ProblemInvalidValue, item.line, msg.ProblemCheckQuote, o.name, s)
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// checkTimeout returns the time of the commands of checks from fields m of a
+// stage as written, empty if the field is absent or null. Any other value
+// that is not a time above zero is reported.
+func (l *loader) checkTimeout(o object, m map[string]field) string {
+	f, present := m["timeout"]
+	if !present || f.value.kind == null {
+		return ""
+	}
+	if s, ok := f.value.scalar.(string); f.value.kind == scalar && ok {
+		if _, ok := checks.ParseTimeout(s); ok {
+			return s
+		}
+	}
+	l.reportOn(o, contract.ProblemInvalidValue, f.line, msg.ProblemTimeout, o.name)
+	return ""
 }
 
 // loadAgent reads the fields of subagent a from v (section 10.2).
@@ -867,7 +936,8 @@ func (l *loader) flow() *Flow {
 		st := l.stages[id]
 		f.Stages = append(f.Stages, Stage{
 			ID: id, Title: st.title, Exit: st.exit, Executor: st.executor,
-			Include: append([]string{}, st.include...), Instruction: l.contents[stagesDir+"/"+id+textExt],
+			Include: append([]string{}, st.include...), Checks: slices.Clone(st.checks), Timeout: st.timeout,
+			Instruction: l.contents[stagesDir+"/"+id+textExt],
 		})
 	}
 	for _, id := range sorted(l.parts) {

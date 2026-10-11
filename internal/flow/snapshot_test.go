@@ -8,7 +8,12 @@ import (
 )
 
 func TestSnapshotRoundTrip(t *testing.T) {
-	res := readShop(t, shop(t, auditor))
+	res := readShop(t, shop(t, with(auditor, map[string]string{
+		"stages/implementation.yaml": "title: Реализация\nexit: тесты проходят\nexecutor: orchestrator\nchecks: [go test ./...]\ntimeout: 20m\n",
+	})))
+	if st, _ := res.Flow.Stage("implementation"); len(st.Checks) != 1 || st.Timeout != "20m" {
+		t.Fatalf("implementation: %+v", st)
+	}
 	b, err := res.Snapshot.Encode()
 	if err != nil {
 		t.Fatal(err)

@@ -795,3 +795,10 @@ const (
 	TaskActiveFlowChanged Key = "task.active_flow_changed"
 	HintFlowActive        Key = "hint.flow_active"
 )
+
+// Texts of the commands of checks of a stage (GNT-19).
+const (
+	ProblemChecks     Key = "problem.checks"
+	ProblemCheckQuote Key = "problem.check_quote"
+	ProblemTimeout    Key = "problem.timeout"
+)

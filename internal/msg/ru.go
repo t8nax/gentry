@@ -782,6 +782,9 @@ var ru = catalog{
 		FlowTask:                  "Задача: %s",
 		TaskActiveFlowChanged:     "Действующий флоу изменён: %s",
 		HintFlowActive:            "Посмотреть действующий флоу",
+		ProblemChecks:             "%s: значение поля «checks» должно быть списком команд.",
+		ProblemCheckQuote:         "%s: в команде проверки не закрыта кавычка: %s",
+		ProblemTimeout:            "%s: значение поля «timeout» должно быть временем с единицей s, m или h, например 10m.",
 	},
 	plurals: map[Key][]string{
 		FlowRounds: {"не более %d возврата", "не более %d возвратов", "не более %d возвратов"},

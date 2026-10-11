@@ -70,6 +70,32 @@ func (a TaskArtifact) MarshalJSON() ([]byte, error) {
 	return withTime(plain(a), "saved", a.Saved)
 }
 
+// MarshalJSON writes the time of recording in TimeFormat.
+func (d OperatorDecision) MarshalJSON() ([]byte, error) {
+	type plain OperatorDecision
+	return withTime(plain(d), "recorded", d.Recorded)
+}
+
+// MarshalJSON writes the time of closing or cancelling in TimeFormat.
+func (e TaskEnded) MarshalJSON() ([]byte, error) {
+	type plain TaskEnded
+	return withTime(plain(e), "time", e.Time)
+}
+
+// MarshalJSON writes the time of taking in TimeFormat.
+func (a TaskAttempt) MarshalJSON() ([]byte, error) {
+	type plain TaskAttempt
+	return withTime(plain(a), "taken", a.Taken)
+}
+
+// MarshalJSON writes the time of the event in TimeFormat. gentry events
+// prints its lines by a structure of its own; the method keeps the type of
+// the contract to the same rule.
+func (e Event) MarshalJSON() ([]byte, error) {
+	type plain Event
+	return withTime(plain(e), "time", e.Time)
+}
+
 // withTime marshals v with its field name holding t in TimeFormat.
 func withTime(v any, name string, t time.Time) ([]byte, error) {
 	return withTimes(v, map[string]*time.Time{name: &t})

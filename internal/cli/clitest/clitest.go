@@ -221,6 +221,10 @@ func Lines(ls ...string) string { return strings.Join(ls, "\n") + "\n" }
 // timePattern is a time as the output names it, to the minute.
 var timePattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
 
+// OutputTime is a time as the JSON output and the events give it:
+// contract.TimeFormat, in UTC with exactly three fractional digits.
+var OutputTime = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`)
+
 // Masked replaces the times in an output by <время>: they are those of the
 // commits.
 func Masked(s string) string { return timePattern.ReplaceAllString(s, "<время>") }

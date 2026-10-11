@@ -145,7 +145,7 @@ func LibraryAgents(files process.Files) map[string]Agent {
 	for id, a := range l.agents {
 		out[id] = Agent{
 			ID: id, Library: true, Purpose: a.purpose,
-			Capabilities: append([]string{}, a.capabilities...), Instruction: a.instruction,
+			Capabilities: append([]string{}, a.capabilities...), Model: a.model, Instruction: a.instruction,
 		}
 	}
 	return out

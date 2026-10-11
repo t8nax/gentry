@@ -82,11 +82,23 @@ func TestAgentProblems(t *testing.T) {
 		want    []Problem
 	}{
 		{"fields", map[string]string{
-			"agents/auditor.yaml": "capabilities: read\nmodel: x\n",
+			"agents/auditor.yaml": "capabilities: read\ntier: x\n",
 		}, nil, []Problem{
 			{contract.ProblemMissingField, "agents/auditor.yaml", 0, msg.Text(msg.ProblemMissingField, msg.Text(msg.FlowObjAgent, "auditor"), "purpose")},
 			{contract.ProblemInvalidValue, "agents/auditor.yaml", 1, msg.Text(msg.ProblemCapabilities, msg.Text(msg.FlowObjAgent, "auditor"), "read, search, edit, run, web, task, progress")},
-			{contract.ProblemUnknownField, "agents/auditor.yaml", 2, msg.Text(msg.ProblemUnknownField, msg.Text(msg.FlowObjAgent, "auditor"), "model")},
+			{contract.ProblemUnknownField, "agents/auditor.yaml", 2, msg.Text(msg.ProblemUnknownField, msg.Text(msg.FlowObjAgent, "auditor"), "tier")},
+		}},
+		// The model is a level the adapter turns into a model of the AI
+		// tool, not a model of the tool.
+		{"unknown model", map[string]string{
+			"agents/auditor.yaml": "purpose: x\ncapabilities: [read]\nmodel: opus\n",
+		}, nil, []Problem{
+			{contract.ProblemInvalidValue, "agents/auditor.yaml", 3, msg.Text(msg.ProblemModel, msg.Text(msg.FlowObjAgent, "auditor"), "light, standard, strong")},
+		}},
+		{"model not a string", map[string]string{
+			"agents/auditor.yaml": "purpose: x\ncapabilities: [read]\nmodel: [strong]\n",
+		}, nil, []Problem{
+			{contract.ProblemInvalidValue, "agents/auditor.yaml", 3, msg.Text(msg.ProblemNotString, msg.Text(msg.FlowObjAgent, "auditor"), "model")},
 		}},
 		{"unknown capability", map[string]string{
 			"agents/auditor.yaml": "purpose: x\ncapabilities: [read, write]\n",
@@ -111,10 +123,11 @@ func TestAgentProblems(t *testing.T) {
 		// A library subagent has no file in the flow: its problems name it and
 		// come before files that do not belong to the flow.
 		{"library", map[string]string{"README.md": "x"}, map[string]string{
-			"reviewer.yaml": "purpose: x\ncapabilities: [all]\n",
+			"reviewer.yaml": "purpose: x\ncapabilities: [all]\nmodel: huge\n",
 			"reviewer.md":   "",
 		}, []Problem{
 			{contract.ProblemInvalidValue, "", 0, msg.Text(msg.ProblemCapabilities, msg.Text(msg.FlowObjLibraryAgent, "reviewer"), "read, search, edit, run, web, task, progress")},
+			{contract.ProblemInvalidValue, "", 0, msg.Text(msg.ProblemModel, msg.Text(msg.FlowObjLibraryAgent, "reviewer"), "light, standard, strong")},
 			{contract.ProblemMissingInstruction, "", 0, msg.Text(msg.ProblemMissingInstruction, msg.Text(msg.FlowObjLibraryAgent, "reviewer"))},
 			{contract.ProblemExtraFile, "README.md", 0, msg.Text(msg.ProblemExtraFile, "README.md")},
 		}},
@@ -155,5 +168,32 @@ func TestAgentGentryCapabilities(t *testing.T) {
 	}
 	if a, _ := res.Flow.Agent("auditor"); !reflect.DeepEqual(a.Capabilities, []string{"read", "edit", "task", "progress"}) {
 		t.Errorf("capabilities %v", a.Capabilities)
+	}
+}
+
+// TestAgentModel checks that a subagent of the project and one of the library
+// may name the model they run on, and that an empty field names none.
+func TestAgentModel(t *testing.T) {
+	p := shop(t, with(auditor, map[string]string{
+		"agents/auditor.yaml": "purpose: проверка безопасности изменений\ncapabilities: [read, search, run]\nmodel: strong\n",
+	}))
+	if err := os.WriteFile(filepath.Join(p.Library, "reviewer.yaml"), []byte("purpose: ревью\ncapabilities: [read]\nmodel: light\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := readShop(t, p)
+	if len(res.Problems) > 0 {
+		t.Fatal(dump(res.Problems))
+	}
+	if a, _ := res.Flow.Agent("auditor"); a.Model != "strong" {
+		t.Errorf("auditor: model %q", a.Model)
+	}
+	if a, _ := res.Flow.Agent("reviewer"); !a.Library || a.Model != "light" {
+		t.Errorf("reviewer: %+v", a)
+	}
+	res = readShop(t, shop(t, with(auditor, map[string]string{
+		"agents/auditor.yaml": "purpose: проверка безопасности изменений\ncapabilities: [read]\nmodel:\n",
+	})))
+	if a, _ := res.Flow.Agent("auditor"); len(res.Problems) > 0 || a.Model != "" {
+		t.Errorf("auditor with an empty model: %+v, problems %s", a, dump(res.Problems))
 	}
 }

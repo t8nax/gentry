@@ -11,7 +11,10 @@ import (
 )
 
 // eventLine is one line of `gentry events --json`, as contract.Event. It is a
-// type of its own to print the time with exactly three fractional digits.
+// type of its own so that the data of the event goes out as stored, a
+// json.RawMessage not parsed anew, and the line is not escaped for HTML:
+// contract.Event holds the data as a map and is marshaled by json.Marshal,
+// which escapes it.
 type eventLine struct {
 	Seq     int64           `json:"seq"`
 	Time    string          `json:"time"`

@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -220,6 +221,49 @@ func Lines(ls ...string) string { return strings.Join(ls, "\n") + "\n" }
 
 // timePattern is a time as the output names it, to the minute.
 var timePattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
+
+// OutputTime is a time as the JSON output and the events give it:
+// contract.TimeFormat, in UTC with exactly three fractional digits.
+var OutputTime = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`)
+
+// JSONAt returns the string at path of the JSON output out: names of fields
+// and indexes of arrays apart by dots, such as attempts.0.taken; "" if there
+// is none.
+func JSONAt(t *testing.T, out, path string) string {
+	t.Helper()
+	var v any
+	if err := json.Unmarshal([]byte(out), &v); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range strings.Split(path, ".") {
+		switch x := v.(type) {
+		case map[string]any:
+			v = x[name]
+		case []any:
+			i, err := strconv.Atoi(name)
+			if err != nil || i < 0 || i >= len(x) {
+				return ""
+			}
+			v = x[i]
+		default:
+			return ""
+		}
+	}
+	s, _ := v.(string)
+	return s
+}
+
+// WantSameTime checks that the times are in the format of the output and are
+// the same string: a moment is always the same string.
+func WantSameTime(t *testing.T, what string, times ...string) {
+	t.Helper()
+	for _, tm := range times {
+		if !OutputTime.MatchString(tm) || tm != times[0] {
+			t.Errorf("%s: %q, want the same time in the format of the output", what, times)
+			return
+		}
+	}
+}
 
 // Masked replaces the times in an output by <время>: they are those of the
 // commits.

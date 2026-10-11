@@ -6,7 +6,9 @@ import (
 )
 
 // TimeFormat is the format of times in the output of commands and in events:
-// UTC, RFC 3339 with milliseconds.
+// UTC, RFC 3339 with exactly three fractional digits, as the description of
+// the package states. The generated types with a time write it by the
+// MarshalJSON methods below.
 const TimeFormat = "2006-01-02T15:04:05.000Z07:00"
 
 // MarshalJSON writes the time of the commit in TimeFormat.
@@ -68,6 +70,30 @@ func (n TaskNote) MarshalJSON() ([]byte, error) {
 func (a TaskArtifact) MarshalJSON() ([]byte, error) {
 	type plain TaskArtifact
 	return withTime(plain(a), "saved", a.Saved)
+}
+
+// MarshalJSON writes the time of recording in TimeFormat.
+func (d OperatorDecision) MarshalJSON() ([]byte, error) {
+	type plain OperatorDecision
+	return withTime(plain(d), "recorded", d.Recorded)
+}
+
+// MarshalJSON writes the time of closing or cancelling in TimeFormat.
+func (e TaskEnded) MarshalJSON() ([]byte, error) {
+	type plain TaskEnded
+	return withTime(plain(e), "time", e.Time)
+}
+
+// MarshalJSON writes the time of taking in TimeFormat.
+func (a TaskAttempt) MarshalJSON() ([]byte, error) {
+	type plain TaskAttempt
+	return withTime(plain(a), "taken", a.Taken)
+}
+
+// MarshalJSON writes the time of the event in TimeFormat.
+func (e Event) MarshalJSON() ([]byte, error) {
+	type plain Event
+	return withTime(plain(e), "time", e.Time)
 }
 
 // withTime marshals v with its field name holding t in TimeFormat.

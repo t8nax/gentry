@@ -785,6 +785,8 @@ var ru = catalog{
 		ProblemChecks:             "%s: значение поля «checks» должно быть списком команд.",
 		ProblemCheckQuote:         "%s: в команде проверки не закрыта кавычка: %s",
 		ProblemTimeout:            "%s: значение поля «timeout» должно быть временем с единицей s, m или h, например 10m.",
+		FlowCheckTimeout:          "Время проверок: %s",
+		FlowChecks:                "Проверки:",
 	},
 	plurals: map[Key][]string{
 		FlowRounds: {"не более %d возврата", "не более %d возвратов", "не более %d возвратов"},

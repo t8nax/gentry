@@ -38,6 +38,8 @@ func TestStageShowText(t *testing.T) {
 		},
 	}
 	header := []string{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)}
+	checked := branch
+	checked.Stage.Checks, checked.Stage.Timeout = []string{"go vet ./...", `go test -run "Total|Sum" ./...`}, ptr("10m")
 	tests := []struct {
 		name       string
 		out        contract.StageShowOutput
@@ -49,6 +51,23 @@ func TestStageShowText(t *testing.T) {
 			msg.Text(msg.FlowExecutor, "orchestrator"),
 			msg.Text(msg.FlowExit, "создана ветка задачи"),
 			msg.Text(msg.FlowParts, noValue),
+			"",
+		) + table(header, []string{"plan", "План фичи", noValue, noValue}) + lines(
+			"",
+			msg.Text(msg.FlowInstruction),
+			"  Создать ветку задачи от main.",
+		), ""},
+		// The commands of checks follow the parts, one a line, as written.
+		{"checks", checked, lines(
+			msg.Text(msg.FlowStage, round("Ветка", "branch", 1)),
+			"Задача: SHOP-1",
+			msg.Text(msg.FlowExecutor, "orchestrator"),
+			msg.Text(msg.FlowExit, "создана ветка задачи"),
+			msg.Text(msg.FlowParts, noValue),
+			"Время проверок: 10m",
+			"Проверки:",
+			"  go vet ./...",
+			`  go test -run "Total|Sum" ./...`,
 			"",
 		) + table(header, []string{"plan", "План фичи", noValue, noValue}) + lines(
 			"",

@@ -801,4 +801,6 @@ const (
 	ProblemChecks     Key = "problem.checks"
 	ProblemCheckQuote Key = "problem.check_quote"
 	ProblemTimeout    Key = "problem.timeout"
+	FlowCheckTimeout  Key = "flow.check_timeout"
+	FlowChecks        Key = "flow.checks"
 )

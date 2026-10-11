@@ -58,6 +58,7 @@ func runStageShow(args []string, env Env) int {
 		},
 		Transitions: []contract.StageShowTransition{},
 	}
+	out.Stage.Checks, out.Stage.Timeout = checksJSON(sv.Stage)
 	for _, p := range sv.Parts {
 		out.Stage.Parts = append(out.Stage.Parts, contract.StageShowPart{Id: p.ID, Text: p.Text})
 	}
@@ -93,6 +94,7 @@ func stageShowText(p *page, out contract.StageShowOutput, include []string) {
 	fmt.Fprintln(b, msg.Text(msg.FlowExecutor, st.Executor))
 	fmt.Fprintln(b, msg.Text(msg.FlowExit, orNone(oneLine(st.Exit))))
 	fmt.Fprintln(b, msg.Text(msg.FlowParts, joined(include)))
+	writeChecks(b, st.Checks, st.Timeout)
 	b.WriteString("\n")
 	rows := [][]string{{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)}}
 	for _, t := range out.Transitions {

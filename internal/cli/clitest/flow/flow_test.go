@@ -359,6 +359,28 @@ func TestFlowJSON(t *testing.T) {
 		t.Errorf("show --draft --agent auditor with a model: %s", stdout)
 	}
 
+	// The commands of checks of a stage and their time pass the contract;
+	// without the field timeout the time is the default. A stage without
+	// commands has neither field.
+	clitest.WriteDraft(t, p, map[string]string{
+		"stages/implementation.yaml": "title: Реализация\nexit: изменения сделаны, тесты проходят\nexecutor: orchestrator\n" +
+			"checks:\n  - go vet ./...\n  - go test ./...\n",
+	})
+	for stage, want := range map[string]string{
+		"implementation": `"checks":["go vet ./...","go test ./..."],"executor":"orchestrator",`,
+		"merge":          `[{"executor":"operator",`,
+	} {
+		code, stdout, _ = clitest.Run("flow", "show", "--draft", "--stage", stage, "--json")
+		if code != contract.ExitOK {
+			t.Fatalf("show --draft --stage %s: exit code %d: %s", stage, code, stdout)
+		}
+		clitest.Validate(t, "schemas/flow-show.json", stdout)
+		if !strings.Contains(stdout, want) || strings.Contains(stdout, `"timeout"`) != (stage == "implementation") ||
+			stage == "implementation" && !strings.Contains(stdout, `"timeout":"10m","title":"Реализация"`) {
+			t.Errorf("show --draft --stage %s: %s", stage, stdout)
+		}
+	}
+
 	_, stdout, _ = clitest.Run("flow", "discard", "--json")
 	clitest.Validate(t, "schemas/flow-discard.json", stdout)
 	if want := `{"dir":` + clitest.JSONString(p.Dir) + `,"project":"shop"}` + "\n"; stdout != want {

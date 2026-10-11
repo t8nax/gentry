@@ -244,6 +244,7 @@ const (
 	FlowSource                    Key = "flow.source"
 	FlowPurpose                   Key = "flow.purpose"
 	FlowCapabilities              Key = "flow.capabilities"
+	FlowModel                     Key = "flow.model"
 	FlowStages                    Key = "flow.stages"
 	FlowPart                      Key = "flow.part"
 	FlowText                      Key = "flow.text"
@@ -283,6 +284,7 @@ const (
 	FlowObjAgent                  Key = "flow.obj.agent"
 	FlowObjLibraryAgent           Key = "flow.obj.library_agent"
 	ProblemCapabilities           Key = "problem.capabilities"
+	ProblemModel                  Key = "problem.model"
 	ProblemOrphanAgentInstruction Key = "problem.orphan_agent_instruction"
 )
 
@@ -741,6 +743,7 @@ const (
 	ReportFieldParts        Key = "report.field_parts"
 	ReportFieldPurpose      Key = "report.field_purpose"
 	ReportFieldCapabilities Key = "report.field_capabilities"
+	ReportFieldModel        Key = "report.field_model"
 	SchemaExecutor          Key = "schema.executor"
 	SchemaOperator          Key = "schema.operator"
 	SchemaWas               Key = "schema.was"

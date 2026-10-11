@@ -180,7 +180,7 @@ flowchart TD
 		"\n" + msg.Text(msg.FlowInstruction) + "\n\n> Проверить изменения на уязвимости.\n" +
 		"\n" + msg.Text(msg.ReportHeadingChange, msg.Text(msg.FlowObjAgent, "auditor"), added) + "\n\n" +
 		clitest.Lines(msg.Text(msg.FlowPurpose, "проверка безопасности изменений")+"  ", msg.Text(msg.FlowCapabilities, "read, search")+"  ",
-			msg.Text(msg.FlowStages, "security")) +
+			msg.Text(msg.FlowModel, clitest.None)+"  ", msg.Text(msg.FlowStages, "security")) +
 		"\n" + msg.Text(msg.FlowInstruction) + "\n\n> Найти уязвимости в изменениях задачи.\n" +
 		"\n" + msg.Text(msg.ReportLibrary) + "\n" +
 		"\n" + msg.Text(msg.ReportLibraryAgent, "reviewer", modified) + "\n\n" +

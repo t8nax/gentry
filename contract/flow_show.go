@@ -17,6 +17,10 @@ type FlowAgent struct {
 	// Instruction of the subagent in markdown, as written.
 	Instruction string `json:"instruction"`
 
+	// Model level of the subagent; absent if the flow does not name one, and the
+	// subagent runs on the model of the main session.
+	Model *FlowShowOutputAgentsElemModel `json:"model,omitempty,omitzero"`
+
 	// What the subagent is for.
 	Purpose string `json:"purpose"`
 
@@ -327,6 +331,38 @@ func (j *FlowShowOutputAgentsElemCapabilitiesElem) UnmarshalJSON(value []byte) e
 		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_FlowShowOutputAgentsElemCapabilitiesElem, v)
 	}
 	*j = FlowShowOutputAgentsElemCapabilitiesElem(v)
+	return nil
+}
+
+type FlowShowOutputAgentsElemModel string
+
+const FlowShowOutputAgentsElemModelLight FlowShowOutputAgentsElemModel = "light"
+const FlowShowOutputAgentsElemModelStandard FlowShowOutputAgentsElemModel = "standard"
+const FlowShowOutputAgentsElemModelStrong FlowShowOutputAgentsElemModel = "strong"
+
+var enumValues_FlowShowOutputAgentsElemModel = []interface{}{
+	"light",
+	"standard",
+	"strong",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowShowOutputAgentsElemModel) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_FlowShowOutputAgentsElemModel {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_FlowShowOutputAgentsElemModel, v)
+	}
+	*j = FlowShowOutputAgentsElemModel(v)
 	return nil
 }
 

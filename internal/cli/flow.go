@@ -431,6 +431,11 @@ func writeFlowObject(b *strings.Builder, out contract.FlowShowOutput, x flowShow
 			capabilities = append(capabilities, string(c))
 		}
 		fmt.Fprintln(b, msg.Text(msg.FlowCapabilities, joined(capabilities)))
+		var model string
+		if a.Model != nil {
+			model = string(*a.Model)
+		}
+		fmt.Fprintln(b, msg.Text(msg.FlowModel, orNone(model)))
 		fmt.Fprintln(b, msg.Text(msg.FlowStages, joined(x.uses)))
 		b.WriteString("\n")
 		writeText(b, msg.Text(msg.FlowInstruction), a.Instruction)
@@ -618,6 +623,10 @@ func flowJSON(out contract.FlowShowOutput, fl *flow.Flow) contract.FlowShowOutpu
 		}
 		for _, c := range a.Capabilities {
 			ca.Capabilities = append(ca.Capabilities, contract.FlowShowOutputAgentsElemCapabilitiesElem(c))
+		}
+		if a.Model != "" {
+			m := contract.FlowShowOutputAgentsElemModel(a.Model)
+			ca.Model = &m
 		}
 		out.Agents = append(out.Agents, ca)
 	}

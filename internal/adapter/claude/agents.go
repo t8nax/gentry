@@ -26,6 +26,15 @@ var tools = map[string][]string{
 	"progress": gentryTools(append(taskTools, "step_add", "step_done", "step_drop", "note_add", "artifact_save")...),
 }
 
+// models maps the model levels of a subagent to the models of Claude Code.
+// An alias names the latest model of its family, so the table does not
+// change with a new version of a model.
+var models = map[string]string{
+	"light":    "haiku",
+	"standard": "sonnet",
+	"strong":   "opus",
+}
+
 // taskTools are the tools that show the task.
 var taskTools = []string{"stage_show", "task_show", "note_list"}
 
@@ -40,7 +49,8 @@ func gentryTools(names ...string) []string {
 
 // Agents lays out subagents as Claude Code reads them from a project:
 // .claude/agents/<id>.md, a YAML front matter with the mark of Gentry, the
-// name, the description and the tools, then the instruction.
+// name, the description, the tools and the model if the subagent has a
+// level, then the instruction.
 type Agents struct{}
 
 var _ agents.Layout = Agents{}
@@ -59,7 +69,8 @@ func (Agents) ID(name string) (string, bool) {
 // File is the file of subagent a. An empty list of tools is written as []:
 // with an empty value of the field Claude Code 2.1 does not finish starting
 // the subagent. A Go quoted string is a valid YAML double-quoted scalar for
-// the purpose: it is one line of text.
+// the purpose: it is one line of text. Without a level the subagent runs on
+// the model of the main session.
 func (Agents) File(a flow.Agent) []byte {
 	var names []string
 	for _, c := range a.Capabilities {
@@ -79,6 +90,9 @@ func (Agents) File(a flow.Agent) []byte {
 	b.WriteString("name: " + a.ID + "\n")
 	b.WriteString("description: " + strconv.Quote(a.Purpose) + "\n")
 	b.WriteString("tools: " + list + "\n")
+	if m, ok := models[a.Model]; ok {
+		b.WriteString("model: " + m + "\n")
+	}
 	b.WriteString("---\n\n")
 	b.WriteString(strings.TrimRight(a.Instruction, "\n") + "\n")
 	return []byte(b.String())

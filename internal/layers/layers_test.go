@@ -217,8 +217,9 @@ type use struct {
 // uses of each import in the files of the package in the order of files. A
 // package is a folder with a Go file that is not a test file, a file named
 // with . or _, which the go tool ignores, nor a file with //go:build ignore;
-// such files of all systems count, whatever their other build constraints. Folders testdata and vendor, folders named with . or _
-// and folders with a go.mod of their own are skipped with all they hold.
+// such files of all systems count, whatever their other build constraints.
+// Folders testdata and vendor, folders named with . or _ and folders with a
+// go.mod of their own are skipped with all they hold.
 func moduleImports(root, module string) (map[string]map[string][]use, error) {
 	fset := token.NewFileSet()
 	pkgs := map[string]map[string][]use{}

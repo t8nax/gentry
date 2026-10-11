@@ -155,28 +155,19 @@ func TestFlowShowTask(t *testing.T) {
 	}
 }
 
-// TestFlowShowTaskLibrary checks that a change of the library marks the
-// active flow changed only if a stage names the subagent changed.
+// TestFlowShowTaskLibrary checks a library subagent of the flow of a task
+// after the library changed it: as the task has it, with the hint to the
+// active flow. Which changes of the library count, TestActiveFlow of
+// package task checks.
 func TestFlowShowTaskLibrary(t *testing.T) {
 	_, _, _ = takeInFix(t)
 	lib := clitest.ShopPlaces().Library
-	clitest.WriteFiles(t, lib, map[string]string{
-		"translator.yaml": "purpose: перевод текстов витрины\ncapabilities: [read]\n",
-		"translator.md":   "Перевести тексты витрины.\n",
-	})
-	applyJSON(t, "library")
-	if out := showJSON(t); out.Task == nil || out.Task.ActiveFlow != nil {
-		t.Errorf("a subagent no stage names: %+v", out.Task)
-	}
 	text, err := os.ReadFile(filepath.Join(lib, "reviewer.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	clitest.WriteFiles(t, lib, map[string]string{"reviewer.md": string(text) + "Проверить логи.\n"})
-	applied := applyJSON(t, "library")
-	if out := showJSON(t); out.Task == nil || !sameApplied(out.Task.ActiveFlow, applied) {
-		t.Errorf("the subagent of a stage: %+v", out.Task)
-	}
+	clitest.MustRun(t, "library", "apply")
 	_, stdout, _ := clitest.Run("flow", "show", "--agent", "reviewer")
 	if strings.Contains(stdout, "Проверить логи.") || !strings.HasSuffix(stdout, "\n\n"+cli.HintText(msg.HintFlowActive)+"\n") {
 		t.Errorf("--agent reviewer:\n%s", stdout)

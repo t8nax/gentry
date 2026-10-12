@@ -794,6 +794,8 @@ var ru = catalog{
 		ErrChecksTimeout:          "Проверки этапа не завершились за %s.",
 		CheckCommandLine:          "Команда: %s",
 		ErrCheckNotFound:          "Программа команды проверки не найдена: %s",
+		ErrCheckNotStarted:        "Программа команды проверки не запустилась: %s",
+		CheckReasonLine:           "Причина: %s",
 		PassCheckLogs:             "Вывод проверок:",
 		ReportChecks:              "Проверки: %s",
 		ReportFieldCheckTimeout:   "Время проверок",

@@ -159,6 +159,32 @@ func TestRunNotFound(t *testing.T) {
 	}
 }
 
+// TestRunNotStarted checks that a program the system does not start is
+// named with the reason the system gives and has no file of output: a file
+// that is no program and, but on Windows, a file that may not be run.
+func TestRunNotStarted(t *testing.T) {
+	files := map[string]os.FileMode{"bad.exe": 0o755}
+	if runtime.GOOS != "windows" {
+		files["locked.exe"] = 0o644
+	}
+	for name, mode := range files {
+		c := command(t, "output", "0")
+		if err := os.WriteFile(filepath.Join(c.Dir, name), []byte("not a program\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+		c.Args[0] = "./" + name
+		var ns *NotStartedError
+		if _, err := Run(context.Background(), c); !errors.As(err, &ns) || ns.Program != c.Args[0] || ns.Reason == "" {
+			t.Errorf("%s: %v", name, err)
+		} else {
+			t.Logf("%s: %s", name, ns.Reason)
+		}
+		if _, err := os.Stat(c.Log); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s: a file of output: %v", name, err)
+		}
+	}
+}
+
 // TestRunDotOnPath checks that a program found in the current directory,
 // which is not the worktree, or in a relative directory of PATH is looked
 // for in the absolute directories of PATH after them.

@@ -598,6 +598,13 @@ func TestWayFailureText(t *testing.T) {
 			"Программа команды проверки не найдена: golangci-lint",
 			msg.Text(msg.CheckCommandLine, "golangci-lint run"),
 		), ""},
+		// The reason is what the system says, as it says it.
+		{"check program not started", "stage exit", &task.CheckStartError{Node: "implementation", Program: "./gradlew",
+			Command: "./gradlew test", Reason: "permission denied"}, true, lines(
+			"Программа команды проверки не запустилась: ./gradlew",
+			msg.Text(msg.CheckCommandLine, "./gradlew test"),
+			"Причина: permission denied",
+		), ""},
 		{"file too large", "artifact save", &task.FileError{Path: "big.bin", Reason: task.FileTooLarge}, false, lines(
 			"Файл артефакта больше 10 МБ: big.bin",
 		), lines(

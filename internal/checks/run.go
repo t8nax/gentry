@@ -19,6 +19,16 @@ type NotFoundError struct{ Program string }
 
 func (e *NotFoundError) Error() string { return e.Program + ": program not found" }
 
+// NotStartedError means the program of a command is found, but the system
+// did not start it: for example, it may not be run, or the file is no
+// program.
+type NotStartedError struct {
+	Program string
+	Reason  string // what the system says, as it says it
+}
+
+func (e *NotStartedError) Error() string { return e.Program + ": " + e.Reason }
+
 // Command is a command of checks to run.
 type Command struct {
 	Dir  string   // the worktree the command runs in
@@ -38,8 +48,10 @@ var ProgressEvery = 5 * time.Second
 // them, to the file c.Log; its standard input is empty and its environment
 // is that of Gentry. When ctx is done, the command is ended with every
 // process it started, and Run returns the error of ctx; the processes the
-// command leaves behind when it ends are ended too. The file of the output
-// is made only once the program is found, and not if ctx is done already.
+// command leaves behind when it ends are ended too. A program not found
+// gives *NotFoundError, and a program the system does not start gives
+// *NotStartedError; the file of the output is left only once the program
+// starts, and is not made if ctx is done already.
 func Run(ctx context.Context, c Command) (code int, err error) {
 	program, err := lookPath(c.Dir, c.Args[0])
 	if err != nil {
@@ -69,6 +81,12 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 		// command ended before it is resumed fails to resume.
 		if ctx.Err() != nil {
 			return 0, ctx.Err()
+		}
+		var pe *os.PathError
+		if errors.As(err, &pe) {
+			out.Close()
+			os.Remove(c.Log)
+			return 0, &NotStartedError{Program: c.Args[0], Reason: pe.Err.Error()}
 		}
 		return 0, err
 	}
@@ -132,11 +150,14 @@ func lookPath(dir, program string) (string, error) {
 	}
 	if err != nil {
 		var ee *exec.Error
-		if errors.As(err, &ee) && (errors.Is(ee.Err, exec.ErrNotFound) ||
-			errors.Is(ee.Err, os.ErrNotExist) || errors.Is(ee.Err, os.ErrPermission)) {
+		switch {
+		case !errors.As(err, &ee):
+			return "", err
+		case errors.Is(ee.Err, exec.ErrNotFound) || errors.Is(ee.Err, os.ErrNotExist):
 			return "", &NotFoundError{Program: program}
 		}
-		return "", err
+		// The file is there, but it may not be run, for example.
+		return "", &NotStartedError{Program: program, Reason: ee.Err.Error()}
 	}
 	return path, nil
 }

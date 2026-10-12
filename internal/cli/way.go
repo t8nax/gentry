@@ -239,6 +239,7 @@ func wayFailure(cmd string, err error) failure {
 		failed     *task.ChecksFailedError
 		timeout    *task.ChecksTimeoutError
 		noProgram  *task.CheckProgramError
+		noStart    *task.CheckStartError
 	)
 	switch {
 	case errors.As(err, &finished):
@@ -359,6 +360,14 @@ func wayFailure(cmd string, err error) failure {
 			message: msg.Text(msg.ErrCheckNotFound, noProgram.Program),
 			more:    msg.Text(msg.CheckCommandLine, noProgram.Command) + "\n",
 			details: map[string]any{"node": noProgram.Node, "command": noProgram.Command, "program": noProgram.Program},
+		}
+	case errors.As(err, &noStart):
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeCheckProgramNotStarted,
+			message: msg.Text(msg.ErrCheckNotStarted, noStart.Program),
+			more:    msg.Text(msg.CheckCommandLine, noStart.Command) + "\n" + msg.Text(msg.CheckReasonLine, noStart.Reason) + "\n",
+			details: map[string]any{"node": noStart.Node, "command": noStart.Command, "program": noStart.Program, "reason": noStart.Reason},
 		}
 	case errors.As(err, &file) && file.Reason == task.FileTooLarge:
 		return fieldInvalid("file", file.Reason, msg.Text(msg.ErrArtifactFileTooLarge, file.Path), hintOf(msg.HintArtifactLink))

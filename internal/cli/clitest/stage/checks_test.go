@@ -130,3 +130,32 @@ func read(t *testing.T, path string) string {
 	}
 	return strings.ReplaceAll(string(b), "\r\n", "\n")
 }
+
+// TestStageCheckNotStarted checks the refusal of a program of checks that
+// is found, but is no program: the system does not start it.
+func TestStageCheckNotStarted(t *testing.T) {
+	_, fix := clitest.TaskShop(t)
+	clitest.WriteDraft(t, clitest.ShopPlaces(), map[string]string{
+		"stages/branch.yaml": "title: Ветка\nexit: создана ветка задачи\nexecutor: orchestrator\nchecks:\n  - ./bad.exe --all\n",
+	})
+	clitest.MustRun(t, "flow", "apply")
+	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	if err := os.WriteFile(filepath.Join(fix, "bad.exe"), []byte("not a program\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	clitest.MustRun(t, "step", "add", "Создать ветку")
+	clitest.MustRun(t, "step", "done", "1")
+	code, out, _ := clitest.Run("stage", "exit", "--kind", "result", "--text", "Готово", "--json")
+	clitest.Validate(t, "schemas/error.json", out)
+	var e contract.ErrorOutput
+	json.Unmarshal([]byte(out), &e)
+	reason, _ := e.Error.Details["reason"].(string)
+	if want := map[string]any{"node": "branch", "command": "./bad.exe --all", "program": "./bad.exe", "reason": reason}; code != contract.ExitError ||
+		e.Error.Code != contract.CodeCheckProgramNotStarted || reason == "" || !clitest.JSONEqual(e.Error.Details, want) {
+		t.Errorf("exit with a program not started: exit code %d: %s", code, out)
+	}
+	if logs := filepath.Join(os.Getenv(home.EnvVar), "state", "shop", "tasks", "SHOP-1", "checks", "branch-1-1.log"); clitest.FileExists(logs) {
+		t.Error("a program not started has a file of output")
+	}
+}

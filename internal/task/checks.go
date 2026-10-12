@@ -51,6 +51,17 @@ type CheckProgramError struct {
 
 func (e *CheckProgramError) Error() string { return e.Command + ": " + e.Program + " not found" }
 
+// CheckStartError means the program of a command of checks is found, but
+// the system did not start it.
+type CheckStartError struct {
+	Node    string
+	Program string
+	Command string
+	Reason  string // what the system says, as it says it
+}
+
+func (e *CheckStartError) Error() string { return e.Command + ": " + e.Program + ": " + e.Reason }
+
 // taskDir returns the directory of the files of task t in the data root:
 // state/<project>/tasks/<task> for the first attempt of the task,
 // …/<task>/attempts/<attempt> for a later one.
@@ -129,9 +140,12 @@ func runChecks(ctx context.Context, t state.Task, p state.Pass, st flow.Stage, p
 		}
 		code, err := checks.Run(run, checks.Command{Dir: t.Worktree, Args: args, Log: log, Progress: progress})
 		var nf *checks.NotFoundError
+		var ns *checks.NotStartedError
 		switch {
 		case errors.As(err, &nf):
 			return &CheckProgramError{Node: p.Node, Program: nf.Program, Command: command}
+		case errors.As(err, &ns):
+			return &CheckStartError{Node: p.Node, Program: ns.Program, Command: command, Reason: ns.Reason}
 		case ctx.Err() != nil:
 			return ctx.Err()
 		case errors.Is(err, context.DeadlineExceeded):

@@ -183,30 +183,39 @@ func TestRunTimeout(t *testing.T) {
 }
 
 // TestRunCancel checks that a command that goes on reports its progress, and
-// that it is ended when its context is cancelled: here at the third report.
+// that it is ended when its context is cancelled: here at the second report,
+// which is slow, so that the command ends while it is made. Run returns only
+// after the report: the answer of a call comes after its last report.
 func TestRunCancel(t *testing.T) {
 	defer func(d time.Duration) { ProgressEvery = d }(ProgressEvery)
 	ProgressEvery = 100 * time.Millisecond
 	var reports atomic.Int32
+	var returned, late atomic.Bool
 	c := command(t, "sleep", "10")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c.Progress = func() {
-		if reports.Add(1) == 3 {
+		if reports.Add(1) == 2 {
 			cancel()
+			time.Sleep(500 * time.Millisecond)
+		}
+		if returned.Load() {
+			late.Store(true)
 		}
 	}
 	start := time.Now()
-	if _, err := Run(ctx, c); !errors.Is(err, context.Canceled) {
+	_, err := Run(ctx, c)
+	returned.Store(true)
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Run: %v", err)
 	}
 	if d := time.Since(start); d > 5*time.Second {
 		t.Errorf("Run returned after %v", d)
 	}
 	n := reports.Load()
-	time.Sleep(300 * time.Millisecond)
-	if reports.Load() != n {
-		t.Error("progress is reported after the command ended")
+	time.Sleep(time.Second)
+	if late.Load() || reports.Load() != n {
+		t.Error("progress is reported after Run returned")
 	}
 }
 

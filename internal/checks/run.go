@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -68,10 +69,15 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 		}
 		return 0, err
 	}
+	// The progress is reported only while Run runs: the answer of the call
+	// that reports it must come after the last report.
 	done := make(chan struct{})
+	var reports sync.WaitGroup
 	if c.Progress != nil {
 		c.Progress()
+		reports.Add(1)
 		go func() {
+			defer reports.Done()
 			t := time.NewTicker(ProgressEvery)
 			defer t.Stop()
 			for {
@@ -86,6 +92,7 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 	}
 	err = cmd.Wait()
 	close(done)
+	reports.Wait()
 	tree.kill()
 	if ctx.Err() != nil {
 		return 0, ctx.Err()

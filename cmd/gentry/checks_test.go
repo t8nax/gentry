@@ -26,8 +26,8 @@ const (
 // checkHelper does what mode names and returns the exit code:
 //   - span: writes "start" to the file of spansEnv, sleeps 2 seconds and
 //     writes "end";
-//   - tree: starts a child that writes the file of markerEnv after 3
-//     seconds, then sleeps 10 seconds;
+//   - tree: writes "start" to the file of spansEnv, starts a child that
+//     writes the file of markerEnv after 3 seconds, then sleeps 10 seconds;
 //   - marker: sleeps 3 seconds and writes the file of markerEnv.
 func checkHelper(mode string) int {
 	switch mode {
@@ -37,6 +37,7 @@ func checkHelper(mode string) int {
 		appendLine(os.Getenv(spansEnv), "end")
 		return 0
 	case "tree":
+		appendLine(os.Getenv(spansEnv), "start")
 		child := exec.Command(os.Args[0])
 		child.Env = append(os.Environ(), helperEnv+"=marker")
 		if err := child.Start(); err != nil {
@@ -222,5 +223,32 @@ func TestStageSkipDuringChecks(t *testing.T) {
 	}
 	if got := pathNodes(t, bin, shop); got != "branch:skip plan:" {
 		t.Errorf("path: %s", got)
+	}
+}
+
+// TestTaskCancelDuringChecks checks that the cancel of a task ends its
+// command of checks that runs, with the process it started, which leaves no
+// marker, and that the exit is refused as the task is cancelled.
+func TestTaskCancelDuringChecks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("concurrent processes are skipped in short mode")
+	}
+	bin := buildGentry(t)
+	shop, files := checksShop(t, bin, "tree")
+	s := startServer(t, bin, shop)
+	id := s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
+	waitFile(t, filepath.Join(files, "spans"))
+	start := time.Now()
+	gentry(t, bin, shop, "task", "cancel", "--reason", "Отмена")
+	text, failed, _ := s.answer(t, id)
+	if first, _, _ := strings.Cut(text, "\n"); !failed || first != msg.Text(msg.TaskCancelled, "SHOP-1") {
+		t.Errorf("the exit: failed %v:\n%s", failed, text)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("the exit was answered %v after the cancel", d)
+	}
+	time.Sleep(4 * time.Second)
+	if _, err := os.Stat(filepath.Join(files, "marker")); err == nil {
+		t.Error("the child of the command was not ended")
 	}
 }

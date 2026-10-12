@@ -275,6 +275,67 @@ func TestRunCancel(t *testing.T) {
 	}
 }
 
+// TestEnd checks that End ends a command that runs with a mark, with the
+// process it started, which leaves no marker, and does nothing when no
+// command runs with the mark.
+func TestEnd(t *testing.T) {
+	mark := filepath.Join(t.TempDir(), ".running")
+	if err := End(mark); err != nil {
+		t.Errorf("End with no command: %v", err)
+	}
+	c := command(t, "tree", "")
+	marker := filepath.Join(c.Dir, "marker")
+	c.Args[2], c.Mark = marker, mark
+	started := make(chan struct{}, 1)
+	c.Progress = func() {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+	}
+	ended := make(chan error, 1)
+	go func() {
+		<-started
+		ended <- End(mark)
+	}()
+	start := time.Now()
+	code, err := Run(context.Background(), c)
+	if err != nil || code == 0 {
+		t.Errorf("Run: code %d, %v", code, err)
+	}
+	if err := <-ended; err != nil {
+		t.Errorf("End: %v", err)
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("Run returned after %v", d)
+	}
+	time.Sleep(2 * time.Second)
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the child of the command was not ended: %v", err)
+	}
+	if err := End(mark); err != nil {
+		t.Errorf("End after the command: %v", err)
+	}
+}
+
+// TestRunNotReady checks that a command that Ready does not allow is ended
+// at once, before the process it would start, and Run returns the error of
+// Ready.
+func TestRunNotReady(t *testing.T) {
+	c := command(t, "tree", "")
+	marker := filepath.Join(c.Dir, "marker")
+	c.Args[2], c.Mark = marker, filepath.Join(t.TempDir(), ".running")
+	stop := errors.New("the task is cancelled")
+	c.Ready = func() error { return stop }
+	if _, err := Run(context.Background(), c); !errors.Is(err, stop) {
+		t.Errorf("Run: %v", err)
+	}
+	time.Sleep(2 * time.Second)
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the command ran: %v", err)
+	}
+}
+
 // TestRunDone checks that a command whose context is done before it starts
 // does not run and leaves no file of output.
 func TestRunDone(t *testing.T) {

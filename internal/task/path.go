@@ -120,7 +120,8 @@ var errPassChanged = errors.New("the current pass of the task changed")
 // the current one; otherwise another command closed it, and the closing
 // starts anew with the pass that is current now, as an exit right after that
 // command would. When ctx is done, the command that runs is ended and the
-// stage is not closed.
+// stage is not closed. When the task is cancelled, EndTask ends the command,
+// and the exit is refused as the task is ended.
 func CloseStage(ctx context.Context, st *state.Store, req Close) (Closed, error) {
 	var checked int64 // the pass the commands of checks ran for
 	var lock *filelock.Lock
@@ -159,7 +160,15 @@ func CloseStage(ctx context.Context, st *state.Store, req Close) (Closed, error)
 			}
 			continue
 		case errors.Is(err, errChecksNeeded):
-			if err := runChecks(ctx, need.task, need.pass, need.stage, req.Progress); err != nil {
+			ready := func() error { return taskActive(st, need.task.ID) }
+			if err := runChecks(ctx, need.task, need.pass, need.stage, req.Progress, ready); err != nil {
+				// A command ended by the cancel of the task fails: the
+				// refusal is that of the task.
+				if ctx.Err() == nil {
+					if err := taskActive(st, need.task.ID); err != nil {
+						return Closed{}, err
+					}
+				}
 				return Closed{}, err
 			}
 			checked = need.pass.ID

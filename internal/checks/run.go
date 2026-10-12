@@ -37,6 +37,14 @@ type Command struct {
 	// Progress, if set, is called when the command starts and then every
 	// ProgressEvery while it runs.
 	Progress func()
+	// Mark, if set, names the command while it runs, so that End ends it
+	// from another process: on Windows its job object is named after the
+	// path Mark, elsewhere the file Mark holds its process group.
+	Mark string
+	// Ready, if set, is asked once the command can be ended by End: if it
+	// returns an error, the command is ended at once, and Run returns the
+	// error. On Windows the command has not run yet then.
+	Ready func() error
 }
 
 // ProgressEvery is how often Run reports that a command goes on; tests set
@@ -73,7 +81,7 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 	cmd.Args[0] = c.Args[0]
 	cmd.Dir = c.Dir
 	cmd.Stdout, cmd.Stderr = out, out
-	tree := newTree(cmd)
+	tree := newTree(cmd, c.Mark, c.Ready)
 	defer tree.close()
 	cmd.Cancel = tree.kill
 	if err := tree.start(); err != nil {

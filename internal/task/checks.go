@@ -89,19 +89,31 @@ func CheckLogPath(t state.Task, node string, round, n int) (string, error) {
 	return filepath.Join(dir, "checks", fmt.Sprintf("%s-%d-%d.log", node, round, n)), nil
 }
 
-// checksLock is the name of the file of the lock of the commands of checks of
-// a task, in the directory of their files of output.
-const checksLock = ".lock"
+// The files of the commands of checks of a task, in the directory of their
+// files of output: the lock, held by the process that runs them, and the
+// mark of the command that runs (checks.Command.Mark).
+const (
+	checksLock = ".lock"
+	checksMark = ".running"
+)
+
+// checksFile returns the file name of the commands of checks of task t.
+func checksFile(t state.Task, name string) (string, error) {
+	dir, err := taskDir(t)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "checks", name), nil
+}
 
 // lockChecks takes the lock of the commands of checks of task t: one process
 // runs them at a time. While another holds it, lockChecks waits until ctx is
 // done and reports the progress, as the commands of the other do.
 func lockChecks(ctx context.Context, t state.Task, progress func()) (*filelock.Lock, error) {
-	dir, err := taskDir(t)
+	path, err := checksFile(t, checksLock)
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(dir, "checks", checksLock)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
@@ -109,6 +121,38 @@ func lockChecks(ctx context.Context, t state.Task, progress func()) (*filelock.L
 		defer checks.Report(progress)()
 	}
 	return filelock.AcquireContext(ctx, path)
+}
+
+// endChecks ends the command of checks of task t that runs now, if any, with
+// the processes it started; the exit that runs it then refuses, as the task
+// is ended. A command runs only while another process holds the lock of the
+// checks of the task: a mark without the lock is left by a process that
+// ended, and its process group may be another's by now. The task is ended
+// either way, so an error here is not reported.
+func endChecks(t state.Task) {
+	lock, err := checksFile(t, checksLock)
+	if err != nil {
+		return
+	}
+	if held, err := filelock.Held(lock); err != nil || !held {
+		return
+	}
+	if mark, err := checksFile(t, checksMark); err == nil {
+		checks.End(mark)
+	}
+}
+
+// taskActive returns the error of the task of row id if it is closed or
+// cancelled.
+func taskActive(st *state.Store, id int64) error {
+	t, ok, err := st.Task(id)
+	if err != nil {
+		return err
+	}
+	if ok && t.IsEnded() {
+		return &EndedError{Task: t.Key(), State: t.State}
+	}
+	return nil
 }
 
 // CheckLogs returns the files of the output of the commands of checks run
@@ -133,8 +177,10 @@ func CheckLogs(t state.Task, p state.Pass) []string {
 // reports the progress while they run. The files of the output of the last
 // attempt go first, so that the files of the pass are those of this one; a
 // call cancelled already leaves them. The first command that fails or is
-// ended stops the others.
-func runChecks(ctx context.Context, t state.Task, p state.Pass, st flow.Stage, progress func()) error {
+// ended stops the others. Each command runs with the mark of the checks of
+// the task, so that the cancel of the task ends it, and only if ready allows
+// it once it can be ended so: the task may be cancelled before.
+func runChecks(ctx context.Context, t state.Task, p state.Pass, st flow.Stage, progress func(), ready func() error) error {
 	limit, ok := checks.ParseTimeout(st.CheckTimeout())
 	if !ok {
 		return fmt.Errorf("stage %s: the time of checks %q", st.ID, st.CheckTimeout())
@@ -146,6 +192,10 @@ func runChecks(ctx context.Context, t state.Task, p state.Pass, st flow.Stage, p
 		if err := os.Remove(path); err != nil {
 			return err
 		}
+	}
+	mark, err := checksFile(t, checksMark)
+	if err != nil {
+		return err
 	}
 	run, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
@@ -161,7 +211,7 @@ func runChecks(ctx context.Context, t state.Task, p state.Pass, st flow.Stage, p
 		if err != nil {
 			return err
 		}
-		code, err := checks.Run(run, checks.Command{Dir: t.Worktree, Args: args, Log: log, Progress: progress})
+		code, err := checks.Run(run, checks.Command{Dir: t.Worktree, Args: args, Log: log, Progress: progress, Mark: mark, Ready: ready})
 		var nf *checks.NotFoundError
 		var ns *checks.NotStartedError
 		switch {

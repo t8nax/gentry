@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/t8nax/gentry/internal/checks"
+	"github.com/t8nax/gentry/internal/filelock"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/state"
@@ -86,6 +87,28 @@ func CheckLogPath(t state.Task, node string, round, n int) (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "checks", fmt.Sprintf("%s-%d-%d.log", node, round, n)), nil
+}
+
+// checksLock is the name of the file of the lock of the commands of checks of
+// a task, in the directory of their files of output.
+const checksLock = ".lock"
+
+// lockChecks takes the lock of the commands of checks of task t: one process
+// runs them at a time. While another holds it, lockChecks waits until ctx is
+// done and reports the progress, as the commands of the other do.
+func lockChecks(ctx context.Context, t state.Task, progress func()) (*filelock.Lock, error) {
+	dir, err := taskDir(t)
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, "checks", checksLock)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	if progress != nil {
+		defer checks.Report(progress)()
+	}
+	return filelock.AcquireContext(ctx, path)
 }
 
 // CheckLogs returns the files of the output of the commands of checks run

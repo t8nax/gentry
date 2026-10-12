@@ -92,28 +92,13 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 	}
 	// The progress is reported only while Run runs: the answer of the call
 	// that reports it must come after the last report.
-	done := make(chan struct{})
-	var reports sync.WaitGroup
+	stop := func() {}
 	if c.Progress != nil {
 		c.Progress()
-		reports.Add(1)
-		go func() {
-			defer reports.Done()
-			t := time.NewTicker(ProgressEvery)
-			defer t.Stop()
-			for {
-				select {
-				case <-done:
-					return
-				case <-t.C:
-					c.Progress()
-				}
-			}
-		}()
+		stop = Report(c.Progress)
 	}
 	err = cmd.Wait()
-	close(done)
-	reports.Wait()
+	stop()
 	tree.kill()
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
@@ -126,6 +111,31 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 		return 0, err
 	}
 	return 0, nil
+}
+
+// Report calls progress every ProgressEvery until stop is called; stop
+// returns once the last call has returned, so that no call comes after it.
+func Report(progress func()) (stop func()) {
+	done := make(chan struct{})
+	var calls sync.WaitGroup
+	calls.Add(1)
+	go func() {
+		defer calls.Done()
+		t := time.NewTicker(ProgressEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				progress()
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		calls.Wait()
+	}
 }
 
 // lookPath finds the program of a command: a name without a path on PATH,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/filelock"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/state"
 )
@@ -113,12 +114,21 @@ var errPassChanged = errors.New("the current pass of the task changed")
 // An exit of a stage with commands of checks runs them first, outside the
 // transaction, in the worktree of the task: the transaction would hold the
 // store for their whole time. The refusals that need no command come before
-// them. The stage is then closed if its pass is still the current one;
-// otherwise another command closed it, and the closing starts anew with the
-// pass that is current now, as an exit right after that command would. When
-// ctx is done, the command that runs is ended and the stage is not closed.
+// them. One process at a time runs the commands of a task, under the lock of
+// its checks; another waits for it and then checks the stage anew, held
+// until the stage is closed. The stage is then closed if its pass is still
+// the current one; otherwise another command closed it, and the closing
+// starts anew with the pass that is current now, as an exit right after that
+// command would. When ctx is done, the command that runs is ended and the
+// stage is not closed.
 func CloseStage(ctx context.Context, st *state.Store, req Close) (Closed, error) {
 	var checked int64 // the pass the commands of checks ran for
+	var lock *filelock.Lock
+	defer func() {
+		if lock != nil {
+			lock.Release()
+		}
+	}()
 	for range closeAttempts {
 		var res Closed
 		var need closing
@@ -140,6 +150,13 @@ func CloseStage(ctx context.Context, st *state.Store, req Close) (Closed, error)
 		switch {
 		case errors.Is(err, errPassChanged):
 			checked = 0
+			continue
+		case errors.Is(err, errChecksNeeded) && lock == nil:
+			// While this one waited, another process may have closed the
+			// stage or ended the task: the stage is checked anew.
+			if lock, err = lockChecks(ctx, need.task, req.Progress); err != nil {
+				return Closed{}, err
+			}
 			continue
 		case errors.Is(err, errChecksNeeded):
 			if err := runChecks(ctx, need.task, need.pass, need.stage, req.Progress); err != nil {

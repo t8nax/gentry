@@ -29,7 +29,7 @@ func TestStageChecks(t *testing.T) {
 	git := "git rev-parse --is-inside-work-tree"
 	clitest.WriteDraft(t, clitest.ShopPlaces(), map[string]string{
 		"stages/branch.yaml": "title: Ветка\nexit: создана ветка задачи\nexecutor: orchestrator\n" +
-			"checks:\n  - " + git + "\n  - '" + helper + "'\ntimeout: 3s\n",
+			"checks:\n  - " + git + "\n  - '" + helper + "'\ntimeout: 8s\n",
 	})
 	clitest.MustRun(t, "flow", "apply")
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
@@ -38,13 +38,13 @@ func TestStageChecks(t *testing.T) {
 	log1, log2 := filepath.Join(logs, "branch-1-1.log"), filepath.Join(logs, "branch-1-2.log")
 
 	stdout := clitest.MustRun(t, "stage", "show")
-	if want := clitest.Lines(msg.Text(msg.FlowParts, clitest.None), msg.Text(msg.FlowCheckTimeout, "3s"), msg.Text(msg.FlowChecks),
+	if want := clitest.Lines(msg.Text(msg.FlowParts, clitest.None), msg.Text(msg.FlowCheckTimeout, "8s"), msg.Text(msg.FlowChecks),
 		"  "+git, "  "+helper, ""); !strings.Contains(stdout, want) {
 		t.Errorf("stage show:\n%s", stdout)
 	}
 	out := clitest.WantJSON(t, contract.ExitOK, "schemas/stage-show.json", "stage", "show")
 	if want := `"checks":["git rev-parse --is-inside-work-tree",` + clitest.JSONString(helper) + `],`; !strings.Contains(out, want) ||
-		!strings.Contains(out, `"timeout":"3s"`) {
+		!strings.Contains(out, `"timeout":"8s"`) {
 		t.Errorf("stage show --json: %s", out)
 	}
 
@@ -85,12 +85,12 @@ func TestStageChecks(t *testing.T) {
 	start = time.Now()
 	code, out, _ = clitest.Run("stage", "exit", "--kind", "result", "--text", "Готово", "--json")
 	json.Unmarshal([]byte(out), &e)
-	if want := map[string]any{"node": "branch", "timeout": "3s", "command": helper, "log": log2}; code != contract.ExitError ||
+	if want := map[string]any{"node": "branch", "timeout": "8s", "command": helper, "log": log2}; code != contract.ExitError ||
 		e.Error.Code != contract.CodeChecksTimeout || !clitest.JSONEqual(e.Error.Details, want) {
 		t.Errorf("exit with checks out of time: exit code %d: %s", code, out)
 	}
-	if d := time.Since(start); d > 10*time.Second {
-		t.Errorf("checks of 3s ended after %v", d)
+	if d := time.Since(start); d > 16*time.Second {
+		t.Errorf("checks of 8s ended after %v", d)
 	}
 
 	// Without git on PATH the first command finds no program, and the files

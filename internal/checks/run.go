@@ -111,9 +111,8 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 }
 
 // lookPath finds the program of a command: a name without a path on PATH,
-// as the command line does, and a path relative to the worktree dir. A
-// program found in the current directory of Gentry only is not found: that
-// directory is not the worktree.
+// as the command line does, and a path relative to the worktree dir. The
+// current directory of Gentry is not looked in: it is not the worktree.
 func lookPath(dir, program string) (string, error) {
 	seps := "/"
 	if runtime.GOOS == "windows" {
@@ -124,15 +123,36 @@ func lookPath(dir, program string) (string, error) {
 		name = filepath.Join(dir, program)
 	}
 	path, err := exec.LookPath(name)
+	if errors.Is(err, exec.ErrDot) {
+		// exec.LookPath looks in the current directory first on Windows
+		// and in the relative directories of PATH, and gives ErrDot for a
+		// program found there even if a directory of PATH after them has
+		// it.
+		path, err = lookAbsPath(program)
+	}
 	if err != nil {
 		var ee *exec.Error
-		if errors.As(err, &ee) && (errors.Is(ee.Err, exec.ErrNotFound) || errors.Is(ee.Err, exec.ErrDot) ||
+		if errors.As(err, &ee) && (errors.Is(ee.Err, exec.ErrNotFound) ||
 			errors.Is(ee.Err, os.ErrNotExist) || errors.Is(ee.Err, os.ErrPermission)) {
 			return "", &NotFoundError{Program: program}
 		}
 		return "", err
 	}
 	return path, nil
+}
+
+// lookAbsPath looks for a program without a path in the absolute
+// directories of PATH, in their order.
+func lookAbsPath(program string) (string, error) {
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		if path, err := exec.LookPath(filepath.Join(dir, program)); err == nil {
+			return path, nil
+		}
+	}
+	return "", &exec.Error{Name: program, Err: exec.ErrNotFound}
 }
 
 // TailLines is how many last lines of the output Tail gives.

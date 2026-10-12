@@ -159,6 +159,36 @@ func TestRunNotFound(t *testing.T) {
 	}
 }
 
+// TestRunDotOnPath checks that a program found in the current directory,
+// which is not the worktree, or in a relative directory of PATH is looked
+// for in the absolute directories of PATH after them.
+func TestRunDotOnPath(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	name := "gentry-checks-dot"
+	exe := name
+	if runtime.GOOS == "windows" {
+		exe += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(cwd, exe), []byte("not a program"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	b, err := os.ReadFile(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, exe), b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", "."+string(os.PathListSeparator)+bin)
+	c := command(t, "output", "0")
+	c.Args[0] = name
+	if code, err := Run(context.Background(), c); err != nil || code != 0 {
+		t.Errorf("code %d, %v", code, err)
+	}
+}
+
 // TestRunTimeout checks that a command that does not end in time is ended
 // with the process it started, which leaves no marker, and that Run returns
 // at once with the error of the context.

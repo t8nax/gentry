@@ -97,12 +97,16 @@ func CheckLogs(t state.Task, p state.Pass) []string {
 // runChecks runs the commands of checks of stage st for pass p of task t in
 // order in the worktree of the task, within the time of the stage, and
 // reports the progress while they run. The files of the output of the last
-// attempt go first, so that the files of the pass are those of this one. The
-// first command that fails or is ended stops the others.
+// attempt go first, so that the files of the pass are those of this one; a
+// call cancelled already leaves them. The first command that fails or is
+// ended stops the others.
 func runChecks(ctx context.Context, t state.Task, p state.Pass, st flow.Stage, progress func()) error {
 	limit, ok := checks.ParseTimeout(st.CheckTimeout())
 	if !ok {
 		return fmt.Errorf("stage %s: the time of checks %q", st.ID, st.CheckTimeout())
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	for _, path := range CheckLogs(t, p) {
 		if err := os.Remove(path); err != nil {

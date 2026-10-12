@@ -39,10 +39,13 @@ var ProgressEvery = 5 * time.Second
 // is that of Gentry. When ctx is done, the command is ended with every
 // process it started, and Run returns the error of ctx; the processes the
 // command leaves behind when it ends are ended too. The file of the output
-// is made only once the program is found.
+// is made only once the program is found, and not if ctx is done already.
 func Run(ctx context.Context, c Command) (code int, err error) {
 	program, err := lookPath(c.Dir, c.Args[0])
 	if err != nil {
+		return 0, err
+	}
+	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
 	if err := os.MkdirAll(filepath.Dir(c.Log), 0o755); err != nil {

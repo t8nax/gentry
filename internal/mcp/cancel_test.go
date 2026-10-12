@@ -4,20 +4,24 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 // session runs a server whose tool cart_wait reports its progress every 10
 // ms until its call is cancelled or a second passes, and returns the input
-// of the server and its messages as they come.
-func session(t *testing.T) (io.WriteCloser, <-chan map[string]any) {
+// of the server, its messages as they come and the number of calls run.
+func session(t *testing.T) (io.WriteCloser, <-chan map[string]any, *atomic.Int32) {
 	t.Helper()
+	calls := new(atomic.Int32)
 	s := Server{Name: "shop", Version: "1.0", Tools: []Tool{{
 		Name:        "cart_wait",
 		InputSchema: json.RawMessage(`{"type":"object"}`),
 		Call: func(ctx context.Context, args json.RawMessage, progress func()) (string, bool) {
+			calls.Add(1)
 			tick := time.NewTicker(10 * time.Millisecond)
 			defer tick.Stop()
 			deadline := time.After(time.Second)
@@ -59,7 +63,7 @@ func session(t *testing.T) (io.WriteCloser, <-chan map[string]any) {
 			t.Error(err)
 		}
 	})
-	return inW, msgs
+	return inW, msgs, calls
 }
 
 func send(t *testing.T, w io.Writer, line string) {
@@ -92,10 +96,10 @@ func next(t *testing.T, msgs <-chan map[string]any) (map[string]any, []map[strin
 }
 
 // TestCancel checks that a call that runs ends when the client cancels it,
-// without an answer, and so does a call that waits for its turn; the calls
-// after them are served.
+// without an answer, and that a call cancelled while it waits for its turn
+// does not run; the calls after them are served.
 func TestCancel(t *testing.T) {
-	in, msgs := session(t)
+	in, msgs, calls := session(t)
 	start := time.Now()
 	send(t, in, `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"cart_wait"}}`)
 	send(t, in, `{"jsonrpc":"2.0","id":"8","method":"tools/call","params":{"name":"cart_wait"}}`)
@@ -110,13 +114,35 @@ func TestCancel(t *testing.T) {
 	if d := time.Since(start); d > 900*time.Millisecond {
 		t.Errorf("the cancelled calls ended after %v", d)
 	}
+	// The call 7 may be cancelled before its turn too.
+	if n := calls.Load(); n > 1 {
+		t.Errorf("%d calls ran: the call cancelled while it waited ran", n)
+	}
+}
+
+// TestCancelBehindQueue checks that the client cancels a call however many
+// requests wait behind it: the input is read on.
+func TestCancelBehindQueue(t *testing.T) {
+	in, msgs, _ := session(t)
+	start := time.Now()
+	send(t, in, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cart_wait"}}`)
+	for i := range 100 {
+		send(t, in, fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"ping"}`, 100+i))
+	}
+	send(t, in, `{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}`)
+	if m, _ := next(t, msgs); m["id"] != 100.0 {
+		t.Errorf("the message after the cancelled call: %v", m)
+	}
+	if d := time.Since(start); d > 900*time.Millisecond {
+		t.Errorf("the cancelled call ended after %v", d)
+	}
 }
 
 // TestProgress checks that a call with a progress token tells the client
 // that it goes on, with a progress that grows, before its answer, and that a
 // call without one does not.
 func TestProgress(t *testing.T) {
-	in, msgs := session(t)
+	in, msgs, _ := session(t)
 	send(t, in, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cart_wait","arguments":{"a":1},"_meta":{"progressToken":"p1"}}}`)
 	m, progress := next(t, msgs)
 	if m["id"] != 1.0 || len(progress) < 2 {

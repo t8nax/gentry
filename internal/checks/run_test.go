@@ -219,6 +219,20 @@ func TestRunCancel(t *testing.T) {
 	}
 }
 
+// TestRunDone checks that a command whose context is done before it starts
+// does not run and leaves no file of output.
+func TestRunDone(t *testing.T) {
+	c := command(t, "output", "0")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := Run(ctx, c); !errors.Is(err, context.Canceled) {
+		t.Errorf("Run: %v", err)
+	}
+	if _, err := os.Stat(c.Log); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a file of output: %v", err)
+	}
+}
+
 func TestTail(t *testing.T) {
 	dir := t.TempDir()
 	var long strings.Builder

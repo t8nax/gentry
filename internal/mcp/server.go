@@ -105,61 +105,24 @@ func (o *output) write(v any) error {
 // Serve reads messages from in and answers the requests on out until in
 // ends. Calls run one at a time, in the order they come. The input is read
 // while a call runs, so that the client can cancel a call that runs or waits
-// by notifications/cancelled: its context is done, and it gets no answer.
+// by notifications/cancelled: its context is done, and it gets no answer; a
+// call cancelled while it waits does not run.
 func (s *Server) Serve(in io.Reader, out io.Writer) error {
 	o := &output{enc: json.NewEncoder(out)}
 	o.enc.SetEscapeHTML(false)
-	var mu sync.Mutex
-	pending := map[string]*request{} // by id
-	queue := make(chan *request, 64)
-	stop := make(chan struct{})
-	defer close(stop)
-	var readErr error
-	go func() {
-		defer close(queue)
-		sc := bufio.NewScanner(in)
-		sc.Buffer(make([]byte, 64*1024), maxMessage)
-		for sc.Scan() {
-			line := sc.Bytes()
-			if len(line) == 0 {
-				continue
-			}
-			r := &request{}
-			switch err := json.Unmarshal(line, &r.m); {
-			case err != nil:
-				r.m, r.err = message{ID: json.RawMessage("null")}, &rpcError{codeParse, err.Error()}
-			case r.m.Method == "notifications/cancelled":
-				cancelRequest(&mu, pending, r.m.Params)
-				continue
-			case len(r.m.ID) == 0 || r.m.Method == "":
-				// A notification has no id, and a response of the client
-				// has no method: neither gets an answer.
-				continue
-			}
-			r.ctx, r.cancel = context.WithCancel(context.Background())
-			if r.err == nil {
-				mu.Lock()
-				pending[idKey(r.m.ID)] = r
-				mu.Unlock()
-			}
-			select {
-			case queue <- r:
-			case <-stop:
-				return
-			}
+	q := &requests{pending: map[string]*request{}, wake: make(chan struct{}, 1)}
+	go q.read(in)
+	for {
+		r, ok := q.next()
+		if !ok {
+			return q.err
 		}
-		readErr = sc.Err()
-	}()
-	for r := range queue {
 		var res any
 		rerr := r.err
-		if rerr == nil {
+		if rerr == nil && !r.cancelled.Load() {
 			res, rerr = s.handle(r.ctx, r.m, o)
-			mu.Lock()
-			delete(pending, idKey(r.m.ID))
-			mu.Unlock()
 		}
-		r.cancel()
+		q.done(r)
 		if r.cancelled.Load() {
 			continue
 		}
@@ -167,24 +130,109 @@ func (s *Server) Serve(in io.Reader, out io.Writer) error {
 			return err
 		}
 	}
-	return readErr
+}
+
+// requests are the requests of the client that wait for their turn, in the
+// order they came. The queue has no limit, so that the input is read, and a
+// call cancelled, however many requests wait.
+type requests struct {
+	mu      sync.Mutex
+	queue   []*request
+	pending map[string]*request // the requests that wait or run, by id
+	ended   bool                // the input ended
+	err     error               // why it ended, if not at its end
+	wake    chan struct{}       // tells next that the queue changed
+}
+
+// read reads the messages of in into the queue until in ends.
+func (q *requests) read(in io.Reader) {
+	sc := bufio.NewScanner(in)
+	sc.Buffer(make([]byte, 64*1024), maxMessage)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		r := &request{}
+		switch err := json.Unmarshal(line, &r.m); {
+		case err != nil:
+			r.m, r.err = message{ID: json.RawMessage("null")}, &rpcError{codeParse, err.Error()}
+		case r.m.Method == "notifications/cancelled":
+			q.cancel(r.m.Params)
+			continue
+		case len(r.m.ID) == 0 || r.m.Method == "":
+			// A notification has no id, and a response of the client has
+			// no method: neither gets an answer.
+			continue
+		}
+		r.ctx, r.cancel = context.WithCancel(context.Background())
+		q.mu.Lock()
+		q.queue = append(q.queue, r)
+		if r.err == nil {
+			q.pending[idKey(r.m.ID)] = r
+		}
+		q.mu.Unlock()
+		q.signal()
+	}
+	q.mu.Lock()
+	q.ended, q.err = true, sc.Err()
+	q.mu.Unlock()
+	q.signal()
+}
+
+// signal tells next that the queue changed, if it does not know yet.
+func (q *requests) signal() {
+	select {
+	case q.wake <- struct{}{}:
+	default:
+	}
+}
+
+// next returns the first request of the queue, waiting for one; ok is false
+// once the input ended and no request waits.
+func (q *requests) next() (r *request, ok bool) {
+	for {
+		q.mu.Lock()
+		if len(q.queue) > 0 {
+			r = q.queue[0]
+			q.queue = q.queue[1:]
+			q.mu.Unlock()
+			return r, true
+		}
+		ended := q.ended
+		q.mu.Unlock()
+		if ended {
+			return nil, false
+		}
+		<-q.wake
+	}
+}
+
+// done forgets the request r once it is served.
+func (q *requests) done(r *request) {
+	r.cancel()
+	q.mu.Lock()
+	if key := idKey(r.m.ID); q.pending[key] == r {
+		delete(q.pending, key)
+	}
+	q.mu.Unlock()
 }
 
 // idKey is the id of a request as a key: the JSON of a number or a string.
 func idKey(id json.RawMessage) string { return string(bytes.TrimSpace(id)) }
 
-// cancelRequest cancels the request that params of notifications/cancelled
-// name, if it waits or runs.
-func cancelRequest(mu *sync.Mutex, pending map[string]*request, params json.RawMessage) {
+// cancel cancels the request that params of notifications/cancelled name,
+// if it waits or runs.
+func (q *requests) cancel(params json.RawMessage) {
 	var p struct {
 		RequestID json.RawMessage `json:"requestId"`
 	}
 	if json.Unmarshal(params, &p) != nil || len(p.RequestID) == 0 {
 		return
 	}
-	mu.Lock()
-	r, ok := pending[idKey(p.RequestID)]
-	mu.Unlock()
+	q.mu.Lock()
+	r, ok := q.pending[idKey(p.RequestID)]
+	q.mu.Unlock()
 	if ok {
 		r.cancelled.Store(true)
 		r.cancel()

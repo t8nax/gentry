@@ -3,6 +3,8 @@
 package checks
 
 import (
+	"errors"
+	"os"
 	"os/exec"
 	"syscall"
 	"unsafe"
@@ -41,6 +43,9 @@ func (t *tree) start() error {
 	if err := t.cmd.Start(); err != nil {
 		return err
 	}
+	if startedHook != nil {
+		startedHook()
+	}
 	p, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE|windows.PROCESS_SUSPEND_RESUME,
 		false, uint32(t.cmd.Process.Pid))
 	if err == nil {
@@ -58,12 +63,27 @@ func (t *tree) start() error {
 	return nil
 }
 
-// kill ends the processes of the job.
+// startedHook, if set, is called after the command starts and before it is
+// put in its job; tests set it.
+var startedHook func()
+
+// kill ends the command and the processes of the job. The command is ended
+// by itself too: until it is in the job, the job does not end it, and the
+// command would run once it is put there and resumed. It starts no process
+// of its own before then, as it is suspended.
 func (t *tree) kill() error {
-	if t.job == 0 {
-		return nil
+	var err error
+	if t.cmd.Process != nil {
+		if e := t.cmd.Process.Kill(); e != nil && !errors.Is(e, os.ErrProcessDone) {
+			err = e
+		}
 	}
-	return windows.TerminateJobObject(t.job, 1)
+	if t.job != 0 {
+		if e := windows.TerminateJobObject(t.job, 1); e != nil {
+			err = e
+		}
+	}
+	return err
 }
 
 // close closes the job, which ends the processes left in it.

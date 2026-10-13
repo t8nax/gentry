@@ -6,9 +6,9 @@
   "type": "object",
   "properties": {
     "kind": {
-      "description": "flow for the flow of a project, shared for the shared subagents.",
+      "description": "flow for the flow of a project, shared for the shared subagents. library is the shared subagents in the process.synced events of earlier versions of Gentry, which called them the library of subagents; Gentry no longer writes it.",
       "type": "string",
-      "enum": ["flow", "shared"]
+      "enum": ["flow", "shared", "library"]
     },
     "project": {
       "description": "Identifier of the project; only for a flow.",

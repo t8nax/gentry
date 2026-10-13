@@ -11,10 +11,11 @@
       "minLength": 1
     },
     "projects": {
-      "description": "The other projects whose active flows name the shared subagents the commit changed, sorted; empty if none.",
+      "description": "The other projects whose active flows name the shared subagents the commit changed, sorted; empty if none. Gentry writes it in every event; flow.applied events of earlier versions, which applied the shared subagents apart, have none, and a reader takes it as empty.",
       "type": "array",
+      "default": [],
       "items": { "type": "string", "minLength": 1 }
     }
   },
-  "required": ["commit", "projects"]
+  "required": ["commit"]
 }

@@ -15,8 +15,10 @@ type FlowAppliedData struct {
 	Commit string `json:"commit"`
 
 	// The other projects whose active flows name the shared subagents the commit
-	// changed, sorted; empty if none.
-	Projects []string `json:"projects"`
+	// changed, sorted; empty if none. Gentry writes it in every event; flow.applied
+	// events of earlier versions, which applied the shared subagents apart, have
+	// none, and a reader takes it as empty.
+	Projects []string `json:"projects,omitempty,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -28,9 +30,6 @@ func (j *FlowAppliedData) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["commit"]; raw != nil && !ok {
 		return fmt.Errorf("field commit in FlowAppliedData: required")
 	}
-	if _, ok := raw["projects"]; raw != nil && !ok {
-		return fmt.Errorf("field projects in FlowAppliedData: required")
-	}
 	type Plain FlowAppliedData
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
@@ -38,6 +37,9 @@ func (j *FlowAppliedData) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Commit)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "commit", 1)
+	}
+	if v, ok := raw["projects"]; !ok || v == nil {
+		plain.Projects = []string{}
 	}
 	*j = FlowAppliedData(plain)
 	return nil

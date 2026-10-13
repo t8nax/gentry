@@ -9,6 +9,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/flow"
+	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/paths"
 	"github.com/t8nax/gentry/internal/process"
@@ -111,40 +112,22 @@ func syncFlow(env Env, r *process.Repo) (*process.Sync, *contract.AgentsLayout, 
 	return s, syncDone(env, r, s, false), nil
 }
 
-// runFlowShow prints a flow as a whole or one object of it: in a worktree
-// that holds a task, the flow of the task; otherwise, or with --active, the
-// active flow of the project; with --draft its draft. It only reads: the
-// flow is checked anew at each call.
+// runFlowShow prints the active flow of a project as a whole or one object
+// of it, or with --draft its draft, wherever it is called: the flow of a task
+// is shown by task flow show. It only reads: the flow is checked anew at each
+// call.
 func runFlowShow(args []string, env Env) int {
-	f := newFlags("flow show")
-	objects := make([]*stringFlag, len(flowObjects))
-	for i, o := range flowObjects {
-		objects[i] = f.String(o.flag)
-	}
-	active := f.Bool("active")
+	const cmd = "flow show"
+	f := newFlags(cmd)
+	objects := flowObjectFlags(f)
 	draft := f.Bool("draft")
 	proj := f.String("project")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
-	object, id := -1, ""
-	var given []string
-	for i, o := range flowObjects {
-		v := objects[i]
-		if !v.Set {
-			continue
-		}
-		if v.Value == "" {
-			return fail(env, flagValueMissing("--"+o.flag))
-		}
-		given = append(given, "--"+o.flag)
-		object, id = i, v.Value
-	}
-	if len(given) > 1 {
-		return fail(env, conflictingFlags("flow show", given[:2]))
-	}
-	if *active && *draft {
-		return fail(env, conflictingFlags("flow show", []string{"--active", "--draft"}))
+	object, id, bad := flowObjectOf(cmd, objects)
+	if bad != nil {
+		return fail(env, *bad)
 	}
 	if proj.Set && proj.Value == "" {
 		return fail(env, flagValueMissing("--project"))
@@ -160,23 +143,11 @@ func runFlowShow(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	out := contract.FlowShowOutput{Project: places.Project, Sync: syncJSON(s, synced)}
-	var fl *flow.Flow
-	tf, ok, bad := copyTaskFlow(r, places.Project, *active || *draft)
-	switch {
-	case bad != nil:
+	fl, bad := projectFlow(r, places, *draft, &out)
+	if bad != nil {
 		return fail(env, *bad)
-	case ok:
-		fl = tf.Flow
-		out.Task = &contract.FlowShowTask{Id: tf.Key(), Flow: contract.Applied{Commit: tf.FlowCommit, Time: tf.FlowApplied}}
-		if tf.ActiveFlow != nil {
-			out.Task.ActiveFlow = appliedJSON(tf.ActiveFlow)
-		}
-	default:
-		if fl, bad = projectFlow(r, places, *draft, &out); bad != nil {
-			return fail(env, *bad)
-		}
 	}
-	x := flowShowExtra{draft: *draft}
+	x := flowShowExtra{draft: *draft, show: cmd}
 	if object >= 0 {
 		narrowed, uses, ok := flowObject(fl, flowObjects[object].flag, id)
 		if !ok {
@@ -187,38 +158,87 @@ func runFlowShow(args []string, env Env) int {
 	return emit(env, flowJSON(out, fl), func(p *page, out contract.FlowShowOutput) { flowShowText(p, out, x) })
 }
 
-// copyTaskFlow returns the flow of the task that holds the worktree of the
-// current directory, if the task is of project; ok is false if the directory
-// holds no task of project, or if skip is set: --active and --draft show the
-// flow of the project. The state store is only read, and not created.
-func copyTaskFlow(r *process.Repo, project string, skip bool) (tf task.FlowView, ok bool, bad *failure) {
-	fail := func(f failure) (task.FlowView, bool, *failure) { return task.FlowView{}, false, &f }
-	if skip {
-		return task.FlowView{}, false, nil
+// runTaskFlowShow prints the flow a task goes by, as a whole or one object of
+// it: the flow kept when the task was taken, in any state of the task. The
+// task is the one named by --task or the task of the current worktree. The
+// mark that the active flow changed is read as task show reads it: without a
+// synchronization and without waiting for the process repository.
+func runTaskFlowShow(args []string, env Env) int {
+	const cmd = "task flow show"
+	f := newFlags(cmd)
+	objects := flowObjectFlags(f)
+	key := f.String("task")
+	if code, done := f.parse(args, env); done {
+		return code
 	}
-	st, bad := openTasks()
-	if bad != nil || st == nil {
-		return task.FlowView{}, false, bad
-	}
-	defer st.Close()
-	worktrees, bad := readWorktrees(st)
+	object, id, bad := flowObjectOf(cmd, objects)
 	if bad != nil {
-		return task.FlowView{}, false, bad
+		return fail(env, *bad)
 	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return fail(internal(err))
+	w, bad := openWayTask(key, true)
+	if bad != nil {
+		return fail(env, *bad)
 	}
-	dir, err := paths.Canonical(wd)
-	if err != nil {
-		return fail(internal(err))
+	defer w.close()
+	v, bad := w.view()
+	if bad != nil {
+		return fail(env, *bad)
 	}
-	tf, ok, err = task.FlowIn(st, r, worktrees, dir, project)
-	if err != nil {
-		// A snapshot that cannot be read refuses as stage show does.
-		return fail(processFailure(err))
+	if v.Flow == nil {
+		// A snapshot that cannot be read refuses as task stage show does.
+		return fail(env, processFailure(task.ErrUnreadable))
 	}
-	return tf, ok, nil
+	out := contract.FlowShowOutput{Project: v.Project, Task: &contract.FlowShowTask{Id: v.Key(), Flow: contract.Applied{Commit: v.FlowCommit, Time: v.FlowApplied}}}
+	if dir, err := home.Process(); err == nil {
+		if a := task.ActiveFlowAt(dir, v); a != nil {
+			out.Task.ActiveFlow = appliedJSON(a)
+		}
+	}
+	fl := v.Flow
+	x := flowShowExtra{show: cmd, hints: w.hints}
+	if object >= 0 {
+		narrowed, uses, ok := flowObject(fl, flowObjects[object].flag, id)
+		if !ok {
+			return w.fail(env, taskObjectNotFound(v.Project, object, id))
+		}
+		fl, x.object, x.uses = narrowed, flowObjects[object].flag, uses
+	}
+	return emit(env, flowJSON(out, fl), func(p *page, out contract.FlowShowOutput) { flowShowText(p, out, x) })
+}
+
+// flowObjectFlags defines the flags of the objects of a flow of the command
+// of f, in the order of flowObjects.
+func flowObjectFlags(f *flags) []*stringFlag {
+	objects := make([]*stringFlag, len(flowObjects))
+	for i, o := range flowObjects {
+		objects[i] = f.String(o.flag)
+	}
+	return objects
+}
+
+// flowObjectOf returns the object of a flow the flags of command cmd name:
+// its index in flowObjects and its identifier, or -1 if none is named. A
+// flag without a value and two flags of objects are refused.
+func flowObjectOf(cmd string, objects []*stringFlag) (int, string, *failure) {
+	object, id := -1, ""
+	var given []string
+	for i, o := range flowObjects {
+		v := objects[i]
+		if !v.Set {
+			continue
+		}
+		if v.Value == "" {
+			f := flagValueMissing("--" + o.flag)
+			return 0, "", &f
+		}
+		given = append(given, "--"+o.flag)
+		object, id = i, v.Value
+	}
+	if len(given) > 1 {
+		f := conflictingFlags(cmd, given[:2])
+		return 0, "", &f
+	}
+	return object, id, nil
 }
 
 // projectFlow returns the active flow of the project at places, or with
@@ -286,13 +306,26 @@ func projectFlow(r *process.Repo, places flow.Places, draft bool, out *contract.
 	return fl, nil
 }
 
-// flowShowExtra is what the text of flow show has apart from the contract:
-// whether the draft is shown, the flag of the object shown alone and where
-// that object is used, which the flow of the object alone has not.
+// flowShowExtra is what the text of flow show and task flow show has apart
+// from the contract: whether the draft is shown, the flag of the object shown
+// alone and where that object is used, which the flow of the object alone has
+// not, and the command that shows the flow, which its hints name.
 type flowShowExtra struct {
 	draft  bool
 	object string   // scenario, stage, agent or part; empty for the whole flow
 	uses   []string // the scenarios of a stage, the stages of a subagent or of a part
+	show   string   // flow show or task flow show
+	// hints returns the hints for the task whose flow task flow show shows:
+	// outside its worktree they name the task. Nil for flow show.
+	hints func(...hint) []hint
+}
+
+// forTask returns hs for the task whose flow is shown, if any.
+func (x flowShowExtra) forTask(hs ...hint) []hint {
+	if x.hints == nil {
+		return hs
+	}
+	return x.hints(hs...)
 }
 
 // flowObject returns the flow of the object of fl named by flag and id alone,
@@ -341,7 +374,7 @@ func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 		}
 		writeFlowObject(b, out, x)
 		if changed {
-			p.hints(hintOf(msg.HintFlowActive))
+			p.hints(x.forTask(hintOf(msg.HintFlowActive))...)
 		}
 		return
 	}
@@ -383,15 +416,16 @@ func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 		}
 		writeTable(b, rows)
 	}
+	stage := hintOf(msg.HintFlowStage).on(x.show)
 	switch {
 	case x.draft:
 		p.hints(hintOf(msg.HintFlowApply))
 	case out.Draft != nil:
 		p.hints(hintOf(msg.HintFlowShowDraft))
 	case changed:
-		p.hints(hintOf(msg.HintFlowStage), hintOf(msg.HintFlowActive))
+		p.hints(x.forTask(stage, hintOf(msg.HintFlowActive))...)
 	default:
-		p.hints(hintOf(msg.HintFlowStage))
+		p.hints(x.forTask(stage)...)
 	}
 }
 
@@ -465,6 +499,15 @@ func objectNotFound(projectID string, object int, id string, draft bool) failure
 		f.message = msg.Text(msg.ErrDraftObjectNotFound, projectID, msg.Text(o.name), id)
 		f.hints = []hint{hintOf(msg.HintDraftObjects)}
 	}
+	return f
+}
+
+// taskObjectNotFound is the refusal of task flow show for an object the flow
+// of the task does not have: as flow show refuses, with the hint to the
+// objects of the flow of the task.
+func taskObjectNotFound(projectID string, object int, id string) failure {
+	f := objectNotFound(projectID, object, id, false)
+	f.hints = []hint{hintOf(msg.HintFlowObjects).on("task flow show")}
 	return f
 }
 

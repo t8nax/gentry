@@ -11,8 +11,8 @@ type AgentsLayout struct {
 	// Subagents not laid out: a file of their name is there already.
 	Conflicts []AgentsConflict `json:"conflicts"`
 
-	// Present if the layout failed, with what went wrong; gentry agents sync repeats
-	// it.
+	// Present if the layout failed, with what went wrong; gentry agents deploy
+	// repeats it.
 	Error *string `json:"error,omitempty,omitzero"`
 
 	// The worktrees the layout changed.

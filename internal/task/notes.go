@@ -23,7 +23,7 @@ func AddNote(st *state.Store, task int64, text, source string) (state.Task, stat
 			return err
 		}
 		if len(passes) == 0 {
-			return errUnreadable
+			return ErrUnreadable
 		}
 		p := passes[len(passes)-1]
 		if n, err = tx.AddNote(t.ID, state.Note{Text: text, Pass: p.ID, Source: source}); err != nil {

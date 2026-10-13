@@ -17,12 +17,12 @@ func passedShop(t *testing.T, bin string) string {
 		{"reason": "Не нужен"}, {"reason": "Не нужен"}, {"reason": "Не нужен"},
 		{"reason": "Не нужен", "to": "merge"},
 	} {
-		if text, failed := s.call(t, "stage_skip", args); failed {
-			t.Fatalf("stage_skip: %s", text)
+		if text, failed := s.call(t, "task_stage_skip", args); failed {
+			t.Fatalf("task_stage_skip: %s", text)
 		}
 	}
-	if text, failed := s.call(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка влита в main"}); failed {
-		t.Fatalf("stage_exit: %s", text)
+	if text, failed := s.call(t, "task_stage_exit", map[string]any{"kind": "result", "text": "Ветка влита в main"}); failed {
+		t.Fatalf("task_stage_exit: %s", text)
 	}
 	return shop
 }
@@ -84,7 +84,7 @@ func TestTakeAgainAtOnce(t *testing.T) {
 	gentry(t, bin, worktrees[0], "task", "cancel")
 	commands := make([][]string, writers)
 	for i := range commands {
-		commands[i] = []string{"task", "take", "--task", "SHOP-1", "--scenario", "feature", "--worktree", worktrees[i+1], "--json"}
+		commands[i] = []string{"task", "take", "SHOP-1", "--scenario", "feature", "--worktree", worktrees[i+1], "--json"}
 	}
 	taken := 0
 	for _, r := range atOnce(t, bin, worktrees[0], commands) {
@@ -104,7 +104,7 @@ func TestTakeAgainAtOnce(t *testing.T) {
 			State   string `json:"state"`
 		} `json:"attempts"`
 	}
-	if err := json.Unmarshal([]byte(gentry(t, bin, worktrees[0], "task", "attempts", "SHOP-1", "--json")), &out); err != nil ||
+	if err := json.Unmarshal([]byte(gentry(t, bin, worktrees[0], "task", "attempt", "list", "--task", "SHOP-1", "--json")), &out); err != nil ||
 		len(out.Attempts) != 2 || out.Attempts[1].Attempt != 2 || out.Attempts[1].State != "active" {
 		t.Errorf("attempts %+v, %v", out.Attempts, err)
 	}

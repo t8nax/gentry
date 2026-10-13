@@ -16,7 +16,7 @@
       "items": { "$ref": "./agents-conflict.json" }
     },
     "error": {
-      "description": "Present if the layout failed, with what went wrong; gentry agents sync repeats it.",
+      "description": "Present if the layout failed, with what went wrong; gentry agents deploy repeats it.",
       "type": "string"
     }
   },

@@ -160,12 +160,12 @@ func commands() []command {
 			name: "agents", section: msg.HelpSectionProjects, summary: msg.CmdAgentsSummary, desc: msg.CmdAgentsDesc,
 			actions: []command{
 				{
-					name: "agents sync", summary: msg.CmdAgentsSyncSummary, desc: msg.CmdAgentsSyncDesc,
+					name: "agents deploy", summary: msg.CmdAgentsDeploySummary, desc: msg.CmdAgentsDeployDesc,
 					flags: []flagSpec{
-						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagAgentsSyncProject)},
+						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagAgentsDeployProject)},
 						jsonFlag,
 					},
-					run: runAgentsSync,
+					run: runAgentsDeploy,
 				},
 			},
 		},
@@ -179,8 +179,7 @@ func commands() []command {
 						{name: "stage", value: msg.ArgStage, desc: descText(msg.FlagShowStage), group: "object"},
 						{name: "agent", value: msg.ArgAgent, desc: descText(msg.FlagShowAgent), group: "object"},
 						{name: "part", value: msg.ArgPart, desc: descText(msg.FlagShowPart), group: "object"},
-						{name: "active", desc: descText(msg.FlagShowActive), group: "source"},
-						{name: "draft", desc: descText(msg.FlagShowDraft), group: "source"},
+						{name: "draft", desc: descText(msg.FlagShowDraft)},
 						{name: "project", value: msg.ArgProjectID, desc: descText(msg.FlagFlowShowProject)},
 						jsonFlag,
 					},
@@ -225,21 +224,26 @@ func commands() []command {
 			actions: []command{
 				{
 					name: "process remote", summary: msg.CmdProcessRemoteSummary, desc: msg.CmdProcessRemoteDesc,
-					args:  []argSpec{{name: msg.ArgRemote, field: "remote", desc: descText(msg.ArgRemoteDesc)}},
-					flags: []flagSpec{jsonFlag},
-					run:   runProcessRemote,
+					actions: []command{
+						{
+							name: "process remote set", summary: msg.CmdProcessRemoteSetSummary, desc: msg.CmdProcessRemoteSetDesc,
+							args:  []argSpec{{name: msg.ArgRemote, field: "remote", desc: descText(msg.ArgRemoteDesc)}},
+							flags: []flagSpec{jsonFlag},
+							run:   runProcessRemoteSet,
+						},
+					},
 				},
 				{name: "process sync", summary: msg.CmdProcessSyncSummary, desc: msg.CmdProcessSyncDesc, flags: []flagSpec{jsonFlag}, run: runProcessSync},
-				{name: "process status", summary: msg.CmdProcessStatusSummary, desc: msg.CmdProcessStatusDesc, flags: []flagSpec{jsonFlag}, run: runProcessStatus},
+				{name: "process show", summary: msg.CmdProcessShowSummary, desc: msg.CmdProcessShowDesc, flags: []flagSpec{jsonFlag}, run: runProcessShow},
 			},
 		},
 		{
-			name: "task", section: msg.HelpSectionTasks, summary: msg.CmdTaskSummary, desc: msg.CmdTaskDesc,
+			name: "task", section: msg.HelpSectionTasks, summary: msg.CmdTaskSummary, desc: msg.CmdTaskDesc, parts: msg.HelpTaskParts,
 			actions: []command{
 				{
 					name: "task take", summary: msg.CmdTaskTakeSummary, desc: msg.CmdTaskTakeDesc,
+					args: []argSpec{{name: msg.ArgTask, field: "task", desc: descText(msg.ArgTakeTaskDesc), optional: true}},
 					flags: []flagSpec{
-						{name: "task", value: msg.ArgTask, desc: descText(msg.FlagTaskTask)},
 						{name: "scenario", value: msg.ArgScenario, desc: descText(msg.FlagTaskScenario)},
 						{name: "title", value: msg.ArgTitle, desc: descText(msg.FlagTaskTitle)},
 						{name: "statement", value: msg.ArgText, desc: descText(msg.FlagTaskStatement), cli: msg.FlagTaskStatementCLI},
@@ -286,131 +290,155 @@ func commands() []command {
 					run: runTaskCancel,
 				},
 				{
-					name: "task attempts", summary: msg.CmdTaskAttemptsSummary, desc: msg.CmdTaskAttemptsDesc,
-					args: []argSpec{
-						{name: msg.ArgTask, field: "task", desc: descText(msg.ArgTaskDesc), optional: true},
-						{name: msg.ArgAttempt, field: "attempt", number: true, desc: descText(msg.ArgAttemptDesc), optional: true},
+					name: "task flow", summary: msg.CmdTaskFlowSummary, desc: msg.CmdTaskFlowDesc,
+					actions: []command{
+						{
+							name: "task flow show", summary: msg.CmdTaskFlowShowSummary, desc: msg.CmdTaskFlowShowDesc,
+							flags: []flagSpec{
+								{name: "scenario", value: msg.ArgScenario, desc: descText(msg.FlagShowScenario), group: "object"},
+								{name: "stage", value: msg.ArgStage, desc: descText(msg.FlagShowStage), group: "object"},
+								{name: "agent", value: msg.ArgAgent, desc: descText(msg.FlagShowAgent), group: "object"},
+								{name: "part", value: msg.ArgPart, desc: descText(msg.FlagShowPart), group: "object"},
+								taskFlag,
+								jsonFlag,
+							},
+							run: runTaskFlowShow,
+						},
 					},
-					flags: []flagSpec{jsonFlag},
-					run:   runTaskAttempts,
-				},
-			},
-		},
-		{
-			name: "stage", section: msg.HelpSectionTasks, summary: msg.CmdStageSummary, desc: msg.CmdStageDesc,
-			actions: []command{
-				{
-					name: "stage show", summary: msg.CmdStageShowSummary, desc: msg.CmdStageShowDesc,
-					flags: []flagSpec{taskFlag, jsonFlag},
-					run:   runStageShow,
 				},
 				{
-					name: "stage exit", agentOnly: true, summary: msg.CmdStageExitSummary, desc: msg.CmdStageExitDesc,
-					flags: []flagSpec{
-						{name: "kind", value: msg.ArgKind, desc: descText(msg.FlagExitKind)},
-						{name: "text", value: msg.ArgText, desc: descText(msg.FlagExitText)},
-						{name: "artifact", value: msg.ArgName, desc: descText(msg.FlagExitArtifact)},
-						{name: "to", value: msg.ArgNode, desc: descText(msg.FlagExitTo)},
-						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagExitReason)},
-						taskFlag,
-						inputFlag("kind, text, artifact, to, reason", false),
-						jsonFlag,
+					name: "task stage", summary: msg.CmdTaskStageSummary, desc: msg.CmdTaskStageDesc,
+					actions: []command{
+						{
+							name: "task stage show", summary: msg.CmdTaskStageShowSummary, desc: msg.CmdTaskStageShowDesc,
+							flags: []flagSpec{taskFlag, jsonFlag},
+							run:   runStageShow,
+						},
+						{
+							name: "task stage exit", agentOnly: true, summary: msg.CmdTaskStageExitSummary, desc: msg.CmdTaskStageExitDesc,
+							flags: []flagSpec{
+								{name: "kind", value: msg.ArgKind, desc: descText(msg.FlagExitKind)},
+								{name: "text", value: msg.ArgText, desc: descText(msg.FlagExitText)},
+								{name: "artifact", value: msg.ArgName, desc: descText(msg.FlagExitArtifact)},
+								{name: "to", value: msg.ArgNode, desc: descText(msg.FlagExitTo)},
+								{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagExitReason)},
+								taskFlag,
+								inputFlag("kind, text, artifact, to, reason", false),
+								jsonFlag,
+							},
+							run: runStageExit,
+						},
+						{
+							name: "task stage skip", agentOnly: true, summary: msg.CmdTaskStageSkipSummary, desc: msg.CmdTaskStageSkipDesc,
+							flags: []flagSpec{
+								{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagSkipReason)},
+								{name: "to", value: msg.ArgNode, desc: descText(msg.FlagExitTo)},
+								taskFlag,
+								inputFlag("reason, to", false),
+								jsonFlag,
+							},
+							run: runStageSkip,
+						},
 					},
-					run: runStageExit,
 				},
 				{
-					name: "stage skip", agentOnly: true, summary: msg.CmdStageSkipSummary, desc: msg.CmdStageSkipDesc,
-					flags: []flagSpec{
-						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagSkipReason)},
-						{name: "to", value: msg.ArgNode, desc: descText(msg.FlagExitTo)},
-						taskFlag,
-						inputFlag("reason, to", false),
-						jsonFlag,
+					name: "task step", agentOnly: true, summary: msg.CmdTaskStepSummary, desc: msg.CmdTaskStepDesc,
+					actions: []command{
+						{
+							name: "task step add", agentOnly: true, summary: msg.CmdTaskStepAddSummary, desc: msg.CmdTaskStepAddDesc,
+							args:  []argSpec{{name: msg.ArgStep, field: "steps", desc: descText(msg.ArgStepDesc), many: true}},
+							flags: []flagSpec{taskFlag, inputFlag("steps", true), jsonFlag},
+							run:   runStepAdd,
+						},
+						{
+							name: "task step done", agentOnly: true, summary: msg.CmdTaskStepDoneSummary, desc: msg.CmdTaskStepDoneDesc,
+							args: []argSpec{{name: msg.ArgNumber, field: "step", number: true, desc: descText(msg.ArgStepNumberDesc)}},
+							flags: []flagSpec{
+								{name: "check", value: msg.ArgCheck, desc: descText(msg.FlagStepCheck)},
+								taskFlag,
+								inputFlag("step, check", true),
+								jsonFlag,
+							},
+							run: runStepDone,
+						},
+						{
+							name: "task step drop", agentOnly: true, summary: msg.CmdTaskStepDropSummary, desc: msg.CmdTaskStepDropDesc,
+							args: []argSpec{{name: msg.ArgNumber, field: "step", number: true, desc: descText(msg.ArgStepNumberDesc)}},
+							flags: []flagSpec{
+								{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagStepReason)},
+								taskFlag,
+								inputFlag("step, reason", true),
+								jsonFlag,
+							},
+							run: runStepDrop,
+						},
 					},
-					run: runStageSkip,
-				},
-			},
-		},
-		{
-			name: "step", agentOnly: true, section: msg.HelpSectionTasks, summary: msg.CmdStepSummary, desc: msg.CmdStepDesc,
-			actions: []command{
-				{
-					name: "step add", agentOnly: true, summary: msg.CmdStepAddSummary, desc: msg.CmdStepAddDesc,
-					args:  []argSpec{{name: msg.ArgStep, field: "steps", desc: descText(msg.ArgStepDesc), many: true}},
-					flags: []flagSpec{taskFlag, inputFlag("steps", true), jsonFlag},
-					run:   runStepAdd,
 				},
 				{
-					name: "step done", agentOnly: true, summary: msg.CmdStepDoneSummary, desc: msg.CmdStepDoneDesc,
-					args: []argSpec{{name: msg.ArgNumber, field: "step", number: true, desc: descText(msg.ArgStepNumberDesc)}},
-					flags: []flagSpec{
-						{name: "check", value: msg.ArgCheck, desc: descText(msg.FlagStepCheck)},
-						taskFlag,
-						inputFlag("step, check", true),
-						jsonFlag,
+					name: "task note", summary: msg.CmdTaskNoteSummary, desc: msg.CmdTaskNoteDesc,
+					actions: []command{
+						{
+							name: "task note add", summary: msg.CmdTaskNoteAddSummary, desc: msg.CmdTaskNoteAddDesc,
+							args:  []argSpec{{name: msg.ArgText, field: "text", desc: descText(msg.ArgNoteDesc)}},
+							flags: []flagSpec{taskFlag, inputFlag("text", true), jsonFlag},
+							run:   runNoteAdd,
+						},
+						{
+							name: "task note list", summary: msg.CmdTaskNoteListSummary, desc: msg.CmdTaskNoteListDesc,
+							flags: []flagSpec{taskFlag, jsonFlag},
+							run:   runNoteList,
+						},
 					},
-					run: runStepDone,
 				},
 				{
-					name: "step drop", agentOnly: true, summary: msg.CmdStepDropSummary, desc: msg.CmdStepDropDesc,
-					args: []argSpec{{name: msg.ArgNumber, field: "step", number: true, desc: descText(msg.ArgStepNumberDesc)}},
-					flags: []flagSpec{
-						{name: "reason", value: msg.ArgReason, desc: descText(msg.FlagStepReason)},
-						taskFlag,
-						inputFlag("step, reason", true),
-						jsonFlag,
+					name: "task artifact", agentOnly: true, summary: msg.CmdTaskArtifactSummary, desc: msg.CmdTaskArtifactDesc,
+					actions: []command{
+						{
+							name: "task artifact save", agentOnly: true, summary: msg.CmdTaskArtifactSaveSummary, desc: msg.CmdTaskArtifactSaveDesc,
+							args: []argSpec{{name: msg.ArgName, field: "name", desc: descText(msg.ArgArtifactNameDesc)}},
+							flags: []flagSpec{
+								{name: "file", value: msg.ArgPath, desc: descText(msg.FlagArtifactFile), group: "source"},
+								{name: "url", value: msg.ArgURL, desc: descText(msg.FlagArtifactURL), group: "source"},
+								taskFlag,
+								inputFlag("name, file, url", true),
+								jsonFlag,
+							},
+							run: runArtifactSave,
+						},
 					},
-					run: runStepDrop,
-				},
-			},
-		},
-		{
-			name: "note", section: msg.HelpSectionTasks, summary: msg.CmdNoteSummary, desc: msg.CmdNoteDesc,
-			actions: []command{
-				{
-					name: "note add", summary: msg.CmdNoteAddSummary, desc: msg.CmdNoteAddDesc,
-					args:  []argSpec{{name: msg.ArgText, field: "text", desc: descText(msg.ArgNoteDesc)}},
-					flags: []flagSpec{taskFlag, inputFlag("text", true), jsonFlag},
-					run:   runNoteAdd,
 				},
 				{
-					name: "note list", summary: msg.CmdNoteListSummary, desc: msg.CmdNoteListDesc,
-					flags: []flagSpec{taskFlag, jsonFlag},
-					run:   runNoteList,
-				},
-			},
-		},
-		{
-			name: "artifact", agentOnly: true, section: msg.HelpSectionTasks, summary: msg.CmdArtifactSummary, desc: msg.CmdArtifactDesc,
-			actions: []command{
-				{
-					name: "artifact save", agentOnly: true, summary: msg.CmdArtifactSaveSummary, desc: msg.CmdArtifactSaveDesc,
-					args: []argSpec{{name: msg.ArgName, field: "name", desc: descText(msg.ArgArtifactNameDesc)}},
-					flags: []flagSpec{
-						{name: "file", value: msg.ArgPath, desc: descText(msg.FlagArtifactFile), group: "source"},
-						{name: "url", value: msg.ArgURL, desc: descText(msg.FlagArtifactURL), group: "source"},
-						taskFlag,
-						inputFlag("name, file, url", true),
-						jsonFlag,
+					name: "task decision", summary: msg.CmdTaskDecisionSummary, desc: msg.CmdTaskDecisionDesc,
+					actions: []command{
+						{
+							name: "task decision add", summary: msg.CmdTaskDecisionAddSummary, desc: msg.CmdTaskDecisionAddDesc,
+							flags: []flagSpec{
+								{name: "question", value: msg.ArgQuestion, desc: descText(msg.FlagDecisionQuestion)},
+								{name: "answer", value: msg.ArgAnswer, desc: descText(msg.FlagDecisionAnswer)},
+								{name: "allow-return", value: msg.ArgNode, desc: descText(msg.FlagDecisionAllowReturn)},
+								taskFlag,
+								inputFlagWith("question, options, answer, allow_return", false, msg.FlagInputOptions),
+								jsonFlag,
+							},
+							run: runDecisionAdd,
+						},
 					},
-					run: runArtifactSave,
 				},
-			},
-		},
-		{
-			name: "operator", section: msg.HelpSectionTasks, summary: msg.CmdOperatorSummary, desc: msg.CmdOperatorDesc,
-			actions: []command{
 				{
-					name: "operator record", summary: msg.CmdOperatorRecordSummary, desc: msg.CmdOperatorRecordDesc,
-					flags: []flagSpec{
-						{name: "question", value: msg.ArgQuestion, desc: descText(msg.FlagDecisionQuestion)},
-						{name: "answer", value: msg.ArgAnswer, desc: descText(msg.FlagDecisionAnswer)},
-						{name: "allow-return", value: msg.ArgNode, desc: descText(msg.FlagDecisionAllowReturn)},
-						taskFlag,
-						inputFlagWith("question, options, answer, allow_return", false, msg.FlagInputOptions),
-						jsonFlag,
+					name: "task attempt", summary: msg.CmdTaskAttemptSummary, desc: msg.CmdTaskAttemptDesc,
+					actions: []command{
+						{
+							name: "task attempt list", summary: msg.CmdTaskAttemptListSummary, desc: msg.CmdTaskAttemptListDesc,
+							flags: []flagSpec{taskFlag, jsonFlag},
+							run:   runAttemptList,
+						},
+						{
+							name: "task attempt show", summary: msg.CmdTaskAttemptShowSummary, desc: msg.CmdTaskAttemptShowDesc,
+							args:  []argSpec{{name: msg.ArgAttempt, field: "attempt", number: true, desc: descText(msg.ArgAttemptDesc)}},
+							flags: []flagSpec{taskFlag, jsonFlag},
+							run:   runAttemptShow,
+						},
 					},
-					run: runOperatorRecord,
 				},
 			},
 		},

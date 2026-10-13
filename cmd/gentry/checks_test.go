@@ -98,8 +98,8 @@ func checksShop(t *testing.T, bin, mode string) (shop, files string) {
 	f.Close()
 	gentry(t, bin, shop, "flow", "apply")
 	gentry(t, bin, shop, "task", "take", "--scenario", "feature", "--title", "Проверки", "--statement", "Постановка.")
-	tool(t, bin, shop, "step_add", map[string]any{"steps": []string{"Создать ветку"}})
-	tool(t, bin, shop, "step_done", map[string]any{"step": 1})
+	tool(t, bin, shop, "task_step_add", map[string]any{"steps": []string{"Создать ветку"}})
+	tool(t, bin, shop, "task_step_done", map[string]any{"step": 1})
 	files = t.TempDir()
 	t.Setenv(helperEnv, mode)
 	t.Setenv(spansEnv, filepath.Join(files, "spans"))
@@ -203,7 +203,7 @@ func TestStageExitChecksAtOnce(t *testing.T) {
 	shop, files := checksShop(t, bin, "span")
 	exit := map[string]any{"kind": "result", "text": "Ветка"}
 	closed := 0
-	for _, r := range toolsAtOnce(t, bin, shop, "stage_exit", []any{exit, exit}) {
+	for _, r := range toolsAtOnce(t, bin, shop, "task_stage_exit", []any{exit, exit}) {
 		switch {
 		case !r.failed:
 			closed++
@@ -229,9 +229,9 @@ func TestStageSkipDuringChecks(t *testing.T) {
 	bin := buildGentry(t)
 	shop, files := checksShop(t, bin, "span")
 	s := startServer(t, bin, shop)
-	id := s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
+	id := s.send(t, "task_stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
 	waitFile(t, filepath.Join(files, "spans"))
-	tool(t, bin, shop, "stage_skip", map[string]any{"reason": "Ветка есть"})
+	tool(t, bin, shop, "task_stage_skip", map[string]any{"reason": "Ветка есть"})
 	text, failed, _ := s.answer(t, id)
 	if !failed || !strings.Contains(text, msg.Text(msg.ErrStepsEmpty, "План фичи")) {
 		t.Errorf("the exit: failed %v:\n%s", failed, text)
@@ -251,7 +251,7 @@ func TestTaskCancelDuringChecks(t *testing.T) {
 	bin := buildGentry(t)
 	shop, files := checksShop(t, bin, "tree")
 	s := startServer(t, bin, shop)
-	id := s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
+	id := s.send(t, "task_stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
 	waitFile(t, filepath.Join(files, "spans"))
 	start := time.Now()
 	gentry(t, bin, shop, "task", "cancel", "--reason", "Отмена")
@@ -266,13 +266,13 @@ func TestTaskCancelDuringChecks(t *testing.T) {
 	noMarker(t, files, start)
 }
 
-// TestStageExitProgress checks that a call of stage_exit with a progress
+// TestStageExitProgress checks that a call of task_stage_exit with a progress
 // token is told of the progress of its commands of checks before its answer.
 func TestStageExitProgress(t *testing.T) {
 	bin := buildGentry(t)
 	shop, _ := checksShop(t, bin, "span")
 	s := startServer(t, bin, shop)
-	id := s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, map[string]any{"progressToken": "p1"})
+	id := s.send(t, "task_stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, map[string]any{"progressToken": "p1"})
 	text, failed, notes := s.answer(t, id)
 	if failed || !strings.Contains(text, msg.Text(msg.ChecksPassedLine, 1)) {
 		t.Errorf("the exit: failed %v:\n%s", failed, text)
@@ -288,7 +288,7 @@ func TestStageExitProgress(t *testing.T) {
 	}
 }
 
-// TestStageExitCancelled checks that a call of stage_exit cancelled by the
+// TestStageExitCancelled checks that a call of task_stage_exit cancelled by the
 // client while its command of checks runs gets no answer, ends the command
 // with the process it started, which leaves no marker, and does not close
 // the stage.
@@ -296,17 +296,17 @@ func TestStageExitCancelled(t *testing.T) {
 	bin := buildGentry(t)
 	shop, files := checksShop(t, bin, "tree")
 	s := startServer(t, bin, shop)
-	id := s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
+	id := s.send(t, "task_stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
 	waitFile(t, filepath.Join(files, "spans"))
 	start := time.Now()
 	s.write(t, map[string]any{"jsonrpc": "2.0", "method": "notifications/cancelled", "params": map[string]any{"requestId": id}})
-	shown := s.send(t, "stage_show", map[string]any{}, nil)
+	shown := s.send(t, "task_stage_show", map[string]any{}, nil)
 	if _, failed, notes := s.answer(t, shown); failed || len(notes) > 0 {
-		t.Errorf("stage_show after the cancel: failed %v, messages before it %v", failed, notes)
+		t.Errorf("task_stage_show after the cancel: failed %v, messages before it %v", failed, notes)
 	}
 	// The command would run 20 seconds.
 	if d := time.Since(start); d > 15*time.Second {
-		t.Errorf("stage_show was answered %v after the command started", d)
+		t.Errorf("task_stage_show was answered %v after the command started", d)
 	}
 	noMarker(t, files, start)
 	if got := pathNodes(t, bin, shop); got != "branch:" {

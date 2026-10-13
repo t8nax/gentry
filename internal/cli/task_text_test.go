@@ -340,10 +340,10 @@ func TestTaskShowText(t *testing.T) {
 			taskShowExtra{names: shopNames(), here: true},
 			passedTable + lines(
 				hintLineOf(msg.HintStatement, "gentry task show --statement"),
-				hintLineOf(msg.HintNotes, "gentry note list"),
+				hintLineOf(msg.HintNotes, "gentry task note list"),
 			), passedTable + lines(
 				hintLineOf(msg.HintStatement, "task_show (statement)"),
-				hintLineOf(msg.HintNotes, "note_list"),
+				hintLineOf(msg.HintNotes, "task_note_list"),
 				hintLineOf(msg.HintTaskClose, "task_close"),
 			)},
 		{"path in full", contract.TaskShowOutput{Task: passed, Path: path},
@@ -399,11 +399,11 @@ func TestTaskShowText(t *testing.T) {
 		{"cancelled", contract.TaskShowOutput{Task: cancelled, Path: []contract.TaskPass{currentPass()}, Notes: notes},
 			taskShowExtra{names: shopNames()}, cancelledText + lines(
 				hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"),
-				hintLineOf(msg.HintNotes, "gentry note list --task SHOP-1"),
-				hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
+				hintLineOf(msg.HintNotes, "gentry task note list --task SHOP-1"),
+				hintLineOf(msg.HintTaskAgain, "gentry task take SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 			), cancelledText + lines(
 				hintLineOf(msg.HintStatement, "task_show (task: SHOP-1, statement)"),
-				hintLineOf(msg.HintNotes, "note_list (task: SHOP-1)"),
+				hintLineOf(msg.HintNotes, "task_note_list (task: SHOP-1)"),
 				hintLineOf(msg.HintTaskAgain, "task_take (task: SHOP-1, scenario)"),
 			)},
 		{"closed by the agent", contract.TaskShowOutput{Task: closedTask}, taskShowExtra{names: shopNames()}, lines(
@@ -446,7 +446,7 @@ func TestTaskShowText(t *testing.T) {
 			msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30"),
 			"",
 			hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"),
-			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
+			hintLineOf(msg.HintTaskAgain, "gentry task take SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			msg.Text(msg.TaskHeading, "SHOP-1", "Частичный возврат по карте"),
 			"",
@@ -595,9 +595,10 @@ func TestCheckTakeFieldsText(t *testing.T) {
 	tests := []struct {
 		name       string
 		fields     map[string]string
+		again      bool
 		cli, agent string
 	}{
-		{"no scenario", map[string]string{"title": "Т", "statement": "С"}, lines(
+		{"no scenario", map[string]string{"title": "Т", "statement": "С"}, false, lines(
 			"Не указан сценарий задачи.",
 			"",
 			hintLineOf(msg.HintFlowScenarios, "gentry flow show"),
@@ -606,29 +607,34 @@ func TestCheckTakeFieldsText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintFlowScenarios, "flow_show"),
 		)},
-		{"no title", map[string]string{"scenario": "feature", "statement": "С"}, lines(
+		{"no title", map[string]string{"scenario": "feature", "statement": "С"}, false, lines(
 			"Не указано название задачи.",
 			"",
 			hintLineOf(msg.HintCommandHelp, "gentry task take --help"),
 		), "Не указано название задачи.\n"},
-		{"no statement", map[string]string{"scenario": "feature", "title": "Т"}, lines(
+		{"no statement", map[string]string{"scenario": "feature", "title": "Т"}, false, lines(
 			"Не указана постановка задачи.",
 			"",
 			hintLineOf(msg.HintCommandHelp, "gentry task take --help"),
 		), "Не указана постановка задачи.\n"},
-		{"long title", map[string]string{"scenario": "feature", "title": long, "statement": "С"}, lines(
+		{"long title", map[string]string{"scenario": "feature", "title": long, "statement": "С"}, false, lines(
 			"Название задачи длиннее 80 знаков.",
 			"",
 			msg.Text(msg.HintTitle),
 		), ""},
-		{"title of two lines", map[string]string{"scenario": "feature", "title": "А\nБ", "statement": "С"}, lines(
+		{"title of two lines", map[string]string{"scenario": "feature", "title": "А\nБ", "statement": "С"}, false, lines(
 			"Название задачи состоит из нескольких строк.",
 			"",
 			msg.Text(msg.HintTitle),
 		), ""},
+		{"a task taken anew with a title", map[string]string{"task": "SHOP-1", "scenario": "feature", "title": "Т"}, true, lines(
+			"Номер задачи и флаг --title нельзя указывать вместе.",
+			"",
+			hintLineOf(msg.HintCommandHelp, "gentry task take --help"),
+		), "Номер задачи и флаг --title нельзя указывать вместе.\n"},
 	}
 	for _, tt := range tests {
-		f := checkTakeFields(tt.fields)
+		f := checkTakeFields(tt.fields, tt.again)
 		if f == nil {
 			t.Errorf("%s: no refusal", tt.name)
 			continue

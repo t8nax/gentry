@@ -32,9 +32,9 @@ var serviceCommands = []string{"help", "hook", "events", "mcp", "version"}
 // toolDescs are the descriptions of tools that differ from the help of their
 // commands: the help names flags.
 var toolDescs = map[string]msg.Key{
-	"task take":       msg.ToolTaskTakeDesc,
-	"task cancel":     msg.ToolTaskCancelDesc,
-	"operator record": msg.ToolOperatorRecordDesc,
+	"task take":         msg.ToolTaskTakeDesc,
+	"task cancel":       msg.ToolTaskCancelDesc,
+	"task decision add": msg.ToolTaskDecisionAddDesc,
 }
 
 // toolCommands returns the commands served as tools, in the order of the
@@ -50,7 +50,7 @@ func toolCommands() []command {
 }
 
 // toolName is the name of the tool of the command named cmd, such as
-// stage_show for stage show.
+// task_stage_show for task stage show.
 func toolName(cmd string) string { return strings.ReplaceAll(cmd, " ", "_") }
 
 // fieldName is the field of the flag named name, as --input names it.
@@ -200,7 +200,7 @@ func newTool(c command) (tool, error) {
 			required = append(required, a.field)
 		}
 	}
-	if c.name == "operator record" {
+	if c.name == "task decision add" {
 		describe("options", msg.Text(msg.FlagInputOptions))
 	}
 	t.schema = map[string]any{"type": "object", "properties": props, "additionalProperties": false}

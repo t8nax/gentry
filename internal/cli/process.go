@@ -499,13 +499,13 @@ func remoteUnavailable(remote, output string) failure {
 	}
 }
 
-func runProcessRemote(args []string, env Env) int {
-	f := newFlags("process remote")
+func runProcessRemoteSet(args []string, env Env) int {
+	f := newFlags("process remote set")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
 	if len(f.args) == 0 || f.args[0] == "" {
-		return fail(env, missingArgument("process remote", "remote", msg.Text(msg.ErrRemoteMissing), helpHint(msg.HintCommandHelp, "process remote")))
+		return fail(env, missingArgument("process remote set", "remote", msg.Text(msg.ErrRemoteMissing), helpHint(msg.HintCommandHelp, "process remote set")))
 	}
 	url := f.args[0]
 	r, bad := openProcess()
@@ -527,15 +527,15 @@ func runProcessRemote(args []string, env Env) int {
 	// text only.
 	cs, x := syncJSON(s, nil), syncExtraOf(r, s, false)
 	warn(env, func(p *page) { writeSync(p, cs, x, syncText{}) })
-	out := contract.ProcessRemoteOutput{Remote: url, Result: contract.ProcessRemoteOutputResult(result), Drafts: items(drafts)}
-	return emit(env, out, processRemoteText)
+	out := contract.ProcessRemoteSetOutput{Remote: url, Result: contract.ProcessRemoteSetOutputResult(result), Drafts: items(drafts)}
+	return emit(env, out, processRemoteSetText)
 }
 
-// processRemoteText prints the remote repository connected, what the first
+// processRemoteSetText prints the remote repository connected, what the first
 // synchronization did and the drafts left of the conflicts.
-func processRemoteText(p *page, out contract.ProcessRemoteOutput) {
+func processRemoteSetText(p *page, out contract.ProcessRemoteSetOutput) {
 	fmt.Fprintln(p, msg.Text(msg.ProcessRemoteSet, out.Remote))
-	k := map[contract.ProcessRemoteOutputResult]msg.Key{
+	k := map[contract.ProcessRemoteSetOutputResult]msg.Key{
 		process.RemoteSent: msg.ProcessResultSent, process.RemoteReceived: msg.ProcessResultReceived,
 		process.RemoteMerged: msg.ProcessResultMerged, process.RemoteUnchanged: msg.ProcessResultUnchanged,
 	}[out.Result]
@@ -608,8 +608,8 @@ func processSyncText(p *page, out contract.ProcessSyncOutput, projects map[strin
 	writeFreeLayout(p, out.Agents, projects)
 }
 
-func runProcessStatus(args []string, env Env) int {
-	f := newFlags("process status")
+func runProcessShow(args []string, env Env) int {
+	f := newFlags("process show")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
@@ -622,16 +622,16 @@ func runProcessStatus(args []string, env Env) int {
 	if err != nil {
 		return fail(env, processFailure(err))
 	}
-	out := contract.ProcessStatusOutput{Drafts: items(st.Drafts), Unsent: items(st.Unsent), Conflicts: items(st.Conflicts), Synced: st.Synced}
+	out := contract.ProcessShowOutput{Drafts: items(st.Drafts), Unsent: items(st.Unsent), Conflicts: items(st.Conflicts), Synced: st.Synced}
 	if st.Remote != "" {
 		out.Remote = &st.Remote
 	}
-	return emit(env, out, processStatusText)
+	return emit(env, out, processShowText)
 }
 
-// processStatusText prints the remote repository and when it was last
+// processShowText prints the remote repository and when it was last
 // synchronized, the drafts, what is not sent and the conflicts.
-func processStatusText(p *page, out contract.ProcessStatusOutput) {
+func processShowText(p *page, out contract.ProcessShowOutput) {
 	if out.Remote == nil {
 		fmt.Fprintln(p, msg.Text(msg.ProcessNoRemote))
 	} else {

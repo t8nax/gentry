@@ -34,10 +34,10 @@ func twoMachines(t *testing.T) machines {
 		root := filepath.Dir(os.Getenv(home.EnvVar))
 		remote := filepath.Join(root, "remote.git")
 		gittest.Run(t, root, "init", "--quiet", "--bare", remote)
-		clitest.MustRun(t, "process", "remote", remote)
+		clitest.MustRun(t, "process", "remote", "set", remote)
 		t.Setenv(home.EnvVar, filepath.Join(root, "home-b"))
 		clitest.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
-		clitest.MustRun(t, "process", "remote", remote)
+		clitest.MustRun(t, "process", "remote", "set", remote)
 	})
 	root := filepath.Dir(os.Getenv(home.EnvVar))
 	return machines{t: t, a: filepath.Join(root, "home"), b: filepath.Join(root, "home-b"), remote: filepath.Join(root, "remote.git")}
@@ -61,26 +61,26 @@ func TestProcessRemote(t *testing.T) {
 	remote := filepath.Join(root, "remote.git")
 	gittest.Run(t, root, "init", "--quiet", "--bare", remote)
 
-	_, stdout, _ := clitest.Run("process", "status")
+	_, stdout, _ := clitest.Run("process", "show")
 	if want := clitest.Lines(msg.Text(msg.ProcessNoRemote), "", cli.HintText(msg.HintProcessRemote)); stdout != want {
 		t.Errorf("status without a remote:\n%s\nwant:\n%s", stdout, want)
 	}
-	code, stdout, stderr := clitest.Run("process", "remote", remote)
+	code, stdout, stderr := clitest.Run("process", "remote", "set", remote)
 	if want := clitest.Lines(msg.Text(msg.ProcessRemoteSet, remote), msg.Text(msg.ProcessResultSent)); code != contract.ExitOK || stderr != "" || stdout != want {
 		t.Errorf("remote: exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}
-	_, stdout, _ = clitest.Run("process", "status")
+	_, stdout, _ = clitest.Run("process", "show")
 	if want := clitest.Lines(msg.Text(msg.ProcessRemote, remote), msg.Text(msg.ProcessSyncedAt, "<время>")); clitest.Masked(stdout) != want {
 		t.Errorf("status:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := clitest.Run("process", "remote", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultUnchanged)+"\n") {
+	if _, stdout, _ := clitest.Run("process", "remote", "set", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultUnchanged)+"\n") {
 		t.Errorf("remote again:\n%s", stdout)
 	}
 
 	// Another machine gets the process and shows the same flow.
 	t.Setenv(home.EnvVar, filepath.Join(root, "home-b"))
 	clitest.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
-	if _, stdout, _ := clitest.Run("process", "remote", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultReceived)+"\n") {
+	if _, stdout, _ := clitest.Run("process", "remote", "set", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultReceived)+"\n") {
 		t.Errorf("remote on b:\n%s", stdout)
 	}
 	b := clitest.ShopPlaces()
@@ -96,11 +96,11 @@ func TestProcessRemote(t *testing.T) {
 		exit   int
 		stderr string
 	}{
-		{"no address", []string{"process", "remote"}, contract.ExitUsage,
-			msg.Text(msg.ErrRemoteMissing) + "\n\n" + cli.HintText(msg.HintCommandHelp, "process remote")},
-		{"unavailable", []string{"process", "remote", filepath.Join(root, "none.git")}, contract.ExitError,
+		{"no address", []string{"process", "remote", "set"}, contract.ExitUsage,
+			msg.Text(msg.ErrRemoteMissing) + "\n\n" + cli.HintText(msg.HintCommandHelp, "process remote set")},
+		{"unavailable", []string{"process", "remote", "set", filepath.Join(root, "none.git")}, contract.ExitError,
 			msg.Text(msg.ErrRemoteUnavailable, filepath.Join(root, "none.git")) + "\n\n" + msg.Text(msg.HintRemoteAccess, filepath.Join(root, "none.git"))},
-		{"code", []string{"process", "remote", filepath.Join(root, "shop")}, contract.ExitError,
+		{"code", []string{"process", "remote", "set", filepath.Join(root, "shop")}, contract.ExitError,
 			msg.Text(msg.ErrRemoteNotProcess, filepath.Join(root, "shop"))},
 	}
 	for _, tt := range tests {
@@ -109,7 +109,7 @@ func TestProcessRemote(t *testing.T) {
 			t.Errorf("%s: exit code %d, stdout %q, stderr %q, want %q", tt.name, code, stdout, stderr, tt.stderr)
 		}
 	}
-	if _, stdout, _ := clitest.Run("process", "status"); !strings.HasPrefix(stdout, msg.Text(msg.ProcessRemote, remote)+"\n") {
+	if _, stdout, _ := clitest.Run("process", "show"); !strings.HasPrefix(stdout, msg.Text(msg.ProcessRemote, remote)+"\n") {
 		t.Errorf("a refused address is kept:\n%s", stdout)
 	}
 }
@@ -189,7 +189,7 @@ func TestProcessConflict(t *testing.T) {
 	if text, err := os.ReadFile(filepath.Join(b.Conflict, "stages", "review.md")); err != nil || string(text) != "Проверить изменения по списку машины А.\n" {
 		t.Errorf("variant of a: %q, %v", text, err)
 	}
-	_, stdout, _ = clitest.Run("process", "status")
+	_, stdout, _ = clitest.Run("process", "show")
 	if want := clitest.Lines(msg.Text(msg.ProcessRemote, m.remote), msg.Text(msg.ProcessSyncedAt, "<время>"), "", msg.Text(msg.ProcessDrafts),
 		"  "+flowShop, "", msg.Text(msg.ProcessConflicts), "  "+flowShop); clitest.Masked(stdout) != want {
 		t.Errorf("status:\n%s\nwant:\n%s", stdout, want)
@@ -245,7 +245,7 @@ func TestProcessOffline(t *testing.T) {
 	if _, _, stderr := clitest.Run("flow", "show"); stderr != msg.Text(msg.SyncSkipped)+"\n\n" {
 		t.Errorf("show offline: stderr %q", stderr)
 	}
-	_, stdout, _ = clitest.Run("process", "status")
+	_, stdout, _ = clitest.Run("process", "show")
 	if want := "\n" + clitest.Lines(msg.Text(msg.ProcessUnsent), "  "+flowShop, "", cli.HintText(msg.HintProcessSync)); !strings.HasSuffix(stdout, want) {
 		t.Errorf("status:\n%s", stdout)
 	}
@@ -301,13 +301,13 @@ func TestProcessJSON(t *testing.T) {
 	root := filepath.Dir(os.Getenv(home.EnvVar))
 	remote := filepath.Join(root, "remote.git")
 	gittest.Run(t, root, "init", "--quiet", "--bare", remote)
-	_, stdout, _ := clitest.Run("process", "status", "--json")
-	clitest.Validate(t, "schemas/process-status.json", stdout)
+	_, stdout, _ := clitest.Run("process", "show", "--json")
+	clitest.Validate(t, "schemas/process-show.json", stdout)
 	if stdout != `{"conflicts":[],"drafts":[],"unsent":[]}`+"\n" {
 		t.Errorf("status: %s", stdout)
 	}
-	_, stdout, _ = clitest.Run("process", "remote", remote, "--json")
-	clitest.Validate(t, "schemas/process-remote.json", stdout)
+	_, stdout, _ = clitest.Run("process", "remote", "set", remote, "--json")
+	clitest.Validate(t, "schemas/process-remote-set.json", stdout)
 	if want := `{"drafts":[],"remote":` + clitest.JSONString(remote) + `,"result":"sent"}` + "\n"; stdout != want {
 		t.Errorf("remote: %s, want %s", stdout, want)
 	}
@@ -331,8 +331,8 @@ func TestProcessJSON(t *testing.T) {
 	if stdout != `{"conflicts":[],"received":[],"restored":[],"sent":[]}`+"\n" {
 		t.Errorf("sync: %s", stdout)
 	}
-	_, stdout, _ = clitest.Run("process", "status", "--json")
-	clitest.Validate(t, "schemas/process-status.json", stdout)
+	_, stdout, _ = clitest.Run("process", "show", "--json")
+	clitest.Validate(t, "schemas/process-show.json", stdout)
 	if !strings.Contains(stdout, `"remote":`+clitest.JSONString(remote)+`,"synced":"`) {
 		t.Errorf("status with a remote: %s", stdout)
 	}
@@ -459,7 +459,7 @@ func TestProjectAddWithFlow(t *testing.T) {
 
 	// A third machine takes the process first, then connects the shop.
 	t.Setenv(home.EnvVar, filepath.Join(filepath.Dir(m.a), "home-c"))
-	clitest.MustRun(t, "process", "remote", m.remote)
+	clitest.MustRun(t, "process", "remote", "set", m.remote)
 	_, stdout, _ := clitest.Run("project", "add", "--knowledge", "../shop-knowledge")
 	if !strings.Contains(stdout, "\n\n"+laidOut) {
 		t.Errorf("project add:\n%s", stdout)

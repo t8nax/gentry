@@ -52,10 +52,10 @@ var agentTexts = map[msg.Key]msg.Key{
 
 // argFields are the fields of the arguments of the commands, in order.
 var argFields = map[string][]string{
-	"task show": {"task"}, "task close": {"task"}, "task cancel": {"task"}, "task attempts": {"task", "attempt"},
-	"step add": {"steps"}, "step done": {"step"}, "step drop": {"step"}, "artifact save": {"name"},
-	"note add": {"text"}, "setup": {"tool"}, "worktree add": {"path"}, "process remote": {"remote"},
-	"project add": {"project"},
+	"task take": {"task"}, "task show": {"task"}, "task close": {"task"}, "task cancel": {"task"},
+	"task attempt show": {"attempt"}, "task step add": {"steps"}, "task step done": {"step"}, "task step drop": {"step"},
+	"task artifact save": {"name"}, "task note add": {"text"}, "setup": {"tool"}, "worktree add": {"path"},
+	"process remote set": {"remote"}, "project add": {"project"},
 }
 
 // boolFlags are the flags without a value.
@@ -86,15 +86,11 @@ func lineFor(line string, agent bool) (string, bool) {
 	if slices.Contains(words, "--help") {
 		return line, !agent
 	}
-	cmd := words[0]
-	if len(words) > 1 && !strings.HasPrefix(words[1], "-") && !strings.HasPrefix(words[1], "<") {
-		if _, ok := argFields[words[0]+" "+words[1]]; ok || isGroup(words[0]) {
-			cmd, words = words[0]+" "+words[1], words[2:]
-		} else {
-			words = words[1:]
-		}
-	} else {
-		words = words[1:]
+	// The command is its group, its part and its action: as many words as
+	// lead to a command that is no group.
+	cmd, words := words[0], words[1:]
+	for len(words) > 0 && isGroup(cmd) && !strings.HasPrefix(words[0], "-") && !strings.HasPrefix(words[0], "<") {
+		cmd, words = cmd+" "+words[0], words[1:]
 	}
 	if !agent {
 		return line, !slices.Contains(agentOnly, cmd)
@@ -105,9 +101,10 @@ func lineFor(line string, agent bool) (string, bool) {
 	return m[1] + ": " + tool(cmd, words), true
 }
 
-// isGroup reports whether name is a group of commands.
+// isGroup reports whether name is a group of commands or a part of a group.
 func isGroup(name string) bool {
-	return slices.Contains([]string{"project", "worktree", "agents", "flow", "library", "process", "task", "stage", "step", "note", "artifact", "operator"}, name)
+	return slices.Contains([]string{"project", "worktree", "agents", "flow", "library", "process", "task",
+		"process remote", "task flow", "task stage", "task step", "task note", "task artifact", "task decision", "task attempt"}, name)
 }
 
 // words splits a command into words; a placeholder such as <как проверено>
@@ -159,12 +156,6 @@ func tool(cmd string, words []string) string {
 				value = words[i]
 			}
 			field(strings.ReplaceAll(name, "-", "_"), value)
-			continue
-		}
-		// A placeholder names its argument: «<попытка>» of task attempts is
-		// the attempt, though the task comes first.
-		if w == msg.Text(msg.ArgAttempt) {
-			field("attempt", w)
 			continue
 		}
 		if pos < len(args) {

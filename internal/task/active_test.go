@@ -198,40 +198,6 @@ func TestActiveFlow(t *testing.T) {
 	}
 }
 
-func TestFlowIn(t *testing.T) {
-	t.Parallel()
-	s := newActiveShop(t)
-	worktrees, err := s.st.Worktrees()
-	if err != nil {
-		t.Fatal(err)
-	}
-	src := filepath.Join(s.worktree, "src")
-	if _, ok, err := FlowIn(s.st, s.r, worktrees, src, "shop"); ok || err != nil {
-		t.Errorf("a free worktree: %v, %v", ok, err)
-	}
-	task := s.take()
-	s.write(process.FlowOf("shop"), map[string]string{"stages/plan-feature.md": "Написать план.\n"})
-	applied := s.apply(process.FlowOf("shop"))
-	tf, ok, err := FlowIn(s.st, s.r, worktrees, src, "shop")
-	if !ok || err != nil || tf.ID != task.ID || tf.ActiveFlow == nil || tf.ActiveFlow.Commit != applied.Commit {
-		t.Fatalf("the worktree of the task: %+v, %v, %v", tf, ok, err)
-	}
-	if st, _ := tf.Flow.Stage("plan-feature"); st.Instruction == "Написать план.\n" {
-		t.Errorf("the flow of the task is the active one: %q", st.Instruction)
-	}
-	for _, tt := range []struct{ name, dir, project string }{
-		{"another project", src, "cart"},
-		{"outside the pool", filepath.Dir(s.worktree), "shop"},
-	} {
-		if _, ok, err := FlowIn(s.st, s.r, worktrees, tt.dir, tt.project); ok || err != nil {
-			t.Errorf("%s: %v, %v", tt.name, ok, err)
-		}
-	}
-	if _, ok, err := FlowIn(nil, s.r, worktrees, src, "shop"); ok || err != nil {
-		t.Errorf("no store: %v, %v", ok, err)
-	}
-}
-
 // TestActiveFlowAt checks that a task is shown without the change of the
 // active flow while the process repository cannot be read at once: another
 // command holds it, or there is none, which is not created.

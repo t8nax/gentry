@@ -446,12 +446,12 @@ func nonNil(s []string) []string {
 	return s
 }
 
-// runAgentsSync lays out the subagents in every worktree of the pool of a
+// runAgentsDeploy lays out the subagents in every worktree of the pool of a
 // project: a worktree with a task by the snapshot of its flow, a free one by
 // the active flow. A conflict in any worktree refuses the command, and
 // nothing is written.
-func runAgentsSync(args []string, env Env) int {
-	f := newFlags("agents sync")
+func runAgentsDeploy(args []string, env Env) int {
+	f := newFlags("agents deploy")
 	proj := f.String("project")
 	if code, done := f.parse(args, env); done {
 		return code
@@ -515,7 +515,7 @@ func runAgentsSync(args []string, env Env) int {
 	for _, c := range res.Worktrees {
 		changes[c.Worktree] = c
 	}
-	out := contract.AgentsSyncOutput{Project: id, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}}
+	out := contract.AgentsDeployOutput{Project: id, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}}
 	for _, w := range worktrees {
 		c, ok := changes[w.Path]
 		if !ok {
@@ -523,16 +523,16 @@ func runAgentsSync(args []string, env Env) int {
 		}
 		out.Worktrees = append(out.Worktrees, changeJSON(c, p))
 	}
-	return emit(env, out, func(p *page, out contract.AgentsSyncOutput) { agentsSyncText(p, out, laid) })
+	return emit(env, out, func(p *page, out contract.AgentsDeployOutput) { agentsDeployText(p, out, laid) })
 }
 
-// agentsSyncText prints the layout of the pool of a project as a table of
+// agentsDeployText prints the layout of the pool of a project as a table of
 // its worktrees. laid holds the worktrees whose subagents are known: the
 // subagents of the others are not laid out, for a flow with problems or a
 // snapshot that cannot be read.
-func agentsSyncText(p *page, out contract.AgentsSyncOutput, laid map[string]bool) {
+func agentsDeployText(p *page, out contract.AgentsDeployOutput, laid map[string]bool) {
 	if out.Changed {
-		fmt.Fprintln(p, msg.Text(msg.AgentsSynced, out.Project))
+		fmt.Fprintln(p, msg.Text(msg.AgentsDeployed, out.Project))
 		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
 	} else {
 		fmt.Fprintln(p, msg.Text(msg.AgentsInPlace, out.Project))

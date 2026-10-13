@@ -21,17 +21,17 @@ func at(node, stage, title string, round, passed int) contract.Task {
 }
 
 func TestStageShowText(t *testing.T) {
-	branch := contract.StageShowOutput{
+	branch := contract.TaskStageShowOutput{
 		Task: "SHOP-1", Node: "branch", Round: 1,
-		Stage: contract.StageShowStage{Id: "branch", Title: "Ветка", Executor: "orchestrator", Exit: "создана ветка задачи",
-			Instruction: "Создать ветку задачи от main.", Parts: []contract.StageShowPart{}},
-		Transitions: []contract.StageShowTransition{{To: "plan", Stage: ptr("plan-feature"), Title: ptr("План фичи")}},
+		Stage: contract.TaskStageShowStage{Id: "branch", Title: "Ветка", Executor: "orchestrator", Exit: "создана ветка задачи",
+			Instruction: "Создать ветку задачи от main.", Parts: []contract.TaskStageShowPart{}},
+		Transitions: []contract.TaskStageShowTransition{{To: "plan", Stage: ptr("plan-feature"), Title: ptr("План фичи")}},
 	}
-	review := contract.StageShowOutput{
+	review := contract.TaskStageShowOutput{
 		Task: "SHOP-1", Node: "review", Round: 4,
-		Stage: contract.StageShowStage{Id: "review", Title: "Ревью", Executor: "reviewer", Exit: "замечания ревью записаны и разобраны",
-			Instruction: "Провести ревью.", Parts: []contract.StageShowPart{}},
-		Transitions: []contract.StageShowTransition{
+		Stage: contract.TaskStageShowStage{Id: "review", Title: "Ревью", Executor: "reviewer", Exit: "замечания ревью записаны и разобраны",
+			Instruction: "Провести ревью.", Parts: []contract.TaskStageShowPart{}},
+		Transitions: []contract.TaskStageShowTransition{
 			{To: "implementation", Stage: ptr("implementation"), Title: ptr("Реализация"), If: ptr("ревью выявило существенные замечания"),
 				MaxReturns: ptr(3), Returns: ptr(3), AllowedReturns: ptr(0)},
 			{To: "merge", Stage: ptr("merge"), Title: ptr("Слияние")},
@@ -42,7 +42,7 @@ func TestStageShowText(t *testing.T) {
 	checked.Stage.Checks, checked.Stage.Timeout = []string{"go vet ./...", `go test -run "Total|Sum" ./...`}, ptr("10m")
 	tests := []struct {
 		name       string
-		out        contract.StageShowOutput
+		out        contract.TaskStageShowOutput
 		cli, agent string
 	}{
 		{"first stage", branch, lines(
@@ -121,11 +121,11 @@ func TestStageCloseText(t *testing.T) {
 	show := []hint{hintOf(msg.HintStageShow)}
 	tests := []struct {
 		name       string
-		out        contract.StageCloseOutput
+		out        contract.TaskStageCloseOutput
 		x          stageCloseExtra
 		cli, agent string
 	}{
-		{"exited", contract.StageCloseOutput{Task: at("plan", "plan-feature", "План фичи", 1, 1),
+		{"exited", contract.TaskStageCloseOutput{Task: at("plan", "plan-feature", "План фичи", 1, 1),
 			Closed: closed("branch", "branch", 1, "plan", result("Создана ветка feature/shop-1"), "")},
 			stageCloseExtra{title: "Ветка", hints: show}, lines(
 				"Этап «Ветка» закрыт.",
@@ -135,7 +135,7 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
 				msg.Text(msg.ProgressLine, progress(1, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "gentry stage show"),
+				hintLineOf(msg.HintStageShow, "gentry task stage show"),
 			), lines(
 				"Этап «Ветка» закрыт.",
 				"Вид выхода: "+msg.Text(msg.ExitKindResult),
@@ -144,9 +144,9 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
 				msg.Text(msg.ProgressLine, progress(1, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "stage_show"),
+				hintLineOf(msg.HintStageShow, "task_stage_show"),
 			)},
-		{"exited by an artifact", contract.StageCloseOutput{Task: at("implementation", "implementation", "Реализация", 1, 2),
+		{"exited by an artifact", contract.TaskStageCloseOutput{Task: at("implementation", "implementation", "Реализация", 1, 2),
 			Closed: closed("plan", "plan-feature", 1, "implementation",
 				&contract.TaskPassExit{Kind: contract.TaskPassExitKindArtifact, Artifact: ptr("plan"), Text: "План согласован с оператором"}, "")},
 			stageCloseExtra{title: "План фичи", hints: show}, lines(
@@ -157,7 +157,7 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("Реализация", "implementation", 1)),
 				msg.Text(msg.ProgressLine, progress(2, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "gentry stage show"),
+				hintLineOf(msg.HintStageShow, "gentry task stage show"),
 			), lines(
 				"Этап «План фичи» закрыт.",
 				"Вид выхода: артефакт plan",
@@ -166,9 +166,9 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("Реализация", "implementation", 1)),
 				msg.Text(msg.ProgressLine, progress(2, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "stage_show"),
+				hintLineOf(msg.HintStageShow, "task_stage_show"),
 			)},
-		{"exited after checks", contract.StageCloseOutput{Task: at("review", "review", "Ревью", 1, 3),
+		{"exited after checks", contract.TaskStageCloseOutput{Task: at("review", "review", "Ревью", 1, 3),
 			Closed: withLogs(closed("implementation", "implementation", 1, "review", result("Тесты проходят"), ""),
 				"/work/checks/implementation-1-1.log", "/work/checks/implementation-1-2.log")},
 			stageCloseExtra{title: "Реализация", hints: show}, lines(
@@ -180,7 +180,7 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("Ревью", "review", 1)),
 				msg.Text(msg.ProgressLine, progress(3, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "gentry stage show"),
+				hintLineOf(msg.HintStageShow, "gentry task stage show"),
 			), lines(
 				"Этап «Реализация» закрыт.",
 				"Вид выхода: "+msg.Text(msg.ExitKindResult),
@@ -190,11 +190,11 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("Ревью", "review", 1)),
 				msg.Text(msg.ProgressLine, progress(3, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "stage_show"),
+				hintLineOf(msg.HintStageShow, "task_stage_show"),
 			)},
 		// A skip runs no command: the files of a refused exit are not checks
 		// passed.
-		{"skipped after checks", contract.StageCloseOutput{Task: at("review", "review", "Ревью", 1, 3),
+		{"skipped after checks", contract.TaskStageCloseOutput{Task: at("review", "review", "Ревью", 1, 3),
 			Closed: withLogs(closed("implementation", "implementation", 1, "review", nil, "Изменений нет"), "/work/checks/implementation-1-1.log")},
 			stageCloseExtra{title: "Реализация", hints: show}, lines(
 				msg.Text(msg.StageSkipped, "Реализация"),
@@ -203,7 +203,7 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("Ревью", "review", 1)),
 				msg.Text(msg.ProgressLine, progress(3, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "gentry stage show"),
+				hintLineOf(msg.HintStageShow, "gentry task stage show"),
 			), lines(
 				msg.Text(msg.StageSkipped, "Реализация"),
 				msg.Text(msg.ReasonLine, "Изменений нет"),
@@ -211,9 +211,9 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("Ревью", "review", 1)),
 				msg.Text(msg.ProgressLine, progress(3, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "stage_show"),
+				hintLineOf(msg.HintStageShow, "task_stage_show"),
 			)},
-		{"return", contract.StageCloseOutput{Task: at("implementation", "implementation", "Реализация", 2, 4),
+		{"return", contract.TaskStageCloseOutput{Task: at("implementation", "implementation", "Реализация", 2, 4),
 			Closed: closed("review", "review", 1, "implementation", result("Замечания записаны"), "Две ошибки в расчёте суммы")},
 			stageCloseExtra{title: "Ревью", hints: taskHints("SHOP-1", false, show...)}, lines(
 				"Этап «Ревью» закрыт.",
@@ -224,7 +224,7 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("Реализация", "implementation", 2)),
 				msg.Text(msg.ProgressLine, progress(4, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "gentry stage show --task SHOP-1"),
+				hintLineOf(msg.HintStageShow, "gentry task stage show --task SHOP-1"),
 			), lines(
 				"Этап «Ревью» закрыт.",
 				"Вид выхода: "+msg.Text(msg.ExitKindResult),
@@ -234,9 +234,9 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("Реализация", "implementation", 2)),
 				msg.Text(msg.ProgressLine, progress(4, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "stage_show (task: SHOP-1)"),
+				hintLineOf(msg.HintStageShow, "task_stage_show (task: SHOP-1)"),
 			)},
-		{"end of the scenario", contract.StageCloseOutput{Task: finished,
+		{"end of the scenario", contract.TaskStageCloseOutput{Task: finished,
 			Closed: closed("merge", "merge", 1, flow.Finish, result("Ветка влита в main"), "")},
 			stageCloseExtra{title: "Слияние", hints: []hint{hintOf(msg.HintTaskClose)}}, lines(
 				"Этап «Слияние» закрыт.",
@@ -255,7 +255,7 @@ func TestStageCloseText(t *testing.T) {
 				"",
 				hintLineOf(msg.HintTaskClose, "task_close"),
 			)},
-		{"skipped", contract.StageCloseOutput{Task: at("plan", "plan-feature", "План фичи", 1, 1),
+		{"skipped", contract.TaskStageCloseOutput{Task: at("plan", "plan-feature", "План фичи", 1, 1),
 			Closed: closed("branch", "branch", 1, "plan", nil, "Ветка уже создана оператором")},
 			stageCloseExtra{title: "Ветка", hints: show}, lines(
 				"Этап «Ветка» пропущен.",
@@ -264,7 +264,7 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
 				msg.Text(msg.ProgressLine, progress(1, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "gentry stage show"),
+				hintLineOf(msg.HintStageShow, "gentry task stage show"),
 			), lines(
 				"Этап «Ветка» пропущен.",
 				"Обоснование: Ветка уже создана оператором",
@@ -272,7 +272,7 @@ func TestStageCloseText(t *testing.T) {
 				msg.Text(msg.TaskStage, round("План фичи", "plan-feature", 1)),
 				msg.Text(msg.ProgressLine, progress(1, 5)),
 				"",
-				hintLineOf(msg.HintStageShow, "stage_show"),
+				hintLineOf(msg.HintStageShow, "task_stage_show"),
 			)},
 	}
 	for _, tt := range tests {
@@ -288,40 +288,40 @@ func TestCheckCloseText(t *testing.T) {
 		fromInput  bool
 		cli, agent string
 	}{
-		{"no reason of a skip", "stage skip", task.Close{Skip: true}, false, lines(
+		{"no reason of a skip", "task stage skip", task.Close{Skip: true}, false, lines(
 			"Не указано обоснование пропуска.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry stage skip --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task stage skip --help"),
 		), "Не указано обоснование пропуска.\n"},
-		{"no kind", "stage exit", task.Close{Text: "Т"}, false, lines(
+		{"no kind", "task stage exit", task.Close{Text: "Т"}, false, lines(
 			"Не указан вид выхода.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry stage exit --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task stage exit --help"),
 		), "Не указан вид выхода.\n"},
-		{"bad kind", "stage exit", task.Close{Kind: "fact", Text: "Т"}, false, lines(
+		{"bad kind", "task stage exit", task.Close{Kind: "fact", Text: "Т"}, false, lines(
 			msg.Text(msg.ErrFlagValueInvalid, "--kind", "fact"),
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry stage exit --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task stage exit --help"),
 		), msg.Text(msg.ErrFlagValueInvalid, "--kind", "fact") + "\n"},
-		{"bad kind in input", "stage exit", task.Close{Kind: "fact", Text: "Т"}, true, lines(
+		{"bad kind in input", "task stage exit", task.Close{Kind: "fact", Text: "Т"}, true, lines(
 			msg.Text(msg.ErrInputInvalid, "недопустимое значение поля «kind»"),
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry stage exit --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task stage exit --help"),
 		), msg.Text(msg.ErrToolFields, "недопустимое значение поля «kind»") + "\n"},
-		{"no text", "stage exit", task.Close{Kind: "result"}, false, lines(
+		{"no text", "task stage exit", task.Close{Kind: "result"}, false, lines(
 			"Не указан текст выхода.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry stage exit --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task stage exit --help"),
 		), "Не указан текст выхода.\n"},
-		{"no artifact", "stage exit", task.Close{Kind: "artifact", Text: "Т"}, false, lines(
+		{"no artifact", "task stage exit", task.Close{Kind: "artifact", Text: "Т"}, false, lines(
 			"Не указан артефакт выхода.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry stage exit --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task stage exit --help"),
 		), "Не указан артефакт выхода.\n"},
-		{"artifact of a result", "stage exit", task.Close{Kind: "result", Artifact: "plan", Text: "Т"}, false, lines(
+		{"artifact of a result", "task stage exit", task.Close{Kind: "result", Artifact: "plan", Text: "Т"}, false, lines(
 			"Артефакт указывается только у выхода вида artifact.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry stage exit --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task stage exit --help"),
 		), "Артефакт указывается только у выхода вида artifact.\n"},
 	}
 	for _, tt := range tests {
@@ -341,29 +341,29 @@ func TestStepsText(t *testing.T) {
 	exit := []hint{hintOf(msg.HintStageExit)}
 	tests := []struct {
 		name       string
-		out        contract.StepListOutput
+		out        contract.TaskStepListOutput
 		change     stepChange
 		hints      []hint
 		cli, agent string
 	}{
-		{"one added", contract.StepListOutput{Added: []int{1}, Steps: []contract.TaskStep{step(1, "Создать ветку", contract.TaskStepStatePlanned)}},
+		{"one added", contract.TaskStepListOutput{Added: []int{1}, Steps: []contract.TaskStep{step(1, "Создать ветку", contract.TaskStepStatePlanned)}},
 			stepChange{}, exit, lines(
 				"К этапу добавлено шагов: 1.",
 				"Номер шага: 1",
 			), ""},
-		{"two added", contract.StepListOutput{Added: []int{1, 2}, Steps: []contract.TaskStep{
+		{"two added", contract.TaskStepListOutput{Added: []int{1, 2}, Steps: []contract.TaskStep{
 			step(1, "Добавить расчёт суммы", contract.TaskStepStatePlanned), step(2, "Покрыть расчёт тестами", contract.TaskStepStatePlanned)}},
 			stepChange{}, exit, lines(
 				"К этапу добавлено шагов: 2.",
 				"Номера шагов: 1–2",
 			), ""},
-		{"done, one left", contract.StepListOutput{Steps: []contract.TaskStep{
+		{"done, one left", contract.TaskStepListOutput{Steps: []contract.TaskStep{
 			step(1, "Добавить расчёт суммы", contract.TaskStepStateDone), step(2, "Покрыть расчёт тестами", contract.TaskStepStatePlanned)}},
 			stepChange{step: 1, done: true}, exit, lines(
 				"Шаг 1 выполнен.",
 				"Осталось шагов: 1",
 			), ""},
-		{"done, none left", contract.StepListOutput{Steps: []contract.TaskStep{step(1, "Создать ветку", contract.TaskStepStateDone)}},
+		{"done, none left", contract.TaskStepListOutput{Steps: []contract.TaskStep{step(1, "Создать ветку", contract.TaskStepStateDone)}},
 			stepChange{step: 1, done: true}, exit, lines(
 				"Шаг 1 выполнен.",
 				"Осталось шагов: 0",
@@ -371,9 +371,9 @@ func TestStepsText(t *testing.T) {
 				"Шаг 1 выполнен.",
 				"Осталось шагов: 0",
 				"",
-				hintLineOf(msg.HintStageExit, "stage_exit (kind, text)"),
+				hintLineOf(msg.HintStageExit, "task_stage_exit (kind, text)"),
 			)},
-		{"dropped, outside the worktree", contract.StepListOutput{Steps: []contract.TaskStep{
+		{"dropped, outside the worktree", contract.TaskStepListOutput{Steps: []contract.TaskStep{
 			step(1, "Добавить расчёт суммы", contract.TaskStepStateDone), step(2, "Покрыть расчёт тестами", contract.TaskStepStateDropped)}},
 			stepChange{step: 2}, taskHints("SHOP-1", false, exit...), lines(
 				"Шаг 2 снят.",
@@ -382,7 +382,7 @@ func TestStepsText(t *testing.T) {
 				"Шаг 2 снят.",
 				"Осталось шагов: 0",
 				"",
-				hintLineOf(msg.HintStageExit, "stage_exit (kind, text, task: SHOP-1)"),
+				hintLineOf(msg.HintStageExit, "task_stage_exit (kind, text, task: SHOP-1)"),
 			)},
 	}
 	for _, tt := range tests {
@@ -394,14 +394,14 @@ func TestNoteText(t *testing.T) {
 	note := func(n int, node, stage, text string) contract.TaskNote {
 		return contract.TaskNote{Number: n, Node: node, Stage: stage, Round: 1, Text: text, Source: contract.TaskNoteSourceAgent, Added: shopTime}
 	}
-	wantText(t, "note add", func(p *page) {
-		noteAddText(p, contract.NoteAddOutput{Task: "SHOP-1", Note: note(1, "implementation", "implementation", "Проверить СБП")})
+	wantText(t, "task note add", func(p *page) {
+		noteAddText(p, contract.TaskNoteAddOutput{Task: "SHOP-1", Note: note(1, "implementation", "implementation", "Проверить СБП")})
 	}, "Заметка 1 добавлена.\n", "")
-	wantText(t, "note list, no notes", func(p *page) {
-		noteListText(p, contract.NoteListOutput{Task: "SHOP-1", Notes: []contract.TaskNote{}}, names{})
+	wantText(t, "task note list, no notes", func(p *page) {
+		noteListText(p, contract.TaskNoteListOutput{Task: "SHOP-1", Notes: []contract.TaskNote{}}, names{})
 	}, "У задачи нет заметок.\n", "")
-	wantText(t, "note list", func(p *page) {
-		noteListText(p, contract.NoteListOutput{Task: "SHOP-1", Notes: []contract.TaskNote{
+	wantText(t, "task note list", func(p *page) {
+		noteListText(p, contract.TaskNoteListOutput{Task: "SHOP-1", Notes: []contract.TaskNote{
 			note(1, "implementation", "implementation", "На ревью проверить, что возврат по СБП не задет"),
 			note(2, "merge", "merge", "Первая строка.\nВторая строка."),
 		}}, shopNames())
@@ -422,18 +422,18 @@ func TestArtifactSaveText(t *testing.T) {
 		Source: contract.TaskArtifactSourceAgent, Saved: shopTime}
 	tests := []struct {
 		name string
-		out  contract.ArtifactSaveOutput
+		out  contract.TaskArtifactSaveOutput
 		cli  string
 	}{
-		{"link", contract.ArtifactSaveOutput{Task: "SHOP-1", Artifact: link}, lines(
+		{"link", contract.TaskArtifactSaveOutput{Task: "SHOP-1", Artifact: link}, lines(
 			"Артефакт plan сохранён.",
 			"Адрес: https://claude.ai/code/artifact/plan",
 		)},
-		{"file", contract.ArtifactSaveOutput{Task: "SHOP-1", Artifact: file}, lines(
+		{"file", contract.TaskArtifactSaveOutput{Task: "SHOP-1", Artifact: file}, lines(
 			"Артефакт plan.md сохранён.",
 			"Файл: /home/dev/.gentry/state/shop/tasks/SHOP-1/artifacts/plan.md",
 		)},
-		{"replaced", contract.ArtifactSaveOutput{Task: "SHOP-1", Artifact: link, Replaced: true}, lines(
+		{"replaced", contract.TaskArtifactSaveOutput{Task: "SHOP-1", Artifact: link, Replaced: true}, lines(
 			"Артефакт plan заменён.",
 			"Адрес: https://claude.ai/code/artifact/plan",
 		)},
@@ -453,73 +453,73 @@ func TestWayFailureText(t *testing.T) {
 		here       bool
 		cli, agent string
 	}{
-		{"scenario passed", "stage show", &task.FinishedError{Task: "SHOP-1"}, true, lines(
+		{"scenario passed", "task stage show", &task.FinishedError{Task: "SHOP-1"}, true, lines(
 			"Сценарий задачи SHOP-1 пройден.",
 		), lines(
 			"Сценарий задачи SHOP-1 пройден.",
 			"",
 			hintLineOf(msg.HintTaskClose, "task_close"),
 		)},
-		{"no transition at a fork", "stage exit", &task.FieldError{Field: "to", Fork: true}, true, lines(
+		{"no transition at a fork", "task stage exit", &task.FieldError{Field: "to", Fork: true}, true, lines(
 			"На развилке не указан переход.",
 			"",
-			hintLineOf(msg.HintStageTransitions, "gentry stage show"),
+			hintLineOf(msg.HintStageTransitions, "gentry task stage show"),
 		), lines(
 			"На развилке не указан переход.",
 			"",
-			hintLineOf(msg.HintStageTransitions, "stage_show"),
+			hintLineOf(msg.HintStageTransitions, "task_stage_show"),
 		)},
-		{"no reason at a fork", "stage exit", &task.FieldError{Field: "reason", Fork: true}, true, lines(
+		{"no reason at a fork", "task stage exit", &task.FieldError{Field: "reason", Fork: true}, true, lines(
 			"На развилке не указано обоснование перехода.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry stage exit --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task stage exit --help"),
 		), "На развилке не указано обоснование перехода.\n"},
-		{"no transition", "stage exit", &task.TransitionError{Node: "review", To: "deploy", Stage: review, Transitions: []string{"implementation", "merge"}}, true, lines(
+		{"no transition", "task stage exit", &task.TransitionError{Node: "review", To: "deploy", Stage: review, Transitions: []string{"implementation", "merge"}}, true, lines(
 			"У этапа «Ревью» нет перехода к узлу deploy.",
 			"",
-			hintLineOf(msg.HintStageTransitions, "gentry stage show"),
+			hintLineOf(msg.HintStageTransitions, "gentry task stage show"),
 		), lines(
 			"У этапа «Ревью» нет перехода к узлу deploy.",
 			"",
-			hintLineOf(msg.HintStageTransitions, "stage_show"),
+			hintLineOf(msg.HintStageTransitions, "task_stage_show"),
 		)},
-		{"returns used up", "stage exit", &task.ReturnLimitError{Node: "review", To: "implementation", Limit: 3}, true, lines(
+		{"returns used up", "task stage exit", &task.ReturnLimitError{Node: "review", To: "implementation", Limit: 3}, true, lines(
 			"Возвраты к узлу implementation исчерпаны.",
 			"Возвратов: 3 из 3",
 			"",
-			hintLineOf(msg.HintOtherTransitions, "gentry stage show"),
-			hintLineOf(msg.HintAllowReturn, "gentry operator record --answer "+msg.Text(msg.ArgAnswer)+" --allow-return implementation"),
+			hintLineOf(msg.HintOtherTransitions, "gentry task stage show"),
+			hintLineOf(msg.HintAllowReturn, "gentry task decision add --answer "+msg.Text(msg.ArgAnswer)+" --allow-return implementation"),
 		), lines(
 			"Возвраты к узлу implementation исчерпаны.",
 			"Возвратов: 3 из 3",
 			"",
-			hintLineOf(msg.HintOtherTransitions, "stage_show"),
-			hintLineOf(msg.HintAllowReturn, "operator_record (answer, allow_return: implementation)"),
+			hintLineOf(msg.HintOtherTransitions, "task_stage_show"),
+			hintLineOf(msg.HintAllowReturn, "task_decision_add (answer, allow_return: implementation)"),
 		)},
-		{"no return", "operator record", &task.ReturnNotFoundError{Node: "branch", To: "plan", Stage: flow.Stage{ID: "branch", Title: "Ветка"}, Returns: []string{}}, true, lines(
+		{"no return", "task decision add", &task.ReturnNotFoundError{Node: "branch", To: "plan", Stage: flow.Stage{ID: "branch", Title: "Ветка"}, Returns: []string{}}, true, lines(
 			"У этапа «Ветка» нет возврата к узлу plan.",
 			"",
-			hintLineOf(msg.HintStageTransitions, "gentry stage show"),
+			hintLineOf(msg.HintStageTransitions, "gentry task stage show"),
 		), lines(
 			"У этапа «Ветка» нет возврата к узлу plan.",
 			"",
-			hintLineOf(msg.HintStageTransitions, "stage_show"),
+			hintLineOf(msg.HintStageTransitions, "task_stage_show"),
 		)},
-		{"no steps", "stage exit", &task.StepsEmptyError{Node: "branch", Stage: flow.Stage{ID: "branch", Title: "Ветка"}}, true, lines(
+		{"no steps", "task stage exit", &task.StepsEmptyError{Node: "branch", Stage: flow.Stage{ID: "branch", Title: "Ветка"}}, true, lines(
 			"У этапа «Ветка» нет шагов.",
 		), lines(
 			"У этапа «Ветка» нет шагов.",
 			"",
-			hintLineOf(msg.HintStepAdd, "step_add (steps)"),
+			hintLineOf(msg.HintStepAdd, "task_step_add (steps)"),
 		)},
-		{"no steps, outside the worktree", "stage exit", &task.StepsEmptyError{Node: "branch", Stage: flow.Stage{ID: "branch", Title: "Ветка"}}, false, lines(
+		{"no steps, outside the worktree", "task stage exit", &task.StepsEmptyError{Node: "branch", Stage: flow.Stage{ID: "branch", Title: "Ветка"}}, false, lines(
 			msg.Text(msg.ErrStepsEmpty, "Ветка"),
 		), lines(
 			msg.Text(msg.ErrStepsEmpty, "Ветка"),
 			"",
-			hintLineOf(msg.HintStepAdd, "step_add (steps, task: SHOP-1)"),
+			hintLineOf(msg.HintStepAdd, "task_step_add (steps, task: SHOP-1)"),
 		)},
-		{"steps not done", "stage exit", &task.StepsOpenError{Node: "implementation", Steps: steps}, true, lines(
+		{"steps not done", "task stage exit", &task.StepsOpenError{Node: "implementation", Steps: steps}, true, lines(
 			"У этапа есть невыполненные шаги.",
 			"",
 			"Невыполненные шаги:",
@@ -530,10 +530,10 @@ func TestWayFailureText(t *testing.T) {
 			"Невыполненные шаги:",
 			"  2. Покрыть расчёт тестами",
 			"",
-			hintLineOf(msg.HintStepDone, "step_done (step)"),
-			hintLineOf(msg.HintStepDrop, "step_drop (step, reason)"),
+			hintLineOf(msg.HintStepDone, "task_step_done (step)"),
+			hintLineOf(msg.HintStepDrop, "task_step_drop (step, reason)"),
 		)},
-		{"no step", "step done", &task.StepNotFoundError{Step: 7}, true, lines(
+		{"no step", "task step done", &task.StepNotFoundError{Step: 7}, true, lines(
 			"У этапа нет шага 7.",
 			"",
 			hintLineOf(msg.HintSteps, "gentry task show"),
@@ -542,7 +542,7 @@ func TestWayFailureText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintSteps, "task_show"),
 		)},
-		{"step done already", "step done", &task.StepClosedError{Step: 1, State: state.StepDone}, true, lines(
+		{"task step done already", "task step done", &task.StepClosedError{Step: 1, State: state.StepDone}, true, lines(
 			"Шаг 1 уже выполнен.",
 			"",
 			hintLineOf(msg.HintSteps, "gentry task show"),
@@ -551,7 +551,7 @@ func TestWayFailureText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintSteps, "task_show"),
 		)},
-		{"step dropped already", "step drop", &task.StepClosedError{Step: 2, State: state.StepDropped}, true, lines(
+		{"step dropped already", "task step drop", &task.StepClosedError{Step: 2, State: state.StepDropped}, true, lines(
 			"Шаг 2 уже снят.",
 			"",
 			hintLineOf(msg.HintSteps, "gentry task show"),
@@ -560,16 +560,16 @@ func TestWayFailureText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintSteps, "task_show"),
 		)},
-		{"no artifact", "stage exit", &task.ArtifactNotFoundError{Name: "plan"}, true, lines(
+		{"no artifact", "task stage exit", &task.ArtifactNotFoundError{Name: "plan"}, true, lines(
 			"Артефакт plan не сохранён.",
 		), lines(
 			"Артефакт plan не сохранён.",
 			"",
-			hintLineOf(msg.HintArtifactSave, "artifact_save (name: plan, file)"),
+			hintLineOf(msg.HintArtifactSave, "task_artifact_save (name: plan, file)"),
 		)},
 		// The output of a command of checks follows the lines of Gentry as
 		// it is; the refusals of checks have no hint.
-		{"check failed", "stage exit", &task.ChecksFailedError{Node: "implementation", Command: "go test ./...", Code: 1,
+		{"check failed", "task stage exit", &task.ChecksFailedError{Node: "implementation", Command: "go test ./...", Code: 1,
 			Log: "/work/checks/implementation-1-1.log", Output: "--- FAIL: TestTotal (0.00s)\n    cart_test.go:7: Total = 5, want 6\nFAIL"}, true, lines(
 			"Команда проверки завершилась с ошибкой: go test ./...",
 			"Код выхода: 1",
@@ -579,13 +579,13 @@ func TestWayFailureText(t *testing.T) {
 			"    cart_test.go:7: Total = 5, want 6",
 			"FAIL",
 		), ""},
-		{"check failed without output", "stage exit", &task.ChecksFailedError{Node: "implementation", Command: "go vet ./...", Code: 2,
+		{"check failed without output", "task stage exit", &task.ChecksFailedError{Node: "implementation", Command: "go vet ./...", Code: 2,
 			Log: "/work/checks/implementation-1-1.log"}, true, lines(
 			msg.Text(msg.ErrCheckFailed, "go vet ./..."),
 			msg.Text(msg.CheckExitCodeLine, 2),
 			msg.Text(msg.CheckLogLine, "/work/checks/implementation-1-1.log"),
 		), ""},
-		{"checks timed out", "stage exit", &task.ChecksTimeoutError{Node: "implementation", Timeout: "20m", Command: "go test ./...",
+		{"checks timed out", "task stage exit", &task.ChecksTimeoutError{Node: "implementation", Timeout: "20m", Command: "go test ./...",
 			Log: "/work/checks/implementation-1-2.log", Output: "=== RUN   TestTotal"}, true, lines(
 			"Проверки этапа не завершились за 20m.",
 			"Команда: go test ./...",
@@ -593,26 +593,26 @@ func TestWayFailureText(t *testing.T) {
 			"",
 			"=== RUN   TestTotal",
 		), ""},
-		{"check program not found", "stage exit", &task.CheckProgramError{Node: "implementation", Program: "golangci-lint",
+		{"check program not found", "task stage exit", &task.CheckProgramError{Node: "implementation", Program: "golangci-lint",
 			Command: "golangci-lint run"}, true, lines(
 			"Программа команды проверки не найдена: golangci-lint",
 			msg.Text(msg.CheckCommandLine, "golangci-lint run"),
 		), ""},
 		// The reason is what the system says, as it says it.
-		{"check program not started", "stage exit", &task.CheckStartError{Node: "implementation", Program: "./gradlew",
+		{"check program not started", "task stage exit", &task.CheckStartError{Node: "implementation", Program: "./gradlew",
 			Command: "./gradlew test", Reason: "permission denied"}, true, lines(
 			"Программа команды проверки не запустилась: ./gradlew",
 			msg.Text(msg.CheckCommandLine, "./gradlew test"),
 			"Причина: permission denied",
 		), ""},
-		{"file too large", "artifact save", &task.FileError{Path: "big.bin", Reason: task.FileTooLarge}, false, lines(
+		{"file too large", "task artifact save", &task.FileError{Path: "big.bin", Reason: task.FileTooLarge}, false, lines(
 			"Файл артефакта больше 10 МБ: big.bin",
 		), lines(
 			"Файл артефакта больше 10 МБ: big.bin",
 			"",
-			hintLineOf(msg.HintArtifactLink, "artifact_save (name, url, task: SHOP-1)"),
+			hintLineOf(msg.HintArtifactLink, "task_artifact_save (name, url, task: SHOP-1)"),
 		)},
-		{"no file", "artifact save", &task.FileError{Path: "plan.md", Reason: task.FileNotFound}, true, lines(
+		{"no file", "task artifact save", &task.FileError{Path: "plan.md", Reason: task.FileNotFound}, true, lines(
 			"Файл артефакта не найден: plan.md",
 			"",
 			msg.Text(msg.HintArtifactFile),
@@ -635,22 +635,22 @@ func TestWayRefusalText(t *testing.T) {
 		args       []string
 		cli, agent string
 	}{
-		{"no step", "step add", nil, lines(
+		{"no step", "task step add", nil, lines(
 			"Не указан ни один шаг.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry step add --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task step add --help"),
 		), "Не указан ни один шаг.\n"},
-		{"long step", "step add", []string{long}, lines(
+		{"long step", "task step add", []string{long}, lines(
 			"Шаг длиннее 120 знаков.",
 			"",
 			msg.Text(msg.HintStep),
 		), ""},
-		{"step of two lines", "step add", []string{"А\nБ"}, lines(
+		{"step of two lines", "task step add", []string{"А\nБ"}, lines(
 			"Шаг состоит из нескольких строк.",
 			"",
 			msg.Text(msg.HintStep),
 		), ""},
-		{"step number", "step done", []string{"первый"}, lines(
+		{"step number", "task step done", []string{"первый"}, lines(
 			"Недопустимый номер шага: «первый».",
 			"",
 			hintLineOf(msg.HintSteps, "gentry task show"),
@@ -659,37 +659,37 @@ func TestWayRefusalText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintSteps, "task_show"),
 		)},
-		{"no step number", "step done", nil, lines(
+		{"no step number", "task step done", nil, lines(
 			"Не указан номер шага.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry step done --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task step done --help"),
 		), "Не указан номер шага.\n"},
-		{"no reason of a drop", "step drop", []string{"2"}, lines(
+		{"no reason of a drop", "task step drop", []string{"2"}, lines(
 			"Не указано обоснование снятия шага.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry step drop --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task step drop --help"),
 		), "Не указано обоснование снятия шага.\n"},
-		{"no note", "note add", nil, lines(
+		{"no note", "task note add", nil, lines(
 			"Не указан текст заметки.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry note add --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task note add --help"),
 		), "Не указан текст заметки.\n"},
-		{"no artifact name", "artifact save", []string{"--url", "https://example.com"}, lines(
+		{"no artifact name", "task artifact save", []string{"--url", "https://example.com"}, lines(
 			"Не указано имя артефакта.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry artifact save --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task artifact save --help"),
 		), "Не указано имя артефакта.\n"},
-		{"bad artifact name", "artifact save", []string{"план", "--url", "https://example.com"}, lines(
+		{"bad artifact name", "task artifact save", []string{"план", "--url", "https://example.com"}, lines(
 			"Недопустимое имя артефакта: «план».",
 			"",
 			msg.Text(msg.HintArtifactName),
 		), ""},
-		{"no file or address", "artifact save", []string{"plan"}, lines(
+		{"no file or address", "task artifact save", []string{"plan"}, lines(
 			"Не указан файл или адрес артефакта.",
 			"",
-			hintLineOf(msg.HintCommandHelp, "gentry artifact save --help"),
+			hintLineOf(msg.HintCommandHelp, "gentry task artifact save --help"),
 		), "Не указан файл или адрес артефакта.\n"},
-		{"bad address", "artifact save", []string{"plan", "--url", "claude.ai/code/artifact/1"}, lines(
+		{"bad address", "task artifact save", []string{"plan", "--url", "claude.ai/code/artifact/1"}, lines(
 			"Недопустимый адрес артефакта: «claude.ai/code/artifact/1».",
 			"",
 			msg.Text(msg.HintArtifactURL),

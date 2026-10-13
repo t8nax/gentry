@@ -219,17 +219,17 @@ func TestAgentsSync(t *testing.T) {
 		[]string{shop, clitest.None, "reviewer", clitest.None},
 		[]string{fix, "SHOP-1", "reviewer", clitest.None},
 		[]string{gone, clitest.None, clitest.None, missing},
-	), "", "agents", "sync")
+	), "", "agents", "deploy")
 
 	os.Remove(reviewerFile(shop))
-	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.AgentsSynced, "shop"), nextSession, "")+clitest.Table(header,
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.AgentsDeployed, "shop"), nextSession, "")+clitest.Table(header,
 		[]string{shop, clitest.None, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
 		[]string{fix, "SHOP-1", "reviewer", clitest.None},
 		[]string{gone, clitest.None, clitest.None, missing},
-	), "", "agents", "sync")
+	), "", "agents", "deploy")
 
-	out := clitest.WantJSON(t, contract.ExitOK, "schemas/agents-sync.json", "agents", "sync")
-	var res contract.AgentsSyncOutput
+	out := clitest.WantJSON(t, contract.ExitOK, "schemas/agents-deploy.json", "agents", "deploy")
+	var res contract.AgentsDeployOutput
 	json.Unmarshal([]byte(out), &res)
 	if res.Project != "shop" || res.Changed || len(res.Worktrees) != 3 || res.Worktrees[1].Task == nil || *res.Worktrees[1].Task != "SHOP-1" {
 		t.Errorf("JSON: %s", out)
@@ -238,7 +238,7 @@ func TestAgentsSync(t *testing.T) {
 	// A conflict in any worktree refuses the command and changes nothing.
 	os.Remove(reviewerFile(shop))
 	os.WriteFile(reviewerFile(fix), []byte("личный\n"), 0o644)
-	if code, c := clitest.ErrorCode(t, "agents", "sync"); code != contract.ExitError || c != contract.CodeAgentsConflict {
+	if code, c := clitest.ErrorCode(t, "agents", "deploy"); code != contract.ExitError || c != contract.CodeAgentsConflict {
 		t.Errorf("conflict: exit code %d, code %q", code, c)
 	}
 	if clitest.FileExists(reviewerFile(shop)) {
@@ -251,10 +251,10 @@ func TestAgentsSync(t *testing.T) {
 func passScenario(t *testing.T) {
 	t.Helper()
 	for range 3 {
-		clitest.MustRun(t, "stage", "skip", "--reason", "Не нужен")
+		clitest.MustRun(t, "task", "stage", "skip", "--reason", "Не нужен")
 	}
-	clitest.MustRun(t, "stage", "skip", "--reason", "Не нужен", "--to", "merge")
-	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
+	clitest.MustRun(t, "task", "stage", "skip", "--reason", "Не нужен", "--to", "merge")
+	clitest.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
 }
 
 func TestCloseAndFlowApplyWithTask(t *testing.T) {

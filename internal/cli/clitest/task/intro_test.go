@@ -87,16 +87,16 @@ func TestIntroWithTask(t *testing.T) {
 	}
 
 	// Dropped steps do not count.
-	clitest.MustRun(t, "step", "add", "Создать ветку", "Проверить имя", "Удалить старую ветку")
-	clitest.MustRun(t, "step", "done", "1")
-	clitest.MustRun(t, "step", "drop", "3", "--reason", "Старой ветки нет")
+	clitest.MustRun(t, "task", "step", "add", "Создать ветку", "Проверить имя", "Удалить старую ветку")
+	clitest.MustRun(t, "task", "step", "done", "1")
+	clitest.MustRun(t, "task", "step", "drop", "3", "--reason", "Старой ветки нет")
 	want = head + clitest.Lines(branch, msg.Text(msg.IntroSteps, 1, 2), progress(0)) + tail
 	if got := introIn(t, fix); got != want {
 		t.Errorf("stage with steps:\n%s\nwant:\n%s", got, want)
 	}
 
 	// A passed scenario has no stage and no steps.
-	clitest.MustRun(t, "step", "done", "2")
+	clitest.MustRun(t, "task", "step", "done", "2")
 	passScenario(t)
 	want = head + clitest.Lines(msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)), progress(5)) + tail
 	if got := introIn(t, fix); got != want {

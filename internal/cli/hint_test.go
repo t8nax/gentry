@@ -20,26 +20,26 @@ func TestHintChannels(t *testing.T) {
 		h          hint
 		cli, agent string // empty if the channel has no such hint
 	}{
-		{hintOf(msg.HintStageExit), "", hintLineOf(msg.HintStageExit, "stage_exit (kind, text)")},
+		{hintOf(msg.HintStageExit), "", hintLineOf(msg.HintStageExit, "task_stage_exit (kind, text)")},
 		{hintOf(msg.HintTaskShow).forTask("SHOP-1"),
 			hintLineOf(msg.HintTaskShow, "gentry task show SHOP-1"), hintLineOf(msg.HintTaskShow, "task_show (task: SHOP-1)")},
 		{hintOf(msg.HintStageShow).forTask("SHOP-1"),
-			hintLineOf(msg.HintStageShow, "gentry stage show --task SHOP-1"), hintLineOf(msg.HintStageShow, "stage_show (task: SHOP-1)")},
+			hintLineOf(msg.HintStageShow, "gentry task stage show --task SHOP-1"), hintLineOf(msg.HintStageShow, "task_stage_show (task: SHOP-1)")},
 		{hintOf(msg.HintStatement).forTask("SHOP-1"),
 			hintLineOf(msg.HintStatement, "gentry task show SHOP-1 --statement"), hintLineOf(msg.HintStatement, "task_show (task: SHOP-1, statement)")},
 		{hintOf(msg.HintAttempt),
-			hintLineOf(msg.HintAttempt, "gentry task attempts "+msg.Text(msg.ArgAttempt)), hintLineOf(msg.HintAttempt, "task_attempts (attempt)")},
+			hintLineOf(msg.HintAttempt, "gentry task attempt show "+msg.Text(msg.ArgAttempt)), hintLineOf(msg.HintAttempt, "task_attempt_show (attempt)")},
 		{hintOf(msg.HintAttempt).forTask("SHOP-1"),
-			hintLineOf(msg.HintAttempt, "gentry task attempts SHOP-1 "+msg.Text(msg.ArgAttempt)), hintLineOf(msg.HintAttempt, "task_attempts (task: SHOP-1, attempt)")},
-		{hintOf(msg.HintStepDrop), "", hintLineOf(msg.HintStepDrop, "step_drop (step, reason)")},
+			hintLineOf(msg.HintAttempt, "gentry task attempt show "+msg.Text(msg.ArgAttempt)+" --task SHOP-1"), hintLineOf(msg.HintAttempt, "task_attempt_show (attempt, task: SHOP-1)")},
+		{hintOf(msg.HintStepDrop), "", hintLineOf(msg.HintStepDrop, "task_step_drop (step, reason)")},
 		{hintOf(msg.HintAllowReturn).set("allow_return", "plan"),
-			hintLineOf(msg.HintAllowReturn, "gentry operator record --answer "+msg.Text(msg.ArgAnswer)+" --allow-return plan"),
-			hintLineOf(msg.HintAllowReturn, "operator_record (answer, allow_return: plan)")},
+			hintLineOf(msg.HintAllowReturn, "gentry task decision add --answer "+msg.Text(msg.ArgAnswer)+" --allow-return plan"),
+			hintLineOf(msg.HintAllowReturn, "task_decision_add (answer, allow_return: plan)")},
 		{hintOf(msg.HintFlowShowDraft), hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft"), hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)")},
-		{hintOf(msg.HintFlowActive), hintLineOf(msg.HintFlowActive, "gentry flow show --active"), hintLineOf(msg.HintFlowActive, "flow_show (active)")},
+		{hintOf(msg.HintFlowActive), hintLineOf(msg.HintFlowActive, "gentry flow show"), hintLineOf(msg.HintFlowActive, "flow_show")},
 		{hintOf(msg.HintTaskClose), "", hintLineOf(msg.HintTaskClose, "task_close")},
 		{hintOf(msg.HintTaskClose).forTask("SHOP-1"), "", hintLineOf(msg.HintTaskClose, "task_close (task: SHOP-1)")},
-		{helpHint(msg.HintCommandHelp, "step add"), hintLineOf(msg.HintCommandHelp, "gentry step add --help"), ""},
+		{helpHint(msg.HintCommandHelp, "task step add"), hintLineOf(msg.HintCommandHelp, "gentry task step add --help"), ""},
 		{helpHint(msg.HintActions, "task"), hintLineOf(msg.HintActions, "gentry task --help"), ""},
 		{helpHint(msg.HintUnknownCommand, ""), hintLineOf(msg.HintUnknownCommand, "gentry --help"), ""},
 		{hintOf(msg.HintStateNewer), msg.Text(msg.HintStateNewer), msg.Text(msg.HintStateNewerAgent)},
@@ -61,7 +61,7 @@ func TestHintChannels(t *testing.T) {
 // types it, a command only the agent runs too.
 func TestHintJSON(t *testing.T) {
 	got := renderHints([]hint{hintOf(msg.HintStageExit), helpHint(msg.HintCommandHelp, "task close")}, jsonChannel)
-	want := []string{hintLineOf(msg.HintStageExit, "gentry stage exit --kind "+msg.Text(msg.ArgKind)+" --text "+msg.Text(msg.ArgText)), hintLineOf(msg.HintCommandHelp, "gentry task close --help")}
+	want := []string{hintLineOf(msg.HintStageExit, "gentry task stage exit --kind "+msg.Text(msg.ArgKind)+" --text "+msg.Text(msg.ArgText)), hintLineOf(msg.HintCommandHelp, "gentry task close --help")}
 	if !slices.Equal(got, want) {
 		t.Errorf("%q, want %q", got, want)
 	}
@@ -73,8 +73,8 @@ func TestHintWords(t *testing.T) {
 	defer msg.Override(msg.HintStageShow, "Прочитать текущий этап")()
 	h := hintOf(msg.HintStageShow).forTask("SHOP-1")
 	for ch, want := range map[channel]string{
-		cliChannel:   "Прочитать текущий этап: gentry stage show --task SHOP-1",
-		agentChannel: "Прочитать текущий этап: stage_show (task: SHOP-1)",
+		cliChannel:   "Прочитать текущий этап: gentry task stage show --task SHOP-1",
+		agentChannel: "Прочитать текущий этап: task_stage_show (task: SHOP-1)",
 	} {
 		if got, _ := h.render(ch); got != want {
 			t.Errorf("channel %d: %q, want %q", ch, got, want)

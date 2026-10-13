@@ -22,7 +22,7 @@ var skipFields = textFields("reason", "to")
 var exitKinds = []string{state.ExitArtifact, state.ExitResult, state.ExitNegative}
 
 func runStageShow(args []string, env Env) int {
-	f := newFlags("stage show")
+	f := newFlags("task stage show")
 	key := f.String("task")
 	if code, done := f.parse(args, env); done {
 		return code
@@ -47,23 +47,23 @@ func runStageShow(args []string, env Env) int {
 	}
 	sv, err := task.StageOf(v, decisions)
 	if err != nil {
-		return w.fail(env, wayFailure("stage show", err))
+		return w.fail(env, wayFailure("task stage show", err))
 	}
 
-	out := contract.StageShowOutput{
+	out := contract.TaskStageShowOutput{
 		Task: v.Key(), Node: sv.Node.ID, Round: v.Round,
-		Stage: contract.StageShowStage{
+		Stage: contract.TaskStageShowStage{
 			Id: sv.Stage.ID, Title: sv.Stage.Title, Executor: sv.Stage.Executor, Exit: sv.Stage.Exit,
-			Instruction: sv.Stage.Instruction, Parts: []contract.StageShowPart{},
+			Instruction: sv.Stage.Instruction, Parts: []contract.TaskStageShowPart{},
 		},
-		Transitions: []contract.StageShowTransition{},
+		Transitions: []contract.TaskStageShowTransition{},
 	}
 	out.Stage.Checks, out.Stage.Timeout = checksJSON(sv.Stage)
 	for _, p := range sv.Parts {
-		out.Stage.Parts = append(out.Stage.Parts, contract.StageShowPart{Id: p.ID, Text: p.Text})
+		out.Stage.Parts = append(out.Stage.Parts, contract.TaskStageShowPart{Id: p.ID, Text: p.Text})
 	}
 	for _, t := range sv.Transitions {
-		ct := contract.StageShowTransition{To: t.To}
+		ct := contract.TaskStageShowTransition{To: t.To}
 		if t.To != flow.Finish {
 			id, title := t.Stage.ID, t.Stage.Title
 			ct.Stage, ct.Title = &id, &title
@@ -80,13 +80,13 @@ func runStageShow(args []string, env Env) int {
 	}
 	// The line of parts names every part the stage includes, as its file does.
 	include := sv.Stage.Include
-	return emit(env, out, func(p *page, out contract.StageShowOutput) { stageShowText(p, out, include) })
+	return emit(env, out, func(p *page, out contract.TaskStageShowOutput) { stageShowText(p, out, include) })
 }
 
 // stageShowText prints the current stage of a task: its fields, the
 // transitions, the instruction and the texts of its parts; include names the
 // parts the stage includes.
-func stageShowText(p *page, out contract.StageShowOutput, include []string) {
+func stageShowText(p *page, out contract.TaskStageShowOutput, include []string) {
 	b := &p.Builder
 	st := out.Stage
 	fmt.Fprintln(b, msg.Text(msg.FlowStage, stageRound(st.Title, st.Id, out.Round, false)))
@@ -121,17 +121,17 @@ func stageShowText(p *page, out contract.StageShowOutput, include []string) {
 }
 
 func runStageExit(args []string, env Env) int {
-	return runStageClose("stage exit", args, env)
+	return runStageClose("task stage exit", args, env)
 }
 
 func runStageSkip(args []string, env Env) int {
-	return runStageClose("stage skip", args, env)
+	return runStageClose("task stage skip", args, env)
 }
 
 // runStageClose closes the current stage of a task: by an exit for stage
 // exit, by a skip for stage skip.
 func runStageClose(cmd string, args []string, env Env) int {
-	skip := cmd == "stage skip"
+	skip := cmd == "task stage skip"
 	fields := exitFields
 	if skip {
 		fields = skipFields
@@ -173,12 +173,12 @@ func runStageClose(cmd string, args []string, env Env) int {
 		return w.fail(env, *bad)
 	}
 
-	out := contract.StageCloseOutput{Task: taskJSON(v), Closed: passJSON(res.Pass, task.CheckLogs(res.Task, res.Pass))}
+	out := contract.TaskStageCloseOutput{Task: taskJSON(v), Closed: passJSON(res.Pass, task.CheckLogs(res.Task, res.Pass))}
 	x := stageCloseExtra{title: v.StageTitleOf(res.Pass.Stage), hints: w.hints(hintOf(msg.HintStageShow))}
 	if v.Finished {
 		x.hints = w.hints(hintOf(msg.HintTaskClose))
 	}
-	return emit(env, out, func(p *page, out contract.StageCloseOutput) { stageCloseText(p, out, x) })
+	return emit(env, out, func(p *page, out contract.TaskStageCloseOutput) { stageCloseText(p, out, x) })
 }
 
 // stageCloseExtra is what the text of stage exit and stage skip has apart
@@ -191,7 +191,7 @@ type stageCloseExtra struct {
 
 // stageCloseText prints the stage closed: by its exit or its skip, the
 // transition, the stage the task is at now and its progress.
-func stageCloseText(p *page, out contract.StageCloseOutput, x stageCloseExtra) {
+func stageCloseText(p *page, out contract.TaskStageCloseOutput, x stageCloseExtra) {
 	c := out.Closed
 	title := stageName(flow.Stage{ID: c.Stage, Title: x.title})
 	reason := ""

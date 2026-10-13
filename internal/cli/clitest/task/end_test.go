@@ -21,10 +21,10 @@ import (
 func passScenario(t *testing.T) {
 	t.Helper()
 	for range 3 {
-		clitest.MustRun(t, "stage", "skip", "--reason", "Не нужен")
+		clitest.MustRun(t, "task", "stage", "skip", "--reason", "Не нужен")
 	}
-	clitest.MustRun(t, "stage", "skip", "--reason", "Не нужен", "--to", "merge")
-	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
+	clitest.MustRun(t, "task", "stage", "skip", "--reason", "Не нужен", "--to", "merge")
+	clitest.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
 }
 
 // lastEvent returns the type and the data of the last event of the journal.
@@ -173,7 +173,7 @@ func TestTaskCancel(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
-	clitest.MustRun(t, "note", "add", "Промокоды в таблице promo.")
+	clitest.MustRun(t, "task", "note", "add", "Промокоды в таблице promo.")
 
 	clitest.WantRun(t, contract.ExitOK, clitest.Lines(
 		msg.Text(msg.TaskCancelled, "SHOP-1"),
@@ -257,8 +257,8 @@ func TestTaskCancel(t *testing.T) {
 	}
 	// The times of the cancelling are read back as written.
 	show := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "SHOP-3")
-	attempts := clitest.WantJSON(t, contract.ExitOK, "schemas/task-attempts.json", "task", "attempts", "SHOP-3")
-	clitest.WantSameTime(t, "the time of cancelling in task cancel, task show and task attempts --json",
+	attempts := clitest.WantJSON(t, contract.ExitOK, "schemas/task-attempt-list.json", "task", "attempt", "list", "--task", "SHOP-3")
+	clitest.WantSameTime(t, "the time of cancelling in task cancel, task show and task attempt list --json",
 		clitest.JSONAt(t, out, "task.ended.time"), clitest.JSONAt(t, show, "task.ended.time"), clitest.JSONAt(t, attempts, "attempts.0.ended.time"))
 	clitest.WantSameTime(t, "the time of taking in task cancel and task attempts --json",
 		clitest.JSONAt(t, out, "task.taken"), clitest.JSONAt(t, attempts, "attempts.0.taken"))
@@ -283,15 +283,15 @@ func TestEndedRefusesWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	writes := [][]string{
-		{"stage", "exit", "--kind", "result", "--text", "Готово"},
-		{"stage", "skip", "--reason", "Не нужен"},
-		{"step", "add", "Шаг"},
-		{"step", "done", "1"},
-		{"step", "drop", "1", "--reason", "Не нужен"},
-		{"note", "add", "Проверить логи."},
-		{"artifact", "save", "plan.md", "--file", file},
-		{"artifact", "save", "plan", "--url", "https://example.com/plan"},
-		{"operator", "record", "--answer", "Да."},
+		{"task", "stage", "exit", "--kind", "result", "--text", "Готово"},
+		{"task", "stage", "skip", "--reason", "Не нужен"},
+		{"task", "step", "add", "Шаг"},
+		{"task", "step", "done", "1"},
+		{"task", "step", "drop", "1", "--reason", "Не нужен"},
+		{"task", "note", "add", "Проверить логи."},
+		{"task", "artifact", "save", "plan.md", "--file", file},
+		{"task", "artifact", "save", "plan", "--url", "https://example.com/plan"},
+		{"task", "decision", "add", "--answer", "Да."},
 	}
 	for _, task := range []struct{ key, text string }{
 		{"SHOP-1", taskEnded("SHOP-1")},
@@ -303,11 +303,11 @@ func TestEndedRefusesWrites(t *testing.T) {
 				t.Errorf("%v of %s: exit code %d, code %s", w, task.key, code, c)
 			}
 		}
-		clitest.MustRun(t, "note", "list", "--task", task.key)
+		clitest.MustRun(t, "task", "note", "list", "--task", task.key)
 	}
 	// A cancelled task shows the stage it stopped at; a closed one has none.
-	clitest.MustRun(t, "stage", "show", "--task", "SHOP-2")
-	clitest.WantRun(t, contract.ExitError, "", taskEnded("SHOP-1"), "stage", "show", "--task", "SHOP-1")
+	clitest.MustRun(t, "task", "stage", "show", "--task", "SHOP-2")
+	clitest.WantRun(t, contract.ExitError, "", taskEnded("SHOP-1"), "task", "stage", "show", "--task", "SHOP-1")
 	if clitest.FileExists(filepath.Join(os.Getenv("GENTRY_HOME"), "state", "shop", "tasks", "SHOP-2", "artifacts")) {
 		t.Error("the artifact of a cancelled task is saved")
 	}
@@ -317,16 +317,16 @@ func TestTaskTakeAgain(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
-	clitest.MustRun(t, "note", "add", "Промокоды в таблице promo.")
-	clitest.MustRun(t, "operator", "record", "--answer", "Только для карт.")
+	clitest.MustRun(t, "task", "note", "add", "Промокоды в таблице promo.")
+	clitest.MustRun(t, "task", "decision", "add", "--answer", "Только для карт.")
 	plan := filepath.Join(t.TempDir(), "plan.md")
 	if err := os.WriteFile(plan, []byte("План 1"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clitest.MustRun(t, "artifact", "save", "plan.md", "--file", plan)
-	clitest.MustRun(t, "step", "add", "Создать ветку")
-	clitest.MustRun(t, "step", "done", "1")
-	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Ветка создана")
+	clitest.MustRun(t, "task", "artifact", "save", "plan.md", "--file", plan)
+	clitest.MustRun(t, "task", "step", "add", "Создать ветку")
+	clitest.MustRun(t, "task", "step", "done", "1")
+	clitest.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Ветка создана")
 	clitest.MustRun(t, "task", "cancel", "--reason", "Отложено.")
 
 	// Taken anew in the main worktree by the agent: the title and the
@@ -343,7 +343,7 @@ func TestTaskTakeAgain(t *testing.T) {
 		msg.Text(msg.TaskWorktree, shop),
 		"",
 		cli.HintText(msg.HintTaskShow),
-	), "", "task", "take", "--task", "shop-1", "--scenario", "bug")
+	), "", "task", "take", "shop-1", "--scenario", "bug")
 	t.Setenv(caller.SessionEnv, "")
 	typ, data := lastEvent(t)
 	clitest.Validate(t, "schemas/events/task.taken.json", data)
@@ -373,7 +373,7 @@ func TestTaskTakeAgain(t *testing.T) {
 	if err := os.WriteFile(plan, []byte("План 2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clitest.MustRun(t, "artifact", "save", "plan.md", "--file", plan)
+	clitest.MustRun(t, "task", "artifact", "save", "plan.md", "--file", plan)
 	tasks := filepath.Join(os.Getenv("GENTRY_HOME"), "state", "shop", "tasks", "SHOP-1")
 	for p, want := range map[string]string{
 		filepath.Join(tasks, "artifacts", "plan.md"):                  "План 1",
@@ -386,7 +386,7 @@ func TestTaskTakeAgain(t *testing.T) {
 
 	// The attempts.
 	t.Chdir(filepath.Dir(shop))
-	_, stdout, _ = clitest.Run("task", "attempts", "SHOP-1")
+	_, stdout, _ = clitest.Run("task", "attempt", "list", "--task", "SHOP-1")
 	// Any time of the width of the times printed: the table is compared masked.
 	const at = "2026-01-01 00:00"
 	want := clitest.Table([]string{msg.Text(msg.ColAttempt), msg.Text(msg.ColState), msg.Text(msg.ColScenario),
@@ -396,9 +396,9 @@ func TestTaskTakeAgain(t *testing.T) {
 	if clitest.Masked(stdout) != clitest.Masked(want) {
 		t.Errorf("task attempts:\n%s\nwant:\n%s", stdout, want)
 	}
-	attempts := clitest.WantJSON(t, contract.ExitOK, "schemas/task-attempts.json", "task", "attempts", "SHOP-1")
-	clitest.WantSameTime(t, "the time of taking the second attempt in task show and task attempts --json", taken, clitest.JSONAt(t, attempts, "attempts.1.taken"))
-	_, stdout, _ = clitest.Run("task", "attempts", "SHOP-1", "1")
+	attempts := clitest.WantJSON(t, contract.ExitOK, "schemas/task-attempt-list.json", "task", "attempt", "list", "--task", "SHOP-1")
+	clitest.WantSameTime(t, "the time of taking the second attempt in task show and task attempt list --json", taken, clitest.JSONAt(t, attempts, "attempts.1.taken"))
+	_, stdout, _ = clitest.Run("task", "attempt", "show", "1", "--task", "SHOP-1")
 	for _, part := range []string{
 		clitest.Lines(msg.Text(msg.AttemptHeading, "SHOP-1", 1, "Частичный возврат по карте"), "", msg.Text(msg.TaskProject, "shop"),
 			msg.Text(msg.TaskState, msg.Text(msg.TaskStateCancelled))),
@@ -411,16 +411,16 @@ func TestTaskTakeAgain(t *testing.T) {
 			"  "+msg.Text(msg.DecisionHeading, 1, clitest.Round("Ветка", "branch", 1), msg.Text(msg.TaskSourceOperator))),
 	} {
 		if !strings.Contains(stdout, part) {
-			t.Errorf("task attempts SHOP-1 1 has no %q:\n%s", part, stdout)
+			t.Errorf("task attempt show 1 --task SHOP-1 has no %q:\n%s", part, stdout)
 		}
 	}
 	if strings.Contains(stdout, ": gentry ") {
-		t.Errorf("task attempts SHOP-1 1 has hints:\n%s", stdout)
+		t.Errorf("task attempt show 1 --task SHOP-1 has hints:\n%s", stdout)
 	}
-	first := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "attempts", "SHOP-1", "1")
-	clitest.WantSameTime(t, "the time of cancelling the first attempt in task attempts --json",
+	first := clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "attempt", "show", "1", "--task", "SHOP-1")
+	clitest.WantSameTime(t, "the time of cancelling the first attempt in task attempt list --json",
 		clitest.JSONAt(t, attempts, "attempts.0.ended.time"), clitest.JSONAt(t, first, "task.ended.time"))
-	clitest.WantSameTime(t, "the time of taking the first attempt in task attempts --json",
+	clitest.WantSameTime(t, "the time of taking the first attempt in task attempt list --json",
 		clitest.JSONAt(t, attempts, "attempts.0.taken"), clitest.JSONAt(t, first, "task.taken"))
 	// The refusal of an attempt that the task has not is built from the
 	// attempts of the store: no test of package cli reaches it, this test
@@ -430,17 +430,17 @@ func TestTaskTakeAgain(t *testing.T) {
 		"Попыток: 2",
 		"",
 		cli.HintFor(msg.HintAttemptsList, "task", "SHOP-1"),
-	), "task", "attempts", "SHOP-1", "5")
-	if code, c := clitest.ErrorCode(t, "task", "attempts", "SHOP-1", "5"); code != contract.ExitError || c != contract.CodeAttemptNotFound {
+	), "task", "attempt", "show", "5", "--task", "SHOP-1")
+	if code, c := clitest.ErrorCode(t, "task", "attempt", "show", "5", "--task", "SHOP-1"); code != contract.ExitError || c != contract.CodeAttemptNotFound {
 		t.Errorf("attempt 5: exit code %d, code %s", code, c)
 	}
-	if code, c := clitest.ErrorCode(t, "task", "attempts", "SHOP-1", "первая"); code != contract.ExitUsage || c != contract.CodeInvalidArgument {
+	if code, c := clitest.ErrorCode(t, "task", "attempt", "show", "первая", "--task", "SHOP-1"); code != contract.ExitUsage || c != contract.CodeInvalidArgument {
 		t.Errorf("attempt «первая»: exit code %d, code %s", code, c)
 	}
 	// In the worktree of the task the attempt alone is enough.
 	t.Chdir(shop)
-	if _, stdout, _ := clitest.Run("task", "attempts", "2"); !strings.HasPrefix(stdout, msg.Text(msg.AttemptHeading, "SHOP-1", 2, "Частичный возврат по карте")+"\n") {
-		t.Errorf("task attempts 2:\n%s", stdout)
+	if _, stdout, _ := clitest.Run("task", "attempt", "show", "2"); !strings.HasPrefix(stdout, msg.Text(msg.AttemptHeading, "SHOP-1", 2, "Частичный возврат по карте")+"\n") {
+		t.Errorf("task attempt show 2:\n%s", stdout)
 	}
 	if _, stdout, _ := clitest.Run("task", "list", "--all"); strings.Count(stdout, "SHOP-1") != 1 || !strings.Contains(stdout, "SHOP-1  Частичный возврат по карте  "+msg.Text(msg.TaskStateActive)) {
 		t.Errorf("task list --all:\n%s", stdout)
@@ -462,34 +462,41 @@ func TestTaskTakeAgainRefusals(t *testing.T) {
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(shop)
 
-	clitest.WantRun(t, contract.ExitError, "", taskEnded("SHOP-1"), "task", "take", "--task", "SHOP-1", "--scenario", "feature")
+	clitest.WantRun(t, contract.ExitError, "", taskEnded("SHOP-1"), "task", "take", "SHOP-1", "--scenario", "feature")
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(
 		msg.Text(msg.ErrTaskInWork, "SHOP-3"),
 		msg.Text(msg.TaskWorktree, fix),
 		"",
 		cli.HintFor(msg.HintTaskShow, "task", "SHOP-3"),
-	), "task", "take", "--task", "SHOP-3", "--scenario", "feature")
-	if code, c := clitest.ErrorCode(t, "task", "take", "--task", "SHOP-3", "--scenario", "feature"); code != contract.ExitError || c != contract.CodeTaskInWork {
+	), "task", "take", "SHOP-3", "--scenario", "feature")
+	if code, c := clitest.ErrorCode(t, "task", "take", "SHOP-3", "--scenario", "feature"); code != contract.ExitError || c != contract.CodeTaskInWork {
 		t.Errorf("take a task in work: exit code %d, code %s", code, c)
 	}
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--task", "--title"), "", cli.HintText(msg.HintCommandHelp, "task take")),
-		"task", "take", "--task", "SHOP-2", "--scenario", "feature", "--title", "Скидка")
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrTaskKeyWithFlag, "--title"), "", cli.HintText(msg.HintCommandHelp, "task take")),
+		"task", "take", "SHOP-2", "--scenario", "feature", "--title", "Скидка")
+	refused := clitest.WantJSON(t, contract.ExitUsage, "schemas/error.json", "task", "take", "SHOP-2", "--scenario", "feature", "--title", "Скидка", "--json")
+	if !strings.Contains(refused, `"code":"conflicting_flags"`) || !strings.Contains(refused, `"flags":["`+msg.Text(msg.ArgTask)+`","--title"]`) {
+		t.Errorf("take SHOP-2 --title --json: %s", refused)
+	}
 	input := filepath.Join(t.TempDir(), "task.json")
-	if err := os.WriteFile(input, []byte(`{"task":"SHOP-2","scenario":"feature","statement":"Текст."}`), 0o644); err != nil {
+	if err := os.WriteFile(input, []byte(`{"scenario":"feature","statement":"Текст."}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--task", "--statement"), "", cli.HintText(msg.HintCommandHelp, "task take")),
-		"task", "take", "--input", input)
-	if code, c := clitest.ErrorCode(t, "task", "take", "--task", "SHOP-2"); code != contract.ExitUsage || c != contract.CodeMissingField {
+	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrTaskKeyWithFlag, "--statement"), "", cli.HintText(msg.HintCommandHelp, "task take")),
+		"task", "take", "SHOP-2", "--input", input)
+	if code, c := clitest.ErrorCode(t, "task", "take", "--task", "SHOP-2", "--scenario", "feature"); code != contract.ExitUsage || c != contract.CodeUnknownFlag {
+		t.Errorf("take --task: exit code %d, code %s", code, c)
+	}
+	if code, c := clitest.ErrorCode(t, "task", "take", "SHOP-2"); code != contract.ExitUsage || c != contract.CodeMissingField {
 		t.Errorf("take without a scenario: exit code %d, code %s", code, c)
 	}
-	if code, c := clitest.ErrorCode(t, "task", "take", "--task", "SHOP-9", "--scenario", "feature"); code != contract.ExitError || c != contract.CodeTaskNotFound {
+	if code, c := clitest.ErrorCode(t, "task", "take", "SHOP-9", "--scenario", "feature"); code != contract.ExitError || c != contract.CodeTaskNotFound {
 		t.Errorf("take SHOP-9: exit code %d, code %s", code, c)
 	}
-	if code, c := clitest.ErrorCode(t, "task", "take", "--task", "9", "--scenario", "feature"); code != contract.ExitUsage || c != contract.CodeFlagValue {
+	if code, c := clitest.ErrorCode(t, "task", "take", "9", "--scenario", "feature"); code != contract.ExitUsage || c != contract.CodeInvalidArgument {
 		t.Errorf("take 9: exit code %d, code %s", code, c)
 	}
-	if _, stdout, _ := clitest.Run("task", "attempts", "SHOP-2"); strings.Count(stdout, "\n") != 4 {
+	if _, stdout, _ := clitest.Run("task", "attempt", "list", "--task", "SHOP-2"); strings.Count(stdout, "\n") != 4 {
 		t.Errorf("a refused take made an attempt:\n%s", stdout)
 	}
 
@@ -503,8 +510,8 @@ func TestTaskTakeAgainRefusals(t *testing.T) {
 		msg.Text(msg.WorktreeProjectLine, "blog"),
 		"",
 		cli.HintFor(msg.HintWorktreeListProject, "project", "shop"),
-	), "task", "take", "--task", "SHOP-2", "--scenario", "feature")
-	out := clitest.WantJSON(t, contract.ExitError, "schemas/error.json", "task", "take", "--task", "SHOP-2", "--scenario", "feature")
+	), "task", "take", "SHOP-2", "--scenario", "feature")
+	out := clitest.WantJSON(t, contract.ExitError, "schemas/error.json", "task", "take", "SHOP-2", "--scenario", "feature")
 	if !strings.Contains(out, `"code":"task_project_mismatch"`) || !strings.Contains(out, `"worktree_project":"blog"`) {
 		t.Errorf("take in the blog --json: %s", out)
 	}

@@ -72,8 +72,8 @@ func TestTools(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(string(byName["operator_record"].InputSchema), `"label"`) || strings.Contains(string(byName["operator_record"].InputSchema), `$ref`) {
-		t.Errorf("operator_record: options are not in place: %s", byName["operator_record"].InputSchema)
+	if !strings.Contains(string(byName["task_decision_add"].InputSchema), `"label"`) || strings.Contains(string(byName["task_decision_add"].InputSchema), `$ref`) {
+		t.Errorf("task_decision_add: options are not in place: %s", byName["task_decision_add"].InputSchema)
 	}
 }
 
@@ -91,11 +91,12 @@ func TestToolCommandLine(t *testing.T) {
 		want      []string
 		stdin     string
 	}{
-		{"stage show", `{}`, []string{"stage", "show"}, ""},
+		{"task stage show", `{}`, []string{"task", "stage", "show"}, ""},
 		{"task show", `{"task":"SHOP-1","statement":true,"path":false}`, []string{"task", "show", "--statement", "--", "SHOP-1"}, ""},
-		{"task attempts", `{"task":"SHOP-1","attempt":2}`, []string{"task", "attempts", "--", "SHOP-1", "2"}, ""},
+		{"task attempt show", `{"task":"SHOP-1","attempt":2}`, []string{"task", "attempt", "show", "--task=SHOP-1", "--", "2"}, ""},
+		{"task take", `{"task":"SHOP-1","scenario":"feature"}`, []string{"task", "take", "--input", "-", "--", "SHOP-1"}, `{"scenario":"feature"}`},
 		{"flow show", `{"stage":"--draft","project":"shop"}`, []string{"flow", "show", "--stage=--draft", "--project=shop"}, ""},
-		{"step done", `{"step":1,"check":"go test","task":"SHOP-1"}`, []string{"step", "done", "--task=SHOP-1", "--input", "-"}, `{"check":"go test","step":1}`},
+		{"task step done", `{"step":1,"check":"go test","task":"SHOP-1"}`, []string{"task", "step", "done", "--task=SHOP-1", "--input", "-"}, `{"check":"go test","step":1}`},
 		{"task cancel", `{"task":"SHOP-1","reason":"Не нужна"}`, []string{"task", "cancel", "--input", "-", "--", "SHOP-1"}, `{"reason":"Не нужна"}`},
 		{"worktree add", `{"path":"-x"}`, []string{"worktree", "add", "--", "-x"}, ""},
 	} {
@@ -105,10 +106,10 @@ func TestToolCommandLine(t *testing.T) {
 		}
 	}
 	for _, bad := range []struct{ cmd, args string }{
-		{"stage show", `{"kind":"result"}`},
+		{"task stage show", `{"kind":"result"}`},
 		{"task show", `{"statement":"да"}`},
-		{"task attempts", `{"attempt":1.5}`},
-		{"stage show", `[]`},
+		{"task attempt show", `{"attempt":1.5}`},
+		{"task stage show", `[]`},
 	} {
 		if _, _, err := tool(bad.cmd).commandLine(json.RawMessage(bad.args)); err == nil {
 			t.Errorf("%s %s: no error", bad.cmd, bad.args)
@@ -120,27 +121,27 @@ func TestToolCommandLine(t *testing.T) {
 // hints name tools.
 func TestToolCall(t *testing.T) {
 	t.Chdir(t.TempDir())
-	text, failed := CallTool("stage_exit", []byte(`{"kind":"result","text":"Готово"}`))
+	text, failed := CallTool("task_stage_exit", []byte(`{"kind":"result","text":"Готово"}`))
 	if !failed || text == "" || strings.Contains(text, "gentry ") {
-		t.Errorf("stage_exit outside a task: failed %v, %q", failed, text)
+		t.Errorf("task_stage_exit outside a task: failed %v, %q", failed, text)
 	}
-	text, failed = CallTool("step_add", []byte(`{"steps":["Шаг"],"kind":"x"}`))
+	text, failed = CallTool("task_step_add", []byte(`{"steps":["Шаг"],"kind":"x"}`))
 	if want := msg.Text(msg.ErrToolFields, msg.Text(msg.InputUnknownField, "kind")); !failed || text != want {
 		t.Errorf("unknown field: failed %v, %q, want %q", failed, text, want)
 	}
-	text, failed = CallTool("task_attempts", []byte(`{"attempt":"первая"}`))
+	text, failed = CallTool("task_attempt_show", []byte(`{"attempt":"первая"}`))
 	if want := msg.Text(msg.ErrToolFields, msg.Text(msg.InputNotInteger, "attempt")); !failed || text != want {
 		t.Errorf("not an integer: failed %v, %q, want %q", failed, text, want)
 	}
 	// The fields of --input of a command are fields of the tool to the agent.
-	text, failed = CallTool("step_add", []byte(`{"steps":"Шаг"}`))
+	text, failed = CallTool("task_step_add", []byte(`{"steps":"Шаг"}`))
 	if !failed || strings.Contains(text, "--input") || !strings.Contains(text, msg.Text(msg.InputNotList, "steps")) {
 		t.Errorf("steps not a list: failed %v, %q", failed, text)
 	}
 	// A panic of a command fails the call, not the server.
 	runTool = func([]string, Env) int { panic("корзина") }
 	t.Cleanup(func() { runTool = nil })
-	text, failed = CallTool("stage_show", []byte(`{}`))
+	text, failed = CallTool("task_stage_show", []byte(`{}`))
 	if !failed || text != msg.Text(msg.ErrInternal, "корзина") {
 		t.Errorf("panic: failed %v, %q", failed, text)
 	}
@@ -166,11 +167,11 @@ func TestFieldDescription(t *testing.T) {
 	}
 }
 
-// TestStageExitDescription states the description of the tool stage_exit,
+// TestStageExitDescription states the description of the tool task_stage_exit,
 // which only the agent has: the stage closes once its steps are done and its
 // commands of checks pass.
 func TestStageExitDescription(t *testing.T) {
-	c, _ := lookup("stage exit")
+	c, _ := lookup("task stage exit")
 	tl, err := newTool(c)
 	if err != nil {
 		t.Fatal(err)

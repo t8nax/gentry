@@ -21,24 +21,24 @@ var (
 func TestProcessRemoteText(t *testing.T) {
 	tests := []struct {
 		name       string
-		out        contract.ProcessRemoteOutput
+		out        contract.ProcessRemoteSetOutput
 		cli, agent string
 	}{
-		{"sent", contract.ProcessRemoteOutput{Remote: shopRemote, Result: "sent", Drafts: []contract.ProcessItem{}}, lines(
+		{"sent", contract.ProcessRemoteSetOutput{Remote: shopRemote, Result: "sent", Drafts: []contract.ProcessItem{}}, lines(
 			"Удалённый репозиторий подключён: git@example.com:shop/process.git",
 			"Процесс: отправлен в удалённый репозиторий",
 		), ""},
-		{"received", contract.ProcessRemoteOutput{Remote: shopRemote, Result: "received", Drafts: []contract.ProcessItem{}}, lines(
+		{"received", contract.ProcessRemoteSetOutput{Remote: shopRemote, Result: "received", Drafts: []contract.ProcessItem{}}, lines(
 			msg.Text(msg.ProcessRemoteSet, shopRemote),
 			"Процесс: получен из удалённого репозитория",
 		), ""},
-		{"unchanged", contract.ProcessRemoteOutput{Remote: shopRemote, Result: "unchanged", Drafts: []contract.ProcessItem{}}, lines(
+		{"unchanged", contract.ProcessRemoteSetOutput{Remote: shopRemote, Result: "unchanged", Drafts: []contract.ProcessItem{}}, lines(
 			msg.Text(msg.ProcessRemoteSet, shopRemote),
 			"Процесс: совпадает с удалённым репозиторием",
 		), ""},
 	}
 	for _, tt := range tests {
-		wantText(t, tt.name, func(p *page) { processRemoteText(p, tt.out) }, tt.cli, tt.agent)
+		wantText(t, tt.name, func(p *page) { processRemoteSetText(p, tt.out) }, tt.cli, tt.agent)
 	}
 }
 
@@ -47,23 +47,23 @@ func TestProcessStatusText(t *testing.T) {
 	none := []contract.ProcessItem{}
 	tests := []struct {
 		name       string
-		out        contract.ProcessStatusOutput
+		out        contract.ProcessShowOutput
 		cli, agent string
 	}{
-		{"no remote", contract.ProcessStatusOutput{Drafts: none, Unsent: none, Conflicts: none}, lines(
+		{"no remote", contract.ProcessShowOutput{Drafts: none, Unsent: none, Conflicts: none}, lines(
 			"Удалённый репозиторий не подключён.",
 			"",
-			hintLineOf(msg.HintProcessRemote, "gentry process remote "+msg.Text(msg.ArgRemote)),
+			hintLineOf(msg.HintProcessRemote, "gentry process remote set "+msg.Text(msg.ArgRemote)),
 		), lines(
 			"Удалённый репозиторий не подключён.",
 			"",
-			hintLineOf(msg.HintProcessRemote, "process_remote (remote)"),
+			hintLineOf(msg.HintProcessRemote, "process_remote_set (remote)"),
 		)},
-		{"synchronized", contract.ProcessStatusOutput{Remote: ptr(shopRemote), Synced: &shopTime, Drafts: none, Unsent: none, Conflicts: none}, lines(
+		{"synchronized", contract.ProcessShowOutput{Remote: ptr(shopRemote), Synced: &shopTime, Drafts: none, Unsent: none, Conflicts: none}, lines(
 			"Удалённый репозиторий: git@example.com:shop/process.git",
 			"Синхронизирован: 2026-10-09 12:30",
 		), ""},
-		{"a conflict", contract.ProcessStatusOutput{Remote: ptr(shopRemote), Synced: &shopTime,
+		{"a conflict", contract.ProcessShowOutput{Remote: ptr(shopRemote), Synced: &shopTime,
 			Drafts: []contract.ProcessItem{flowItem}, Unsent: none, Conflicts: []contract.ProcessItem{flowItem}}, lines(
 			msg.Text(msg.ProcessRemote, shopRemote),
 			msg.Text(msg.ProcessSyncedAt, "2026-10-09 12:30"),
@@ -74,7 +74,7 @@ func TestProcessStatusText(t *testing.T) {
 			"Конфликты:",
 			"  флоу shop",
 		), ""},
-		{"not sent", contract.ProcessStatusOutput{Remote: ptr(shopRemote), Synced: &shopTime,
+		{"not sent", contract.ProcessShowOutput{Remote: ptr(shopRemote), Synced: &shopTime,
 			Drafts: none, Unsent: []contract.ProcessItem{flowItem}, Conflicts: none}, lines(
 			msg.Text(msg.ProcessRemote, shopRemote),
 			msg.Text(msg.ProcessSyncedAt, "2026-10-09 12:30"),
@@ -94,7 +94,7 @@ func TestProcessStatusText(t *testing.T) {
 		)},
 	}
 	for _, tt := range tests {
-		wantText(t, tt.name, func(p *page) { processStatusText(p, tt.out) }, tt.cli, tt.agent)
+		wantText(t, tt.name, func(p *page) { processShowText(p, tt.out) }, tt.cli, tt.agent)
 	}
 }
 
@@ -209,10 +209,10 @@ func TestProcessFailureText(t *testing.T) {
 		"",
 		msg.Text(msg.HintRemoteAccess, shopRemote),
 	), "")
-	wantRefusal(t, "no address", "process remote", nil, lines(
+	wantRefusal(t, "no address", "process remote set", nil, lines(
 		"Не указан адрес удалённого репозитория.",
 		"",
-		hintLineOf(msg.HintCommandHelp, "gentry process remote --help"),
+		hintLineOf(msg.HintCommandHelp, "gentry process remote set --help"),
 	), "Не указан адрес удалённого репозитория.\n")
 	wantFail(t, "not a process", processFailure(&process.RemoteInvalidError{Remote: shopMain, Reason: "not_process"}),
 		"Репозиторий не является репозиторием процесса: /work/shop\n", "")

@@ -13,7 +13,7 @@ type ProcessRemoteSetData struct {
 	// Address of the remote repository.
 	Remote string `json:"remote"`
 
-	// What the connection did, as result of ProcessRemoteOutput.
+	// What the connection did, as result of ProcessRemoteSetOutput.
 	Result ProcessRemoteSetDataResult `json:"result"`
 }
 

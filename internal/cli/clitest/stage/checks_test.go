@@ -37,28 +37,28 @@ func TestStageChecks(t *testing.T) {
 	logs := filepath.Join(os.Getenv(home.EnvVar), "state", "shop", "tasks", "SHOP-1", "checks")
 	log1, log2 := filepath.Join(logs, "branch-1-1.log"), filepath.Join(logs, "branch-1-2.log")
 
-	stdout := clitest.MustRun(t, "stage", "show")
+	stdout := clitest.MustRun(t, "task", "stage", "show")
 	if want := clitest.Lines(msg.Text(msg.FlowParts, clitest.None), msg.Text(msg.FlowCheckTimeout, "8s"), msg.Text(msg.FlowChecks),
 		"  "+git, "  "+helper, ""); !strings.Contains(stdout, want) {
-		t.Errorf("stage show:\n%s", stdout)
+		t.Errorf("task stage show:\n%s", stdout)
 	}
-	out := clitest.WantJSON(t, contract.ExitOK, "schemas/stage-show.json", "stage", "show")
+	out := clitest.WantJSON(t, contract.ExitOK, "schemas/task-stage-show.json", "task", "stage", "show")
 	if want := `"checks":["git rev-parse --is-inside-work-tree",` + clitest.JSONString(helper) + `],`; !strings.Contains(out, want) ||
 		!strings.Contains(out, `"timeout":"8s"`) {
-		t.Errorf("stage show --json: %s", out)
+		t.Errorf("task stage show --json: %s", out)
 	}
 
 	// Without steps the exit is refused before the commands run.
 	t.Setenv(helperEnv, "sleep")
 	start := time.Now()
-	if code, c := clitest.ErrorCode(t, "stage", "exit", "--kind", "result", "--text", "Готово"); code != contract.ExitError || c != contract.CodeStepsEmpty {
+	if code, c := clitest.ErrorCode(t, "task", "stage", "exit", "--kind", "result", "--text", "Готово"); code != contract.ExitError || c != contract.CodeStepsEmpty {
 		t.Errorf("exit without steps: exit code %d, code %s", code, c)
 	}
 	if d := time.Since(start); d > 2*time.Second || clitest.FileExists(logs) {
 		t.Errorf("exit without steps ran the commands: %v", d)
 	}
-	clitest.MustRun(t, "step", "add", "Создать ветку")
-	clitest.MustRun(t, "step", "done", "1")
+	clitest.MustRun(t, "task", "step", "add", "Создать ветку")
+	clitest.MustRun(t, "task", "step", "done", "1")
 
 	t.Setenv(helperEnv, "fail")
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(
@@ -68,11 +68,11 @@ func TestStageChecks(t *testing.T) {
 		"",
 		"итог: 1 ошибка",
 		"cart_test.go:7: Total = 5, want 6",
-	), "stage", "exit", "--kind", "result", "--text", "Готово")
+	), "task", "stage", "exit", "--kind", "result", "--text", "Готово")
 	if got := read(t, log1); got != "true\n" {
 		t.Errorf("the output of git: %q", got)
 	}
-	code, out, _ := clitest.Run("stage", "exit", "--kind", "result", "--text", "Готово", "--json")
+	code, out, _ := clitest.Run("task", "stage", "exit", "--kind", "result", "--text", "Готово", "--json")
 	clitest.Validate(t, "schemas/error.json", out)
 	var e contract.ErrorOutput
 	json.Unmarshal([]byte(out), &e)
@@ -83,7 +83,7 @@ func TestStageChecks(t *testing.T) {
 
 	t.Setenv(helperEnv, "sleep")
 	start = time.Now()
-	code, out, _ = clitest.Run("stage", "exit", "--kind", "result", "--text", "Готово", "--json")
+	code, out, _ = clitest.Run("task", "stage", "exit", "--kind", "result", "--text", "Готово", "--json")
 	json.Unmarshal([]byte(out), &e)
 	if want := map[string]any{"node": "branch", "timeout": "8s", "command": helper, "log": log2}; code != contract.ExitError ||
 		e.Error.Code != contract.CodeChecksTimeout || !clitest.JSONEqual(e.Error.Details, want) {
@@ -97,7 +97,7 @@ func TestStageChecks(t *testing.T) {
 	// of the last attempt are gone.
 	path := os.Getenv("PATH")
 	t.Setenv("PATH", "")
-	code, out, _ = clitest.Run("stage", "exit", "--kind", "result", "--text", "Готово", "--json")
+	code, out, _ = clitest.Run("task", "stage", "exit", "--kind", "result", "--text", "Готово", "--json")
 	json.Unmarshal([]byte(out), &e)
 	if want := map[string]any{"node": "branch", "command": git, "program": "git"}; code != contract.ExitError ||
 		e.Error.Code != contract.CodeCheckProgramNotFound || !clitest.JSONEqual(e.Error.Details, want) {
@@ -109,9 +109,9 @@ func TestStageChecks(t *testing.T) {
 	t.Setenv("PATH", path)
 
 	t.Setenv(helperEnv, "pass")
-	stdout = clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Готово")
+	stdout = clitest.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Готово")
 	if want := clitest.Lines(msg.Text(msg.ExitTextLine, "Готово"), msg.Text(msg.ChecksPassedLine, 2), msg.Text(msg.TransitionLine, "plan")); !strings.Contains(stdout, want) {
-		t.Errorf("stage exit:\n%s", stdout)
+		t.Errorf("task stage exit:\n%s", stdout)
 	}
 	out = clitest.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show", "--path")
 	var shown contract.TaskShowOutput
@@ -144,9 +144,9 @@ func TestStageCheckNotStarted(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(fix, "bad.exe"), []byte("not a program\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	clitest.MustRun(t, "step", "add", "Создать ветку")
-	clitest.MustRun(t, "step", "done", "1")
-	code, out, _ := clitest.Run("stage", "exit", "--kind", "result", "--text", "Готово", "--json")
+	clitest.MustRun(t, "task", "step", "add", "Создать ветку")
+	clitest.MustRun(t, "task", "step", "done", "1")
+	code, out, _ := clitest.Run("task", "stage", "exit", "--kind", "result", "--text", "Готово", "--json")
 	clitest.Validate(t, "schemas/error.json", out)
 	var e contract.ErrorOutput
 	json.Unmarshal([]byte(out), &e)
@@ -175,7 +175,7 @@ func TestStageSkipChecks(t *testing.T) {
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
 	t.Setenv(helperEnv, "fail")
-	clitest.WantJSON(t, contract.ExitOK, "schemas/stage-close.json", "stage", "skip", "--reason", "Ветка есть")
+	clitest.WantJSON(t, contract.ExitOK, "schemas/task-stage-close.json", "task", "stage", "skip", "--reason", "Ветка есть")
 	if logs := filepath.Join(os.Getenv(home.EnvVar), "state", "shop", "tasks", "SHOP-1", "checks"); clitest.FileExists(logs) {
 		t.Error("the skip ran the commands of checks")
 	}

@@ -69,11 +69,17 @@ func Main(m *testing.M) int {
 
 // agentOnly are the commands only the agent runs, as its tools: Run runs them
 // as a tool does.
-var agentOnly = []string{"step add", "step done", "step drop", "stage exit", "stage skip", "artifact save", "task close"}
+var agentOnly = []string{"task step add", "task step done", "task step drop", "task stage exit", "task stage skip", "task artifact save", "task close"}
 
-// byAgent reports whether the command of args is one of agentOnly.
+// byAgent reports whether the command of args is one of agentOnly: its first
+// two or three words.
 func byAgent(args []string) bool {
-	return len(args) > 1 && slices.Contains(agentOnly, args[0]+" "+args[1])
+	for n := 2; n <= 3 && n <= len(args); n++ {
+		if slices.Contains(agentOnly, strings.Join(args[:n], " ")) {
+			return true
+		}
+	}
+	return false
 }
 
 // run runs a command of the operator, or of the agent for a command of

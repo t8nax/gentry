@@ -47,13 +47,13 @@ func TestOperatorRecord(t *testing.T) {
 	if err := os.WriteFile(input, []byte(sbpInput), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clitest.WantRun(t, contract.ExitOK, recorded, "", "operator", "record", "--input", input)
+	clitest.WantRun(t, contract.ExitOK, recorded, "", "task", "decision", "add", "--input", input)
 	closeStage(t, "Создать ветку")
 	// The agent records the words of the operator: two lines, no question.
 	t.Setenv(caller.SessionEnv, "drv-1")
-	code, stdout, stderr := clitest.RunWith(`{"answer": "Сумму возврата писать в лог.\nУровень — info."}`, "operator", "record", "--input", "-")
+	code, stdout, stderr := clitest.RunWith(`{"answer": "Сумму возврата писать в лог.\nУровень — info."}`, "task", "decision", "add", "--input", "-")
 	if code != contract.ExitOK || stdout != recorded {
-		t.Errorf("operator record --input -: exit code %d, stdout %q, stderr %q", code, stdout, stderr)
+		t.Errorf("task decision add --input -: exit code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 	t.Setenv(caller.SessionEnv, "")
 
@@ -88,11 +88,11 @@ func TestOperatorRecord(t *testing.T) {
 	if !strings.Contains(stdout, cli.HintFor(msg.HintStatementDecisions, "task", "SHOP-1")+"\n") {
 		t.Errorf("task show outside the worktree:\n%s", stdout)
 	}
-	out := clitest.WantJSON(t, contract.ExitOK, "schemas/operator-record.json",
-		"operator", "record", "--task", "SHOP-1", "--answer", "Сначала карта.", "--json")
+	out := clitest.WantJSON(t, contract.ExitOK, "schemas/task-decision-add.json",
+		"task", "decision", "add", "--task", "SHOP-1", "--answer", "Сначала карта.", "--json")
 	if !strings.Contains(out, `"task":"SHOP-1"`) || !strings.Contains(out, `"number":3`) || strings.Contains(out, `"return"`) ||
 		strings.Contains(out, `"question"`) || !strings.Contains(out, `"source":"operator"`) {
-		t.Errorf("operator record --json: %s", out)
+		t.Errorf("task decision add --json: %s", out)
 	}
 	written := clitest.JSONAt(t, out, "decision.recorded")
 	t.Chdir(fix)
@@ -136,10 +136,10 @@ func TestOperatorRecordRefusals(t *testing.T) {
 	_, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
-	help := cli.HintText(msg.HintCommandHelp, "operator record")
+	help := cli.HintText(msg.HintCommandHelp, "task decision add")
 
 	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrAnswerMissing), "", help),
-		"operator", "record", "--question", "Делать для СБП?")
+		"task", "decision", "add", "--question", "Делать для СБП?")
 	tests := []struct {
 		name, input, code, stderr string
 	}{
@@ -161,26 +161,26 @@ func TestOperatorRecordRefusals(t *testing.T) {
 			contract.CodeInputInvalid, clitest.Lines(msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputBadOption, 2)), "", help)},
 	}
 	for _, tt := range tests {
-		code, stdout, stderr := clitest.RunWith(tt.input, "operator", "record", "--input", "-")
+		code, stdout, stderr := clitest.RunWith(tt.input, "task", "decision", "add", "--input", "-")
 		if code != contract.ExitUsage || stdout != "" || stderr != tt.stderr {
 			t.Errorf("%s: exit code %d, stdout %q, stderr:\n%s\nwant:\n%s", tt.name, code, stdout, stderr, tt.stderr)
 		}
-		_, out, _ := clitest.RunWith(tt.input, "operator", "record", "--input", "-", "--json")
+		_, out, _ := clitest.RunWith(tt.input, "task", "decision", "add", "--input", "-", "--json")
 		clitest.Validate(t, "schemas/error.json", out)
 		if !strings.Contains(out, `"code":"`+tt.code+`"`) {
 			t.Errorf("%s: %s, want code %s", tt.name, out, tt.code)
 		}
 	}
-	if code, c := clitest.ErrorCode(t, "operator", "record", "--answer", "Да", "--input", "-"); code != contract.ExitUsage || c != contract.CodeConflictingFlags {
+	if code, c := clitest.ErrorCode(t, "task", "decision", "add", "--answer", "Да", "--input", "-"); code != contract.ExitUsage || c != contract.CodeConflictingFlags {
 		t.Errorf("--answer with --input: exit code %d, code %s", code, c)
 	}
-	if code, c := clitest.ErrorCode(t, "operator", "record", "--answer", "Да", "--allow-return", ""); code != contract.ExitUsage || c != contract.CodeFlagValue {
+	if code, c := clitest.ErrorCode(t, "task", "decision", "add", "--answer", "Да", "--allow-return", ""); code != contract.ExitUsage || c != contract.CodeFlagValue {
 		t.Errorf("--allow-return without a value: exit code %d, code %s", code, c)
 	}
 	// The branch has no returns at all.
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrReturnNotFound, "Ветка", "plan"), "", cli.HintText(msg.HintStageTransitions)),
-		"operator", "record", "--answer", "Да", "--allow-return", "plan")
-	_, out, _ := clitest.Run("operator", "record", "--answer", "Да", "--allow-return", "plan", "--json")
+		"task", "decision", "add", "--answer", "Да", "--allow-return", "plan")
+	_, out, _ := clitest.Run("task", "decision", "add", "--answer", "Да", "--allow-return", "plan", "--json")
 	if !strings.Contains(out, `"code":"return_not_found"`) || !strings.Contains(out, `"returns":[]`) {
 		t.Errorf("return_not_found --json: %s", out)
 	}
@@ -205,17 +205,17 @@ func TestOperatorAllowReturn(t *testing.T) {
 	closeStage(t, "Сделать")
 	closeStage(t, "Провести ревью", "--to", "implementation", "--reason", "Есть замечания")
 	closeStage(t, "Исправить")
-	clitest.MustRun(t, "step", "add", "Провести ревью")
-	clitest.MustRun(t, "step", "done", "1")
-	exit := []string{"stage", "exit", "--kind", "result", "--text", "Замечания", "--to", "implementation", "--reason", "Ещё замечания"}
+	clitest.MustRun(t, "task", "step", "add", "Провести ревью")
+	clitest.MustRun(t, "task", "step", "done", "1")
+	exit := []string{"task", "stage", "exit", "--kind", "result", "--text", "Замечания", "--to", "implementation", "--reason", "Ещё замечания"}
 	clitest.WantRun(t, contract.ExitError, "", returnLimit("implementation", 1), exit...)
 
 	// Only a return of the current stage can be allowed.
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrReturnNotFound, "Ревью", "merge"), "", cli.HintText(msg.HintStageTransitions)),
-		"operator", "record", "--answer", "Да", "--allow-return", "merge")
+		"task", "decision", "add", "--answer", "Да", "--allow-return", "merge")
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrReturnNotFound, "Ревью", "plan"), "", cli.HintText(msg.HintStageTransitions)),
-		"operator", "record", "--answer", "Да", "--allow-return", "plan")
-	_, out, _ := clitest.Run("operator", "record", "--answer", "Да", "--allow-return", "merge", "--json")
+		"task", "decision", "add", "--answer", "Да", "--allow-return", "plan")
+	_, out, _ := clitest.Run("task", "decision", "add", "--answer", "Да", "--allow-return", "merge", "--json")
 	if !strings.Contains(out, `"details":{"node":"review","returns":["implementation"],"to":"merge"}`) {
 		t.Errorf("return_not_found --json: %s", out)
 	}
@@ -224,14 +224,14 @@ func TestOperatorAllowReturn(t *testing.T) {
 		msg.Text(msg.DecisionRecorded),
 		msg.Text(msg.AllowedReturnLine, msg.Text(msg.TaskNamed, "Реализация", "implementation")),
 		msg.Text(msg.ReturnsLine, 1, 2),
-	), "", "operator", "record", "--question", "Вернуть на реализацию сверх предела?", "--answer", "Да.", "--allow-return", "implementation")
-	_, stdout, _ := clitest.Run("stage", "show")
+	), "", "task", "decision", "add", "--question", "Вернуть на реализацию сверх предела?", "--answer", "Да.", "--allow-return", "implementation")
+	_, stdout, _ := clitest.Run("task", "stage", "show")
 	if !strings.Contains(stdout, "ревью выявило существенные замечания  "+msg.Text(msg.StageReturns, 1, 2)+"\n") {
-		t.Errorf("stage show after the allowance:\n%s", stdout)
+		t.Errorf("task stage show after the allowance:\n%s", stdout)
 	}
-	out = clitest.WantJSON(t, contract.ExitOK, "schemas/stage-show.json", "stage", "show")
+	out = clitest.WantJSON(t, contract.ExitOK, "schemas/task-stage-show.json", "task", "stage", "show")
 	if !strings.Contains(out, `"allowed_returns":1,"if":"ревью выявило существенные замечания","max_returns":2,"returns":1`) {
-		t.Errorf("stage show --json: %s", out)
+		t.Errorf("task stage show --json: %s", out)
 	}
 	clitest.MustRun(t, exit...)
 	_, stdout, _ = clitest.Run("task", "show")
@@ -241,8 +241,8 @@ func TestOperatorAllowReturn(t *testing.T) {
 
 	// The next return is refused again, until the next allowance.
 	closeStage(t, "Исправить")
-	clitest.MustRun(t, "step", "add", "Провести ревью")
-	clitest.MustRun(t, "step", "done", "1")
+	clitest.MustRun(t, "task", "step", "add", "Провести ревью")
+	clitest.MustRun(t, "task", "step", "done", "1")
 	_, _, stderr := clitest.Run(exit...)
 	if !strings.Contains(stderr, msg.Text(msg.ReturnsLine, 2, 2)+"\n") {
 		t.Errorf("the third return:\n%s", stderr)
@@ -251,22 +251,22 @@ func TestOperatorAllowReturn(t *testing.T) {
 	if !strings.Contains(out, `"details":{"allowed":1,"limit":2,"node":"review","to":"implementation"}`) {
 		t.Errorf("return_limit --json: %s", out)
 	}
-	out = clitest.WantJSON(t, contract.ExitOK, "schemas/operator-record.json",
-		"operator", "record", "--answer", "Да, ещё раз.", "--allow-return", "implementation", "--json")
+	out = clitest.WantJSON(t, contract.ExitOK, "schemas/task-decision-add.json",
+		"task", "decision", "add", "--answer", "Да, ещё раз.", "--allow-return", "implementation", "--json")
 	if !strings.Contains(out, `"return":{"allowed_returns":2,"max_returns":3,"node":"review","returns":2,"to":"implementation"}`) ||
 		!strings.Contains(out, `"allow_return":"implementation"`) {
-		t.Errorf("operator record --json: %s", out)
+		t.Errorf("task decision add --json: %s", out)
 	}
 	clitest.MustRun(t, exit...)
 	closeStage(t, "Исправить")
 	closeStage(t, "Провести ревью", "--to", "merge", "--reason", "Замечаний нет")
-	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Влито")
+	clitest.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Влито")
 
 	// Once the scenario is passed, a return is not allowed; a decision is
 	// still recorded, at the last stage.
 	clitest.WantRun(t, contract.ExitError, "", clitest.Lines(msg.Text(msg.ErrScenarioFinished, "SHOP-1"), "", cli.HintText(msg.HintTaskClose)),
-		"operator", "record", "--answer", "Да", "--allow-return", "implementation")
-	clitest.WantRun(t, contract.ExitOK, recorded, "", "operator", "record", "--answer", "Задачу закрыть.")
+		"task", "decision", "add", "--answer", "Да", "--allow-return", "implementation")
+	clitest.WantRun(t, contract.ExitOK, recorded, "", "task", "decision", "add", "--answer", "Задачу закрыть.")
 	_, stdout, _ = clitest.Run("task", "show", "--statement")
 	for _, want := range []string{
 		clitest.Lines(

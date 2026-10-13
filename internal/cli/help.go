@@ -107,9 +107,11 @@ func commandList() string {
 	return b.String()
 }
 
-// groupHelp is the help of a group: what it is for, its actions and its
-// parts, which have actions of their own. Actions and parts share one column
-// width, as one table.
+// groupHelp is the help of a group: what it is for, its actions and, for a
+// group with a heading of parts, its parts, which have actions of their own.
+// Actions and parts share one column width, as one table. A group of actions
+// in a group without such a heading is listed among its actions, as process
+// remote is.
 func groupHelp(g command) string {
 	var actions, parts []row
 	for _, a := range g.actions {
@@ -117,7 +119,7 @@ func groupHelp(g command) string {
 			continue
 		}
 		r := row{strings.TrimPrefix(a.name, g.name+" "), msg.Text(a.summary)}
-		if a.actions != nil {
+		if a.actions != nil && g.parts != "" {
 			parts = append(parts, r)
 		} else {
 			actions = append(actions, r)

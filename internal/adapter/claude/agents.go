@@ -23,7 +23,7 @@ var tools = map[string][]string{
 	"run":      {"Bash", "PowerShell"},
 	"web":      {"WebFetch", "WebSearch"},
 	"task":     gentryTools(taskTools...),
-	"progress": gentryTools(append(taskTools, "step_add", "step_done", "step_drop", "note_add", "artifact_save")...),
+	"progress": gentryTools(append(taskTools, "task_step_add", "task_step_done", "task_step_drop", "task_note_add", "task_artifact_save")...),
 }
 
 // models maps the model levels of a subagent to the models of Claude Code.
@@ -36,7 +36,7 @@ var models = map[string]string{
 }
 
 // taskTools are the tools that show the task.
-var taskTools = []string{"stage_show", "task_show", "note_list"}
+var taskTools = []string{"task_stage_show", "task_show", "task_note_list"}
 
 // gentryTools names the tools of the server of Gentry the way of Claude Code.
 func gentryTools(names ...string) []string {

@@ -630,7 +630,7 @@ func TestFlowHelp(t *testing.T) {
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--help")
 	if usage := "  gentry flow show [--scenario " + msg.Text(msg.ArgScenario) + " | --stage " + msg.Text(msg.ArgStage) + " | --agent " + msg.Text(msg.ArgAgent) +
-		" | --part " + msg.Text(msg.ArgPart) + "] [--active | --draft] [--project " + msg.Text(msg.ArgProjectID) + "] [--json]\n"; !strings.Contains(stdout, usage) {
+		" | --part " + msg.Text(msg.ArgPart) + "] [--draft] [--project " + msg.Text(msg.ArgProjectID) + "] [--json]\n"; !strings.Contains(stdout, usage) {
 		t.Errorf("flow show --help:\n%s\nwant within:\n%s", stdout, usage)
 	}
 }

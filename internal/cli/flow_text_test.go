@@ -269,25 +269,29 @@ func TestFlowShowText(t *testing.T) {
 }
 
 // TestFlowShowTaskText states the block of the task that heads the flow of
-// a task in its worktree, and the hint to the active flow once it changed.
-// When the flow of the task was applied, task show states.
+// a task in task flow show, the hints to its objects and the hint to the
+// active flow once it changed; outside the worktree of the task the hints to
+// its objects name it. When the flow of the task was applied, task show
+// states.
 func TestFlowShowTaskText(t *testing.T) {
 	inUTC(t)
 	fl := readShopFlow(t, nil).Flow
-	shown := func(changed bool, object string) (contract.FlowShowOutput, flowShowExtra) {
+	shown := func(changed bool, object string, here bool) (contract.FlowShowOutput, flowShowExtra) {
 		out := contract.FlowShowOutput{Project: "shop", Task: &contract.FlowShowTask{Id: "SHOP-1", Flow: contract.Applied{Commit: "c0ffee", Time: shopTime}}}
 		if changed {
 			out.Task.ActiveFlow = &contract.Applied{Commit: "decade", Time: shopTime.Add(10 * time.Minute)}
 		}
+		x := flowShowExtra{show: "task flow show", hints: func(hs ...hint) []hint { return taskHints("SHOP-1", here, hs...) }}
 		if object == "" {
-			return flowJSON(out, fl), flowShowExtra{}
+			return flowJSON(out, fl), x
 		}
 		narrowed, uses, _ := flowObject(fl, "stage", object)
-		return flowJSON(out, narrowed), flowShowExtra{object: "stage", uses: uses}
+		x.object, x.uses = "stage", uses
+		return flowJSON(out, narrowed), x
 	}
 	applied := msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30")
 	tables := render(cliChannel, func(p *page) {
-		out, x := shown(false, "")
+		out, x := shown(false, "", true)
 		flowShowText(p, out, x)
 	})
 	tables = tables[strings.Index(tables, "\n\n")+2 : strings.LastIndex(tables, "\n\n")+1]
@@ -302,30 +306,36 @@ func TestFlowShowTaskText(t *testing.T) {
 		msg.Text(msg.FlowInstruction),
 		"  Влить ветку задачи в main.",
 	)
-	stageHint := hintLineOf(msg.HintFlowStage, "gentry flow show --stage "+msg.Text(msg.ArgStage))
-	stageTool := hintLineOf(msg.HintFlowStage, "flow_show (stage)")
-	activeHint := hintLineOf(msg.HintFlowActive, "gentry flow show --active")
-	activeTool := hintLineOf(msg.HintFlowActive, "flow_show (active)")
+	stageHint := hintLineOf(msg.HintFlowStage, "gentry task flow show --stage "+msg.Text(msg.ArgStage))
+	stageTool := hintLineOf(msg.HintFlowStage, "task_flow_show (stage)")
+	activeHint := hintLineOf(msg.HintFlowActive, "gentry flow show")
+	activeTool := hintLineOf(msg.HintFlowActive, "flow_show")
 	tests := []struct {
 		name       string
 		changed    bool
 		object     string
+		here       bool
 		cli, agent string
 	}{
-		{"flow", false, "", lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageHint),
+		{"flow", false, "", true, lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageHint),
 			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageTool)},
-		{"flow changed", true, "", lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
+		{"flow changed", true, "", true, lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
 			tables + "\n" + lines(stageHint, activeHint),
 			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
 				tables + "\n" + lines(stageTool, activeTool)},
-		{"stage", false, "merge", lines("Задача: SHOP-1", applied, "") + merge, ""},
-		{"stage changed", true, "merge", lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
+		{"flow changed, outside the worktree", true, "", false,
+			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
+				tables + "\n" + lines(hintLineOf(msg.HintFlowStage, "gentry task flow show --stage "+msg.Text(msg.ArgStage)+" --task SHOP-1"), activeHint),
+			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
+				tables + "\n" + lines(hintLineOf(msg.HintFlowStage, "task_flow_show (stage, task: SHOP-1)"), activeTool)},
+		{"stage", false, "merge", true, lines("Задача: SHOP-1", applied, "") + merge, ""},
+		{"stage changed", true, "merge", true, lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
 			lines(activeHint),
 			lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
 				lines(activeTool)},
 	}
 	for _, tt := range tests {
-		out, x := shown(tt.changed, tt.object)
+		out, x := shown(tt.changed, tt.object, tt.here)
 		wantText(t, tt.name, func(p *page) { flowShowText(p, out, x) }, tt.cli, tt.agent)
 	}
 }

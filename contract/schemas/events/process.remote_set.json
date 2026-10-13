@@ -11,7 +11,7 @@
       "minLength": 1
     },
     "result": {
-      "description": "What the connection did, as result of ProcessRemoteOutput.",
+      "description": "What the connection did, as result of ProcessRemoteSetOutput.",
       "type": "string",
       "enum": ["sent", "received", "merged", "unchanged"]
     }

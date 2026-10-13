@@ -78,7 +78,7 @@ type Task struct {
 
 	// Current stage of the task; absent once the scenario is passed. A cancelled task
 	// stays at the stage it was cancelled at. Its exit, instruction and transitions
-	// are given by `gentry stage show`.
+	// are given by `gentry task stage show`.
 	Stage *TaskStage `json:"stage,omitempty,omitzero"`
 
 	// State of the task: active — in work, waiting — waits for the operator, closed —
@@ -219,7 +219,7 @@ func (j *TaskScenario) UnmarshalJSON(value []byte) error {
 }
 
 // Current stage of the task. Its exit, instruction and transitions are given by
-// `gentry stage show`.
+// `gentry task stage show`.
 type TaskStage struct {
 	// Identifier of the stage of the node.
 	Id string `json:"id"`

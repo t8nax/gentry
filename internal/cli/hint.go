@@ -85,6 +85,7 @@ var hintSpecs = map[msg.Key]hint{
 	msg.HintWorktreeListProject:   {cmd: "worktree list", params: []param{flag("project")}},
 	msg.HintAgentsConflictWarning: {cmd: "agents deploy"},
 	msg.HintAgentsSyncFailed:      {cmd: "agents deploy"},
+	msg.HintAgentsDeployAll:       {cmd: "agents deploy", params: []param{flag("project")}},
 }
 
 // agentHints are the texts without a command that the agent gets in words of

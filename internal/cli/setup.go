@@ -101,12 +101,37 @@ func runSetup(args []string, env Env) int {
 	if previous != "" {
 		out.Action, out.PreviousDir = setupSwitched, &previous
 	}
-	return emit(env, out, setupText)
+	// The subagents laid out name the tools of the previous plugin: once it
+	// changes, the operator lays them out anew in each project. setup does
+	// not do it itself.
+	x := setupExtra{projects: connectedProjects()}
+	return emit(env, out, func(p *page, out contract.SetupOutput) { setupText(p, out, x) })
+}
+
+// setupExtra is what the text of setup has apart from the contract: whether
+// a project is connected, whose worktrees have subagents laid out.
+type setupExtra struct {
+	projects bool
+}
+
+// connectedProjects reports whether a project is connected on the machine.
+// The state store is only read, and not created; a store that cannot be read
+// is told by the commands of the projects, not by setup.
+func connectedProjects() bool {
+	st, bad := openTasks()
+	if bad != nil || st == nil {
+		return false
+	}
+	defer st.Close()
+	projects, err := st.Projects()
+	return err == nil && len(projects) > 0
 }
 
 // setupText prints what setup did with the plugin, the rule of permission
-// in the settings of the user and whether the plugin is enabled.
-func setupText(p *page, out contract.SetupOutput) {
+// in the settings of the user and whether the plugin is enabled. Once the
+// plugin is updated or switched, the last hint is to lay out the subagents
+// anew in each project, if there is one.
+func setupText(p *page, out contract.SetupOutput, x setupExtra) {
 	if out.PreviousDir != nil {
 		fmt.Fprintln(p, msg.Text(msg.SetupSwitched, *out.PreviousDir))
 	} else {
@@ -143,6 +168,9 @@ func setupText(p *page, out contract.SetupOutput) {
 	}
 	if permission == claude.PermissionFailed || permission == claude.PermissionUnwritten {
 		hints = append(hints, hintOf(msg.HintSetupPermission, claude.PermissionRule))
+	}
+	if x.projects && (out.Action == claude.Updated || out.PreviousDir != nil) {
+		hints = append(hints, hintOf(msg.HintAgentsDeployAll))
 	}
 	p.hints(hints...)
 }

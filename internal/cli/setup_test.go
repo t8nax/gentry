@@ -16,6 +16,7 @@ import (
 	"github.com/t8nax/gentry/internal/adapter/claude"
 	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/state"
 )
 
 func TestSetupClaude(t *testing.T) {
@@ -354,5 +355,57 @@ func TestSetupSameThroughLink(t *testing.T) {
 	}
 	if code, stdout, stderr := setupFrom(t, b); code != contract.ExitOK || stdout != msg.Text(msg.SetupInstalled)+"\n" {
 		t.Errorf("exit code %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+}
+
+// TestSetupAsksToDeploy checks that setup asks to lay out the subagents anew
+// once it updates the plugin and a project is connected, and does not lay
+// them out itself.
+func TestSetupAsksToDeploy(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(home.EnvVar, root)
+	fake := filepath.Join(root, "fakeclaude-state.json")
+	t.Setenv("FAKECLAUDE_STATE", fake)
+	t.Setenv(claude.ConfigDirEnv, filepath.Join(root, "claude-config"))
+	// An older plugin is served: setup updates it.
+	older := func() {
+		t.Helper()
+		var s map[string]any
+		b, err := os.ReadFile(fake)
+		if err != nil {
+			t.Fatal(err)
+		}
+		json.Unmarshal(b, &s)
+		for _, p := range s["plugins"].([]any) {
+			p.(map[string]any)["version"] = "0.0.0+00000000"
+		}
+		b, _ = json.Marshal(s)
+		os.WriteFile(fake, b, 0o644)
+	}
+	run("setup", "claude")
+	older()
+	// Without a project there is nothing to lay out.
+	if _, stdout, _ := run("setup", "claude"); !strings.HasPrefix(stdout, msg.Text(msg.SetupUpdated)+"\n") ||
+		strings.Contains(stdout, msg.Text(msg.HintAgentsDeployAll)) {
+		t.Errorf("updated without a project:\n%s", stdout)
+	}
+	path, _ := state.Path()
+	st, err := state.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Write(func(tx *state.Tx) error {
+		return tx.AddProject(state.Project{ID: "shop", Prefix: "SHOP", Knowledge: filepath.Join(root, "shop-knowledge")})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	older()
+	if _, stdout, _ := run("setup", "claude"); !strings.HasPrefix(stdout, msg.Text(msg.SetupUpdated)+"\n") ||
+		!strings.HasSuffix(stdout, "\n\n"+HintText(msg.HintAgentsDeployAll)+"\n") {
+		t.Errorf("updated with a project:\n%s", stdout)
+	}
+	if _, stdout, _ := run("setup", "claude"); stdout != msg.Text(msg.SetupUnchanged)+"\n" {
+		t.Errorf("unchanged with a project:\n%s", stdout)
 	}
 }

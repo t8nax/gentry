@@ -42,6 +42,7 @@ var ru = catalog{
 		SetupUnchanged:           "Gentry уже подключён к Claude Code.",
 		SetupDisabled:            "Плагин Gentry отключён в Claude Code.",
 		HintPluginEnable:         "Включить плагин: claude plugin enable gentry@gentry",
+		HintAgentsDeployAll:      "Переложить субагентов в рабочие копии каждого проекта",
 		SetupPermissionAdded:     "Инструменты Gentry разрешены в настройках Claude Code.",
 		SetupPermissionFailed:    "Разрешить инструменты Gentry не удалось: настройки Claude Code не прочитаны.",
 		SetupPermissionUnwritten: "Разрешить инструменты Gentry не удалось: настройки Claude Code не записаны.",

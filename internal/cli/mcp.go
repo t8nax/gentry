@@ -2,13 +2,17 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"os/signal"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/buildinfo"
@@ -316,8 +320,10 @@ func scalar(v json.RawMessage, number bool) (string, bool) {
 var runTool func(args []string, env Env) int
 
 // call runs the command of the tool for the agent and returns its text. A
-// panic of the command fails the call, not the server of the session.
-func (t tool) call(raw json.RawMessage) (text string, failed bool) {
+// panic of the command fails the call, not the server of the session. ctx is
+// the call, which the client may cancel, and progress tells the client that
+// it goes on.
+func (t tool) call(ctx context.Context, raw json.RawMessage, progress func()) (text string, failed bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			text, failed = msg.Text(msg.ErrInternal, r), true
@@ -328,7 +334,7 @@ func (t tool) call(raw json.RawMessage) (text string, failed bool) {
 		return msg.Text(msg.ErrToolFields, err.Error()), true
 	}
 	var out bytes.Buffer
-	env := Env{Stdout: &out, Stderr: &out, agent: true}
+	env := Env{Stdout: &out, Stderr: &out, agent: true, ctx: ctx, progress: progress}
 	if stdin != nil {
 		env.Stdin = bytes.NewReader(stdin)
 	}
@@ -366,7 +372,7 @@ func CallTool(name string, args []byte) (string, bool) {
 			if err != nil {
 				panic(err)
 			}
-			return t.call(args)
+			return t.call(context.Background(), args, nil)
 		}
 	}
 	panic("cli: no tool " + name)
@@ -374,6 +380,11 @@ func CallTool(name string, args []byte) (string, bool) {
 
 // runMCP serves the commands as tools of the agent on the standard input and
 // output. Every command it runs is the agent's.
+//
+// An interrupt or SIGTERM ends the server: the call that runs is cancelled,
+// so that the commands of checks it runs end with their processes. On Linux
+// and macOS they run in a process group of their own, which the signal of
+// the terminal does not reach.
 func runMCP(args []string, env Env) int {
 	f := newFlags("mcp")
 	if code, done := f.parse(args, env); done {
@@ -383,7 +394,9 @@ func runMCP(args []string, env Env) int {
 	if err != nil {
 		return fail(env, internal(err))
 	}
-	if err := s.Serve(env.Stdin, env.Stdout); err != nil {
+	ctx, stop := signal.NotifyContext(env.context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := s.Serve(ctx, env.Stdin, env.Stdout); err != nil {
 		return fail(env, internal(err))
 	}
 	return contract.ExitOK

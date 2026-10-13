@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,6 +25,19 @@ type Env struct {
 	// agent is set for the commands gentry mcp runs for the agent: commands
 	// only of the agent run, and hints name tools.
 	agent bool
+	// ctx is the call of a tool: the client may cancel it. Nil for the
+	// command line.
+	ctx context.Context
+	// progress, if set, tells the client of a tool that its call goes on.
+	progress func()
+}
+
+// context returns the context of the call the command runs in.
+func (e Env) context() context.Context {
+	if e.ctx == nil {
+		return context.Background()
+	}
+	return e.ctx
 }
 
 // command is a gentry command. Its arguments and flags are declared here and

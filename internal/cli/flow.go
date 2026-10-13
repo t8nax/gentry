@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
@@ -419,6 +420,7 @@ func writeFlowObject(b *strings.Builder, out contract.FlowShowOutput, x flowShow
 		fmt.Fprintln(b, msg.Text(msg.FlowExit, oneLine(st.Exit)))
 		fmt.Fprintln(b, msg.Text(msg.FlowParts, joined(st.Include)))
 		fmt.Fprintln(b, msg.Text(msg.FlowScenarios, joined(x.uses)))
+		writeChecks(b, st.Checks, st.Timeout)
 		b.WriteString("\n")
 		writeText(b, msg.Text(msg.FlowInstruction), st.Instruction)
 	case "agent":
@@ -608,10 +610,12 @@ func flowJSON(out contract.FlowShowOutput, fl *flow.Flow) contract.FlowShowOutpu
 		out.Scenarios = append(out.Scenarios, cs)
 	}
 	for _, st := range fl.Stages {
-		out.Stages = append(out.Stages, contract.FlowStage{
+		cs := contract.FlowStage{
 			Id: st.ID, Title: st.Title, Exit: st.Exit, Executor: st.Executor,
 			Include: append([]string{}, st.Include...), Instruction: st.Instruction,
-		})
+		}
+		cs.Checks, cs.Timeout = checksJSON(st)
+		out.Stages = append(out.Stages, cs)
 	}
 	for _, p := range fl.Parts {
 		out.Parts = append(out.Parts, contract.FlowPart{Id: p.ID, Text: p.Text})
@@ -631,6 +635,27 @@ func flowJSON(out contract.FlowShowOutput, fl *flow.Flow) contract.FlowShowOutpu
 		out.Agents = append(out.Agents, ca)
 	}
 	return out
+}
+
+// checksJSON returns the commands of checks of stage st and their time as the
+// contract has them: both absent if the stage has no commands, as the time
+// then means nothing.
+func checksJSON(st flow.Stage) ([]string, *string) {
+	if len(st.Checks) == 0 {
+		return nil, nil
+	}
+	timeout := st.CheckTimeout()
+	return slices.Clone(st.Checks), &timeout
+}
+
+// writeChecks prints the time of the commands of checks of a stage and the
+// commands, one a line; nothing if the stage has none.
+func writeChecks(b *strings.Builder, checks []string, timeout *string) {
+	if len(checks) == 0 || timeout == nil {
+		return
+	}
+	fmt.Fprintln(b, msg.Text(msg.FlowCheckTimeout, *timeout))
+	writeList(b, msg.Text(msg.FlowChecks), checks)
 }
 
 // flowSource is where a subagent comes from as the contract names it.

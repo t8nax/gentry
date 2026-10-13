@@ -58,6 +58,7 @@ func runStageShow(args []string, env Env) int {
 		},
 		Transitions: []contract.StageShowTransition{},
 	}
+	out.Stage.Checks, out.Stage.Timeout = checksJSON(sv.Stage)
 	for _, p := range sv.Parts {
 		out.Stage.Parts = append(out.Stage.Parts, contract.StageShowPart{Id: p.ID, Text: p.Text})
 	}
@@ -93,6 +94,7 @@ func stageShowText(p *page, out contract.StageShowOutput, include []string) {
 	fmt.Fprintln(b, msg.Text(msg.FlowExecutor, st.Executor))
 	fmt.Fprintln(b, msg.Text(msg.FlowExit, orNone(oneLine(st.Exit))))
 	fmt.Fprintln(b, msg.Text(msg.FlowParts, joined(include)))
+	writeChecks(b, st.Checks, st.Timeout)
 	b.WriteString("\n")
 	rows := [][]string{{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)}}
 	for _, t := range out.Transitions {
@@ -150,7 +152,7 @@ func runStageClose(cmd string, args []string, env Env) int {
 	}
 	req := task.Close{
 		Skip: skip, Kind: text(values, "kind"), Text: text(values, "text"), Artifact: text(values, "artifact"),
-		To: text(values, "to"), Reason: text(values, "reason"), Source: source(env),
+		To: text(values, "to"), Reason: text(values, "reason"), Source: source(env), Progress: env.progress,
 	}
 	if bad := checkClose(cmd, req, input.Set); bad != nil {
 		return fail(env, *bad)
@@ -162,7 +164,7 @@ func runStageClose(cmd string, args []string, env Env) int {
 	}
 	defer w.close()
 	req.Task = w.task.ID
-	res, err := task.CloseStage(w.st, req)
+	res, err := task.CloseStage(env.context(), w.st, req)
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}
@@ -171,7 +173,7 @@ func runStageClose(cmd string, args []string, env Env) int {
 		return w.fail(env, *bad)
 	}
 
-	out := contract.StageCloseOutput{Task: taskJSON(v), Closed: passJSON(res.Pass)}
+	out := contract.StageCloseOutput{Task: taskJSON(v), Closed: passJSON(res.Pass, task.CheckLogs(res.Task, res.Pass))}
 	x := stageCloseExtra{title: v.StageTitleOf(res.Pass.Stage), hints: w.hints(hintOf(msg.HintStageShow))}
 	if v.Finished {
 		x.hints = w.hints(hintOf(msg.HintTaskClose))
@@ -203,6 +205,9 @@ func stageCloseText(p *page, out contract.StageCloseOutput, x stageCloseExtra) {
 		fmt.Fprintln(p, msg.Text(msg.StageExited, title))
 		fmt.Fprintln(p, msg.Text(msg.ExitKindLine, exitWord(*c.Exit)))
 		fmt.Fprintln(p, msg.Text(msg.ExitTextLine, oneLine(c.Exit.Text)))
+		if len(c.ChecksLogs) > 0 {
+			fmt.Fprintln(p, msg.Text(msg.ChecksPassedLine, len(c.ChecksLogs)))
+		}
 	}
 	fmt.Fprintln(p, msg.Text(msg.TransitionLine, nodeName(*c.To)))
 	if c.Exit != nil && reason != "" {
@@ -266,9 +271,13 @@ func exitKindWord(kind, artifact string) string {
 	return msg.Text(msg.ExitKindResult)
 }
 
-// passJSON returns a pass as the contract has it.
-func passJSON(p state.Pass) contract.TaskPass {
+// passJSON returns a pass as the contract has it; logs are the files of the
+// output of the commands of checks run on it.
+func passJSON(p state.Pass, logs []string) contract.TaskPass {
 	cp := contract.TaskPass{Node: p.Node, Stage: p.Stage, Round: p.Round, Entered: p.Entered, Steps: stepsJSON(p.Steps)}
+	if len(logs) > 0 {
+		cp.ChecksLogs = logs
+	}
 	if p.Current() {
 		return cp
 	}

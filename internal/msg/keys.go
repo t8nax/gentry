@@ -795,3 +795,25 @@ const (
 	TaskActiveFlowChanged Key = "task.active_flow_changed"
 	HintFlowActive        Key = "hint.flow_active"
 )
+
+// Texts of the commands of checks of a stage (GNT-19).
+const (
+	ProblemChecks           Key = "problem.checks"
+	ProblemCheckQuote       Key = "problem.check_quote"
+	ProblemTimeout          Key = "problem.timeout"
+	FlowCheckTimeout        Key = "flow.check_timeout"
+	FlowChecks              Key = "flow.checks"
+	ChecksPassedLine        Key = "stage.checks_passed"
+	ErrCheckFailed          Key = "err.check_failed"
+	CheckExitCodeLine       Key = "check.exit_code"
+	CheckLogLine            Key = "check.log"
+	ErrChecksTimeout        Key = "err.checks_timeout"
+	CheckCommandLine        Key = "check.command"
+	ErrCheckNotFound        Key = "err.check_program_not_found"
+	ErrCheckNotStarted      Key = "err.check_program_not_started"
+	CheckReasonLine         Key = "check.reason"
+	PassCheckLogs           Key = "pass.check_logs"
+	ReportChecks            Key = "report.checks"
+	ReportFieldCheckTimeout Key = "report.field_check_timeout"
+	ReportFieldChecks       Key = "report.field_checks"
+)

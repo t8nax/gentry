@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -15,14 +16,14 @@ func serve(t *testing.T, lines ...string) []map[string]any {
 		Name:        "cart_show",
 		Description: "Показать корзину.",
 		InputSchema: json.RawMessage(`{"type":"object"}`),
-		Call: func(args json.RawMessage) (string, bool) {
+		Call: func(_ context.Context, args json.RawMessage, _ func()) (string, bool) {
 			var a struct{ Fail bool }
 			json.Unmarshal(args, &a)
 			return "args " + string(args), a.Fail
 		},
 	}}}
 	var out bytes.Buffer
-	if err := s.Serve(strings.NewReader(strings.Join(lines, "\n")+"\n"), &out); err != nil {
+	if err := s.Serve(context.Background(), strings.NewReader(strings.Join(lines, "\n")+"\n"), &out); err != nil {
 		t.Fatal(err)
 	}
 	var res []map[string]any

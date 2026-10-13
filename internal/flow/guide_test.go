@@ -45,15 +45,19 @@ func guideExamples(t *testing.T) map[string]string {
 // passes the checks, once the stages and the part they name are there.
 func TestGuideExamples(t *testing.T) {
 	files := guideExamples(t)
-	for _, want := range []string{"scenarios/feature.yaml", "stages/review.yaml", "stages/review.md", "agents/reviewer.yaml"} {
+	for _, want := range []string{"scenarios/feature.yaml", "stages/review.yaml", "stages/review.md", "agents/reviewer.yaml", "stages/implementation.yaml"} {
 		if files[want] == "" {
 			t.Fatalf("the guide has no example of %s: %v", want, files)
 		}
 	}
 	files["agents/reviewer.md"] = "Проверить изменения задачи.\n"
+	files["agents/coder.yaml"] = "purpose: код и тесты\ncapabilities: [read, edit, run]\n"
+	files["agents/coder.md"] = "Написать код и тесты.\n"
 	files["parts/review-checklist.md"] = "Поведение, тесты, тексты.\n"
 	for _, st := range []string{"branch", "plan-feature", "implementation", "merge"} {
-		files["stages/"+st+".yaml"] = "title: " + st + "\nexit: этап пройден\nexecutor: orchestrator\n"
+		if files["stages/"+st+".yaml"] == "" {
+			files["stages/"+st+".yaml"] = "title: " + st + "\nexit: этап пройден\nexecutor: orchestrator\n"
+		}
 		files["stages/"+st+".md"] = "Пройти этап.\n"
 	}
 	res, err := Read(files, nil, nil)
@@ -71,7 +75,7 @@ func TestGuideExamples(t *testing.T) {
 func TestGuideFields(t *testing.T) {
 	guide := agenttext.FlowGuide()
 	words := []string{
-		"title", "start", "nodes", "stage", "next", "to", "if", "max_rounds", "exit", "executor", "include",
+		"title", "start", "nodes", "stage", "next", "to", "if", "max_rounds", "exit", "executor", "include", "checks", "timeout",
 		"purpose", "capabilities", "model", Finish, Orchestrator, Operator, commonFile,
 		scenariosDir + "/", stagesDir + "/", partsDir + "/", agentsDir + "/",
 	}

@@ -117,6 +117,10 @@ func TestFlowShowText(t *testing.T) {
 	bugFork, bugForkX := object(base, conditional, "scenario", "bug")
 	review, reviewX := object(base, nil, "stage", "review")
 	merge, mergeX := object(base, nil, "stage", "merge")
+	checked, checkedX := object(base, map[string]string{
+		"stages/implementation.yaml": "title: Реализация\nexit: изменения сделаны, тесты проходят\nexecutor: orchestrator\n" +
+			"checks:\n  - go vet ./...\n  - go test ./...\ntimeout: 20m\n",
+	}, "stage", "implementation")
 	reviewer, reviewerX := object(base, nil, "agent", "reviewer")
 	strongReviewer, strongReviewerX := object(base, map[string]string{
 		"agents/reviewer.yaml": "purpose: ревью изменений задачи\ncapabilities: [read, search]\nmodel: strong\n",
@@ -210,6 +214,21 @@ func TestFlowShowText(t *testing.T) {
 			"",
 			msg.Text(msg.FlowInstruction),
 			"  Влить ветку задачи в main.",
+		), ""},
+		{"stage with checks", checked, checkedX, lines(
+			msg.Text(msg.FlowStage, "implementation"),
+			msg.Text(msg.FlowTitle, "Реализация"),
+			msg.Text(msg.FlowExecutor, "orchestrator"),
+			msg.Text(msg.FlowExit, "изменения сделаны, тесты проходят"),
+			msg.Text(msg.FlowParts, noValue),
+			msg.Text(msg.FlowScenarios, "bug, feature"),
+			msg.Text(msg.FlowCheckTimeout, "20m"),
+			msg.Text(msg.FlowChecks),
+			"  go vet ./...",
+			"  go test ./...",
+			"",
+			msg.Text(msg.FlowInstruction),
+			"  Сделать изменения по плану и прогнать тесты.",
 		), ""},
 		{"subagent", reviewer, reviewerX, lines(
 			"Субагент: reviewer",

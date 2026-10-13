@@ -53,6 +53,7 @@ type Ended struct {
 // task releases its worktree. A task is closed only once its scenario is
 // passed; both are checked in the transaction, so that of two commands
 // ending one task only one does. The worktree is checked for changes before.
+// A command of checks of a cancelled task that runs is ended.
 func EndTask(st *state.Store, req End) (Ended, error) {
 	var res Ended
 	err := st.Write(func(tx *state.Tx) error {
@@ -87,6 +88,9 @@ func EndTask(st *state.Store, req End) (Ended, error) {
 	})
 	if err != nil {
 		return Ended{}, err
+	}
+	if req.Cancel {
+		endChecks(res.Task)
 	}
 	return res, nil
 }

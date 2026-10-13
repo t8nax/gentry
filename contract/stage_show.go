@@ -98,6 +98,10 @@ func (j *StageShowPart) UnmarshalJSON(value []byte) error {
 
 // The stage of the node.
 type StageShowStage struct {
+	// Commands of checks Gentry runs in the worktree of the task when the stage is
+	// closed by an exit, in order; absent if the stage has none.
+	Checks []string `json:"checks,omitempty,omitzero"`
+
 	// Who does the stage: orchestrator, operator or a subagent.
 	Executor string `json:"executor"`
 
@@ -112,6 +116,10 @@ type StageShowStage struct {
 
 	// Parts the stage includes, in the order of include.
 	Parts []StageShowPart `json:"parts"`
+
+	// Time all the commands of checks have together, as the flow writes it, such as
+	// 90s or 1h30m; 10m if the flow does not give it. Present only with checks.
+	Timeout *string `json:"timeout,omitempty,omitzero"`
 
 	// Title of the stage.
 	Title string `json:"title"`
@@ -146,11 +154,17 @@ func (j *StageShowStage) UnmarshalJSON(value []byte) error {
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
+	if plain.Checks != nil && len(plain.Checks) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "checks", 1)
+	}
 	if utf8.RuneCountInString(string(plain.Executor)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "executor", 1)
 	}
 	if utf8.RuneCountInString(string(plain.Id)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "id", 1)
+	}
+	if plain.Timeout != nil && utf8.RuneCountInString(string(*plain.Timeout)) < 2 {
+		return fmt.Errorf("field %s length: must be >= %d", "timeout", 2)
 	}
 	*j = StageShowStage(plain)
 	return nil

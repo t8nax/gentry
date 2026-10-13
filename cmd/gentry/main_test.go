@@ -9,8 +9,12 @@ import (
 )
 
 // TestMain points the data root and the user's home at a temporary directory,
-// so no test can touch the operator's data.
+// so no test can touch the operator's data. With helperEnv set, the test
+// binary is a command of checks of the tests instead.
 func TestMain(m *testing.M) {
+	if mode := os.Getenv(helperEnv); mode != "" {
+		os.Exit(checkHelper(mode))
+	}
 	os.Exit(isolated(m))
 }
 

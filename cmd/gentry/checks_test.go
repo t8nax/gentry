@@ -252,3 +252,53 @@ func TestTaskCancelDuringChecks(t *testing.T) {
 		t.Error("the child of the command was not ended")
 	}
 }
+
+// TestStageExitProgress checks that a call of stage_exit with a progress
+// token is told of the progress of its commands of checks before its answer.
+func TestStageExitProgress(t *testing.T) {
+	bin := buildGentry(t)
+	shop, _ := checksShop(t, bin, "span")
+	s := startServer(t, bin, shop)
+	id := s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, map[string]any{"progressToken": "p1"})
+	text, failed, notes := s.answer(t, id)
+	if failed || !strings.Contains(text, msg.Text(msg.ChecksPassedLine, 1)) {
+		t.Errorf("the exit: failed %v:\n%s", failed, text)
+	}
+	progress := 0
+	for _, n := range notes {
+		if p, ok := n["params"].(map[string]any); ok && n["method"] == "notifications/progress" && p["progressToken"] == "p1" {
+			progress++
+		}
+	}
+	if progress == 0 {
+		t.Errorf("no notification of progress: %v", notes)
+	}
+}
+
+// TestStageExitCancelled checks that a call of stage_exit cancelled by the
+// client while its command of checks runs gets no answer, ends the command
+// with the process it started, which leaves no marker, and does not close
+// the stage.
+func TestStageExitCancelled(t *testing.T) {
+	bin := buildGentry(t)
+	shop, files := checksShop(t, bin, "tree")
+	s := startServer(t, bin, shop)
+	id := s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
+	waitFile(t, filepath.Join(files, "spans"))
+	s.write(t, map[string]any{"jsonrpc": "2.0", "method": "notifications/cancelled", "params": map[string]any{"requestId": id}})
+	start := time.Now()
+	shown := s.send(t, "stage_show", map[string]any{}, nil)
+	if _, failed, notes := s.answer(t, shown); failed || len(notes) > 0 {
+		t.Errorf("stage_show after the cancel: failed %v, messages before it %v", failed, notes)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("stage_show was answered %v after the cancel", d)
+	}
+	time.Sleep(4 * time.Second)
+	if _, err := os.Stat(filepath.Join(files, "marker")); err == nil {
+		t.Error("the child of the command was not ended")
+	}
+	if got := pathNodes(t, bin, shop); got != "branch:" {
+		t.Errorf("path: %s", got)
+	}
+}

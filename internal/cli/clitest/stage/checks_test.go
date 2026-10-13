@@ -159,3 +159,24 @@ func TestStageCheckNotStarted(t *testing.T) {
 		t.Error("a program not started has a file of output")
 	}
 }
+
+// TestStageSkipChecks checks that a skip closes a stage whose command of
+// checks fails without running it: no file of output is made.
+func TestStageSkipChecks(t *testing.T) {
+	_, fix := clitest.TaskShop(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	clitest.WriteDraft(t, clitest.ShopPlaces(), map[string]string{
+		"stages/branch.yaml": "title: Ветка\nexit: создана ветка задачи\nexecutor: orchestrator\nchecks:\n  - '\"" + exe + "\" check'\n",
+	})
+	clitest.MustRun(t, "flow", "apply")
+	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	t.Setenv(helperEnv, "fail")
+	clitest.WantJSON(t, contract.ExitOK, "schemas/stage-close.json", "stage", "skip", "--reason", "Ветка есть")
+	if logs := filepath.Join(os.Getenv(home.EnvVar), "state", "shop", "tasks", "SHOP-1", "checks"); clitest.FileExists(logs) {
+		t.Error("the skip ran the commands of checks")
+	}
+}

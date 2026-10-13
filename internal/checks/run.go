@@ -121,6 +121,22 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 	return 0, nil
 }
 
+// ClearMark removes the files of mark left by a command that no longer
+// runs, as when Gentry died while it ran. The caller knows that no command
+// runs with mark: on Linux and macOS End would kill the process group the
+// mark names, which may be another's by now.
+func ClearMark(mark string) error {
+	for _, path := range []string{mark, markTemp(mark)} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+// markTemp is the file the mark is written to before it replaces the mark.
+func markTemp(mark string) string { return mark + ".tmp" }
+
 // Report calls progress every ProgressEvery until stop is called; stop
 // returns once the last call has returned, so that no call comes after it.
 func Report(progress func()) (stop func()) {

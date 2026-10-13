@@ -108,7 +108,11 @@ func checksFile(t state.Task, name string) (string, error) {
 
 // lockChecks takes the lock of the commands of checks of task t: one process
 // runs them at a time. While another holds it, lockChecks waits until ctx is
-// done and reports the progress, as the commands of the other do.
+// done and reports the progress, as the commands of the other do. With the
+// lock taken no command of the task runs, so a mark left is of a process
+// that died while its command ran: it is removed, lest the cancel of the
+// task end the process group it names before the next command writes its
+// own.
 func lockChecks(ctx context.Context, t state.Task, progress func()) (*filelock.Lock, error) {
 	path, err := checksFile(t, checksLock)
 	if err != nil {
@@ -117,18 +121,34 @@ func lockChecks(ctx context.Context, t state.Task, progress func()) (*filelock.L
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	if progress != nil {
-		defer checks.Report(progress)()
+	mark, err := checksFile(t, checksMark)
+	if err != nil {
+		return nil, err
 	}
-	return filelock.AcquireContext(ctx, path)
+	stop := func() {}
+	if progress != nil {
+		stop = checks.Report(progress)
+	}
+	lock, err := filelock.AcquireContext(ctx, path)
+	stop()
+	if err != nil {
+		return nil, err
+	}
+	if err := checks.ClearMark(mark); err != nil {
+		lock.Release()
+		return nil, err
+	}
+	return lock, nil
 }
 
 // endChecks ends the command of checks of task t that runs now, if any, with
 // the processes it started; the exit that runs it then refuses, as the task
 // is ended. A command runs only while another process holds the lock of the
 // checks of the task: a mark without the lock is left by a process that
-// ended, and its process group may be another's by now. The task is ended
-// either way, so an error here is not reported.
+// ended, and its process group may be another's by now. The process that
+// holds the lock removes such a mark once it takes the lock, before it runs
+// a command, so the mark seen under the lock is that of its command, or
+// none yet. The task is ended either way, so an error here is not reported.
 func endChecks(t state.Task) {
 	lock, err := checksFile(t, checksLock)
 	if err != nil {

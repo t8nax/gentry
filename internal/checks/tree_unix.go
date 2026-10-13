@@ -51,7 +51,7 @@ func (t *tree) writeMark() error {
 	if t.mark == "" {
 		return nil
 	}
-	tmp := t.mark + ".tmp"
+	tmp := markTemp(t.mark)
 	if err := os.WriteFile(tmp, []byte(strconv.Itoa(t.cmd.Process.Pid)), 0o644); err != nil {
 		return err
 	}

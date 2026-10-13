@@ -1,11 +1,14 @@
 package task
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/t8nax/gentry/internal/checks"
 	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/state"
 )
@@ -52,5 +55,40 @@ func TestCheckLogs(t *testing.T) {
 	}
 	if logs := CheckLogs(again, pass); logs != nil {
 		t.Errorf("files of another attempt: %q", logs)
+	}
+}
+
+// TestLockChecksClearsMark checks that the lock of the checks of a task,
+// once taken, removes a mark left by a process that died while its command
+// ran, so that the cancel of the task does not end the process group the
+// mark names: it may be another's by now.
+func TestLockChecksClearsMark(t *testing.T) {
+	t.Setenv(home.EnvVar, t.TempDir())
+	task := state.Task{Project: "shop", Prefix: "SHOP", Number: 1, Attempt: 1}
+	mark, err := checksFile(task, checksMark)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(mark), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{mark, mark + ".tmp"} {
+		if err := os.WriteFile(path, []byte("999999999"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lock, err := lockChecks(context.Background(), task, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+	for _, path := range []string{mark, mark + ".tmp"} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s is left: %v", filepath.Base(path), err)
+		}
+	}
+	// The cancel of the task finds the lock held and no mark: it ends nothing.
+	if err := checks.End(mark); err != nil {
+		t.Errorf("End: %v", err)
 	}
 }

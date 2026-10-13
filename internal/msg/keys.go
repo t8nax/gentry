@@ -272,6 +272,7 @@ const (
 	HintFlowApply                 Key = "hint.flow_apply"
 	ErrFlowObjectNotFound         Key = "err.flow_object_not_found"
 	ErrDraftObjectNotFound        Key = "err.draft_object_not_found"
+	ErrTaskFlowObjectNotFound     Key = "err.task_flow_object_not_found"
 	FlowKindScenario              Key = "flow.kind.scenario"
 	FlowKindStage                 Key = "flow.kind.stage"
 	FlowKindAgent                 Key = "flow.kind.agent"

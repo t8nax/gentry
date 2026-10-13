@@ -437,6 +437,20 @@ func TestFlowFailureText(t *testing.T) {
 		"",
 		hintLineOf(msg.HintFlowObjects, "flow_show"),
 	))
+	wantFail(t, "no object of the flow of a task", taskObjectNotFound("shop", "SHOP-1", 1, "revew"), lines(
+		"Во флоу задачи SHOP-1 нет этапа «revew».",
+		"",
+		hintLineOf(msg.HintFlowObjects, "gentry task flow show"),
+	), lines(
+		"Во флоу задачи SHOP-1 нет этапа «revew».",
+		"",
+		hintLineOf(msg.HintFlowObjects, "task_flow_show"),
+	))
+	if f := taskObjectNotFound("shop", "SHOP-1", 2, "auditor"); f.code != contract.CodeFlowObjectNotFound ||
+		f.message != msg.Text(msg.ErrTaskFlowObjectNotFound, "SHOP-1", msg.Text(msg.FlowKindAgent), "auditor") ||
+		f.details["project"] != "shop" || f.details["kind"] != "agent" || f.details["id"] != "auditor" || f.details["draft"] != false {
+		t.Errorf("no subagent of the flow of a task: %+v", f)
+	}
 	wantFail(t, "no object of the draft", objectNotFound("shop", 2, "auditor", true), lines(
 		"В черновике флоу проекта shop нет субагента «auditor».",
 		"",

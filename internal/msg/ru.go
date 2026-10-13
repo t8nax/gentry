@@ -275,6 +275,7 @@ var ru = catalog{
 		HintFlowApply:                 "Применить черновик",
 		ErrFlowObjectNotFound:         "Во флоу проекта %s нет %s «%s».",
 		ErrDraftObjectNotFound:        "В черновике флоу проекта %s нет %s «%s».",
+		ErrTaskFlowObjectNotFound:     "Во флоу задачи %s нет %s «%s».",
 		FlowKindScenario:              "сценария",
 		FlowKindStage:                 "этапа",
 		FlowKindAgent:                 "субагента",

@@ -200,7 +200,7 @@ func runTaskFlowShow(args []string, env Env) int {
 	if object >= 0 {
 		narrowed, uses, ok := flowObject(fl, flowObjects[object].flag, id)
 		if !ok {
-			return w.fail(env, taskObjectNotFound(v.Project, object, id))
+			return w.fail(env, taskObjectNotFound(v.Project, v.Key(), object, id))
 		}
 		fl, x.object, x.uses = narrowed, flowObjects[object].flag, uses
 	}
@@ -519,10 +519,12 @@ func objectNotFound(projectID string, object int, id string, draft bool) failure
 }
 
 // taskObjectNotFound is the refusal of task flow show for an object the flow
-// of the task does not have: as flow show refuses, with the hint to the
-// objects of the flow of the task.
-func taskObjectNotFound(projectID string, object int, id string) failure {
+// of task key of project projectID does not have: as flow show refuses, in
+// the words of the flow of the task, which may differ from the active flow,
+// with the hint to the objects of the flow of the task.
+func taskObjectNotFound(projectID, key string, object int, id string) failure {
 	f := objectNotFound(projectID, object, id, false)
+	f.message = msg.Text(msg.ErrTaskFlowObjectNotFound, key, msg.Text(flowObjects[object].name), id)
 	f.hints = []hint{hintOf(msg.HintFlowObjects).on("task flow show")}
 	return f
 }

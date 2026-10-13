@@ -138,6 +138,11 @@ func TestTaskFlowShow(t *testing.T) {
 	if code, errCode := clitest.ErrorCode(t, "task", "flow", "show", "--stage", "security"); code != contract.ExitError || errCode != contract.CodeFlowObjectNotFound {
 		t.Errorf("a stage added after the take: exit code %d, %s", code, errCode)
 	}
+	want = clitest.Lines(msg.Text(msg.ErrTaskFlowObjectNotFound, "SHOP-1", msg.Text(msg.FlowKindStage), "security"), "",
+		msg.Text(msg.HintLine, msg.Text(msg.HintFlowObjects), "gentry task flow show"))
+	if code, _, stderr := clitest.Run("task", "flow", "show", "--stage", "security"); code != contract.ExitError || stderr != want {
+		t.Errorf("a stage added after the take: exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)
+	}
 
 	// flow show shows the active flow in the worktree of the task, as
 	// elsewhere; the flag --active is no more.

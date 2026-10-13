@@ -68,6 +68,8 @@ var ru = catalog{
 		HelpActions:              "Действия:",
 		HelpGroupUsage:           "gentry %s <действие> [аргументы] [флаги]",
 		HelpGroupMore:            "Посмотреть описание действия: gentry %s <действие> --help",
+		HelpPartUsage:            "gentry %s <часть> <действие> [аргументы] [флаги]",
+		HelpPartMore:             "Посмотреть действия части: gentry %s <часть> --help",
 		ErrActionMissing:         "Не указано действие команды %s.",
 		ErrActionUnknown:         "Неизвестное действие «%s» команды %s.",
 		HintActions:              "Посмотреть перечень действий",

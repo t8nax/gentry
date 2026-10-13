@@ -64,6 +64,8 @@ const (
 	HelpActions              Key = "help.actions"
 	HelpGroupUsage           Key = "help.group_usage"
 	HelpGroupMore            Key = "help.group_more"
+	HelpPartUsage            Key = "help.part_usage"
+	HelpPartMore             Key = "help.part_more"
 	ErrActionMissing         Key = "err.action_missing"
 	ErrActionUnknown         Key = "err.action_unknown"
 	HintActions              Key = "hint.actions"

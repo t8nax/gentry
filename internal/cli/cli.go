@@ -43,7 +43,9 @@ func (e Env) context() context.Context {
 // command is a gentry command. Its arguments and flags are declared here and
 // nowhere else: the help is built from them, and newFlags accepts only them.
 // A command with actions, such as project, is a group: its actions are
-// commands of their own, named "project add".
+// commands of their own, named "project add". An action with actions of its
+// own is a part of the group, such as the stage of a task: its actions are
+// named "task stage show". A command has three words at most.
 type command struct {
 	name    string
 	section msg.Key // heading of the help section; empty for a service command
@@ -52,7 +54,10 @@ type command struct {
 	args    []argSpec
 	flags   []flagSpec
 	actions []command
-	run     func(args []string, env Env) int
+	// parts is the heading of the parts of a group in its help, such as
+	// «Части задачи:»; empty for a group without parts.
+	parts msg.Key
+	run   func(args []string, env Env) int
 	// agentOnly marks a command only the agent runs, as a tool of gentry mcp:
 	// the command line and the help do not know it.
 	agentOnly bool
@@ -424,29 +429,40 @@ func commands() []command {
 		},
 		// help is a service command too: the help names --help, which every
 		// command takes, and help stays for those used to git help.
-		{name: "help", args: []argSpec{{}, {}}, run: runHelp},
+		{name: "help", args: []argSpec{{}, {}, {}}, run: runHelp},
 		{name: "hook", args: []argSpec{{}}, flags: []flagSpec{{name: "tool", value: msg.ArgTool}}, run: runHook},
 		{name: "mcp", run: runMCP},
 		{name: "events", flags: []flagSpec{{name: "json"}, {name: "after", value: msg.ArgNumber}}, run: runEvents},
 	}
 	for i := range cmds {
-		for j := range cmds[i].actions {
-			cmds[i].actions[j].section = cmds[i].section
-		}
+		inSection(&cmds[i], cmds[i].section)
 	}
 	return cmds
 }
 
+// inSection puts the actions of group c, and of its parts, in the help section
+// of c.
+func inSection(c *command, section msg.Key) {
+	c.section = section
+	for i := range c.actions {
+		inSection(&c.actions[i], section)
+	}
+}
+
 // allCommands returns every command that runs on its own: top-level commands
-// without actions and the actions of groups.
+// without actions and the actions of groups and of their parts.
 func allCommands() []command {
 	var all []command
-	for _, c := range commands() {
-		if c.actions == nil {
-			all = append(all, c)
+	var add func(cs []command)
+	add = func(cs []command) {
+		for _, c := range cs {
+			if c.actions == nil {
+				all = append(all, c)
+			}
+			add(c.actions)
 		}
-		all = append(all, c.actions...)
 	}
+	add(commands())
 	return all
 }
 
@@ -516,7 +532,9 @@ func Run(args []string, env Env) int {
 		return fail(env, unknownCommand(name))
 	}
 	args = args[1:]
-	if c.actions != nil {
+	// A group leads to its action, a part of a group to an action of the
+	// part: task stage show.
+	for c.actions != nil {
 		if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
 			return commandHelp(c, env)
 		}

@@ -110,8 +110,10 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 		if ctx.Err() != nil {
 			return 0, ctx.Err()
 		}
-		// Else the command did not run — the system did not start it, or
-		// Ready did not allow it — and leaves no file of output.
+		// Else the command did not run, as the system did not start it, or
+		// ran only until Ready refused it: on Windows it is not resumed
+		// then, on Linux and macOS it runs a little before Ready is asked.
+		// It leaves no file of output.
 		out.Close()
 		os.Remove(c.Log)
 		var se *startError

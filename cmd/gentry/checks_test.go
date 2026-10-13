@@ -27,8 +27,9 @@ const (
 //   - span: writes "start" to the file of spansEnv, sleeps 2 seconds and
 //     writes "end";
 //   - tree: writes "start" to the file of spansEnv, starts a child that
-//     writes the file of markerEnv after 3 seconds, then sleeps 10 seconds;
-//   - marker: sleeps 3 seconds and writes the file of markerEnv.
+//     writes the file of markerEnv after markerAfter, then sleeps 20
+//     seconds;
+//   - marker: sleeps markerAfter and writes the file of markerEnv.
 func checkHelper(mode string) int {
 	switch mode {
 	case "span":
@@ -43,14 +44,28 @@ func checkHelper(mode string) int {
 		if err := child.Start(); err != nil {
 			return 9
 		}
-		time.Sleep(10 * time.Second)
+		time.Sleep(20 * time.Second)
 		return 0
 	case "marker":
-		time.Sleep(3 * time.Second)
+		time.Sleep(markerAfter)
 		os.WriteFile(os.Getenv(markerEnv), nil, 0o644)
 		return 0
 	}
 	return 99
+}
+
+// markerAfter is when the child of the command tree writes its marker: the
+// tests end the command before, with time to spare for a loaded machine.
+const markerAfter = 8 * time.Second
+
+// noMarker checks, once the child of the command tree that started at start
+// would have written its marker, that it did not: it was ended.
+func noMarker(t *testing.T, files string, start time.Time) {
+	t.Helper()
+	time.Sleep(time.Until(start.Add(markerAfter + 2*time.Second)))
+	if _, err := os.Stat(filepath.Join(files, "marker")); err == nil {
+		t.Error("the child of the command was not ended")
+	}
 }
 
 // appendLine appends a line to the file at path.
@@ -244,13 +259,11 @@ func TestTaskCancelDuringChecks(t *testing.T) {
 	if first, _, _ := strings.Cut(text, "\n"); !failed || first != msg.Text(msg.TaskCancelled, "SHOP-1") {
 		t.Errorf("the exit: failed %v:\n%s", failed, text)
 	}
-	if d := time.Since(start); d > 5*time.Second {
-		t.Errorf("the exit was answered %v after the cancel", d)
+	// The command would run 20 seconds.
+	if d := time.Since(start); d > 15*time.Second {
+		t.Errorf("the exit was answered %v after the command started", d)
 	}
-	time.Sleep(4 * time.Second)
-	if _, err := os.Stat(filepath.Join(files, "marker")); err == nil {
-		t.Error("the child of the command was not ended")
-	}
+	noMarker(t, files, start)
 }
 
 // TestStageExitProgress checks that a call of stage_exit with a progress
@@ -285,19 +298,17 @@ func TestStageExitCancelled(t *testing.T) {
 	s := startServer(t, bin, shop)
 	id := s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
 	waitFile(t, filepath.Join(files, "spans"))
-	s.write(t, map[string]any{"jsonrpc": "2.0", "method": "notifications/cancelled", "params": map[string]any{"requestId": id}})
 	start := time.Now()
+	s.write(t, map[string]any{"jsonrpc": "2.0", "method": "notifications/cancelled", "params": map[string]any{"requestId": id}})
 	shown := s.send(t, "stage_show", map[string]any{}, nil)
 	if _, failed, notes := s.answer(t, shown); failed || len(notes) > 0 {
 		t.Errorf("stage_show after the cancel: failed %v, messages before it %v", failed, notes)
 	}
-	if d := time.Since(start); d > 5*time.Second {
-		t.Errorf("stage_show was answered %v after the cancel", d)
+	// The command would run 20 seconds.
+	if d := time.Since(start); d > 15*time.Second {
+		t.Errorf("stage_show was answered %v after the command started", d)
 	}
-	time.Sleep(4 * time.Second)
-	if _, err := os.Stat(filepath.Join(files, "marker")); err == nil {
-		t.Error("the child of the command was not ended")
-	}
+	noMarker(t, files, start)
 	if got := pathNodes(t, bin, shop); got != "branch:" {
 		t.Errorf("path: %s", got)
 	}

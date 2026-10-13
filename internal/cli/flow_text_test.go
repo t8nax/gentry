@@ -283,6 +283,9 @@ func TestFlowShowTaskText(t *testing.T) {
 			out.Task.ActiveFlow = &contract.Applied{Commit: "decade", Time: shopTime.Add(10 * time.Minute)}
 		}
 		x := flowShowExtra{show: "task flow show", hints: func(hs ...hint) []hint { return taskHints("SHOP-1", here, hs...) }}
+		if !here {
+			x.project = "shop"
+		}
 		if object == "" {
 			return flowJSON(out, fl), x
 		}
@@ -326,9 +329,15 @@ func TestFlowShowTaskText(t *testing.T) {
 				tables + "\n" + lines(stageTool, activeTool)},
 		{"flow changed, outside the worktree", true, "", false,
 			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
-				tables + "\n" + lines(hintLineOf(msg.HintFlowStage, "gentry task flow show --stage "+msg.Text(msg.ArgStage)+" --task SHOP-1"), activeHint),
+				tables + "\n" + lines(hintLineOf(msg.HintFlowStage, "gentry task flow show --stage "+msg.Text(msg.ArgStage)+" --task SHOP-1"),
+				"Посмотреть действующий флоу: gentry flow show --project shop"),
 			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
-				tables + "\n" + lines(hintLineOf(msg.HintFlowStage, "task_flow_show (stage, task: SHOP-1)"), activeTool)},
+				tables + "\n" + lines(hintLineOf(msg.HintFlowStage, "task_flow_show (stage, task: SHOP-1)"), hintLineOf(msg.HintFlowActive, "flow_show (project: shop)"))},
+		{"stage changed, outside the worktree", true, "merge", false,
+			lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
+				lines(hintLineOf(msg.HintFlowActive, "gentry flow show --project shop")),
+			lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
+				lines(hintLineOf(msg.HintFlowActive, "flow_show (project: shop)"))},
 		{"stage", false, "merge", true, lines("Задача: SHOP-1", applied, "") + merge, ""},
 		{"stage changed", true, "merge", true, lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
 			lines(activeHint),

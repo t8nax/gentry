@@ -178,7 +178,7 @@ func TestTaskFlowShow(t *testing.T) {
 	}
 	want = clitest.Lines(msg.Text(msg.FlowProject, "shop"), msg.Text(msg.FlowTask, "SHOP-1"), msg.Text(msg.TaskFlowApplied, "<время>"),
 		msg.Text(msg.TaskActiveFlowChanged, "<время>")) + "\n" + clitest.ShopTables() + "\n" +
-		clitest.Lines(stageHint("--task", "SHOP-1"), cli.HintText(msg.HintFlowActive))
+		clitest.Lines(stageHint("--task", "SHOP-1"), msg.Text(msg.HintLine, msg.Text(msg.HintFlowActive), "gentry flow show --project shop"))
 	if code, stdout, stderr := clitest.Run("task", "flow", "show", "--task", "SHOP-1"); code != contract.ExitOK || clitest.Masked(stdout) != want {
 		t.Errorf("--task SHOP-1: exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}

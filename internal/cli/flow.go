@@ -197,6 +197,11 @@ func runTaskFlowShow(args []string, env Env) int {
 	}
 	fl := v.Flow
 	x := flowShowExtra{show: cmd, hints: w.hints}
+	if !w.here {
+		// Outside the worktree of the task flow show would show the flow of
+		// the project of the directory.
+		x.project = v.Project
+	}
 	if object >= 0 {
 		narrowed, uses, ok := flowObject(fl, flowObjects[object].flag, id)
 		if !ok {
@@ -332,6 +337,21 @@ type flowShowExtra struct {
 	// hints returns the hints for the task whose flow task flow show shows:
 	// outside its worktree they name the task. Nil for flow show.
 	hints func(...hint) []hint
+	// project is the project of the task outside its worktree, which the
+	// hint to the active flow names; empty for flow show and in the worktree
+	// of the task.
+	project string
+}
+
+// activeHint is the hint to the active flow of the project of the task
+// whose flow is shown: outside the worktree of the task it names the
+// project.
+func (x flowShowExtra) activeHint() hint {
+	h := hintOf(msg.HintFlowActive)
+	if x.project != "" {
+		h.params = append(h.params, param{field: "project", flag: true, value: x.project})
+	}
+	return h
 }
 
 // taskHints returns hs for the task whose flow is shown, if any: outside its
@@ -390,7 +410,7 @@ func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 		}
 		writeFlowObject(b, out, x)
 		if changed {
-			p.hints(x.taskHints(hintOf(msg.HintFlowActive))...)
+			p.hints(x.taskHints(x.activeHint())...)
 		}
 		return
 	}
@@ -439,7 +459,7 @@ func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 	case out.Draft != nil:
 		p.hints(hintOf(msg.HintFlowShowDraft))
 	case changed:
-		p.hints(x.taskHints(stage, hintOf(msg.HintFlowActive))...)
+		p.hints(x.taskHints(stage, x.activeHint())...)
 	default:
 		p.hints(x.taskHints(stage)...)
 	}

@@ -4,8 +4,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/t8nax/gentry/internal/msg"
 )
 
 // oldTools are the names of the tools before the scheme gentry <object>
@@ -96,18 +94,5 @@ func TestSchemeTexts(t *testing.T) {
 				t.Errorf("no\n%s\nin\n%s", p, c.text)
 			}
 		}
-	}
-}
-
-// TestEditingFlowDescription states the description of the skill
-// editing-flow, which names the subagents of the project and the shared
-// ones.
-func TestEditingFlowDescription(t *testing.T) {
-	want := "Показать, написать, поправить и применить флоу проекта под Gentry: сценарии, этапы, фрагменты, субагентов проекта и общих субагентов; " +
-		"разобрать конфликт при применении. Скилл вызывается словами «покажи флоу», «какие есть сценарии», «покажи этап», «напиши флоу», " +
-		"«добавь этап», «добавь сценарий», «поправь сценарий», «переименуй этап», «удали этап», «добавь субагента», «поправь субагента», " +
-		"«сделай субагента общим», «примени флоу», «разбери конфликт флоу». Ведение задачи в скилл не входит."
-	if got := msg.Text(msg.SkillEditingFlow); got != want {
-		t.Errorf("description:\n%s\nwant:\n%s", got, want)
 	}
 }

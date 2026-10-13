@@ -23,7 +23,7 @@ func serve(t *testing.T, lines ...string) []map[string]any {
 		},
 	}}}
 	var out bytes.Buffer
-	if err := s.Serve(strings.NewReader(strings.Join(lines, "\n")+"\n"), &out); err != nil {
+	if err := s.Serve(context.Background(), strings.NewReader(strings.Join(lines, "\n")+"\n"), &out); err != nil {
 		t.Fatal(err)
 	}
 	var res []map[string]any

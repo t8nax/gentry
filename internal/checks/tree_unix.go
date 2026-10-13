@@ -22,6 +22,7 @@ type tree struct {
 
 func newTree(cmd *exec.Cmd, mark string, ready func() error) *tree {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	endWithGentry(cmd.SysProcAttr)
 	return &tree{cmd: cmd, mark: mark, ready: ready}
 }
 

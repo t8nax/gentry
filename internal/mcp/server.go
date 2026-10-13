@@ -103,18 +103,29 @@ func (o *output) write(v any) error {
 }
 
 // Serve reads messages from in and answers the requests on out until in
-// ends. Calls run one at a time, in the order they come. The input is read
-// while a call runs, so that the client can cancel a call that runs or waits
-// by notifications/cancelled: its context is done, and it gets no answer; a
-// call cancelled while it waits does not run.
-func (s *Server) Serve(in io.Reader, out io.Writer) error {
+// ends or ctx is done. Calls run one at a time, in the order they come. The
+// input is read while a call runs, so that the client can cancel a call that
+// runs or waits by notifications/cancelled: its context is done, and it gets
+// no answer; a call cancelled while it waits does not run.
+//
+// When the input ends, the client is going away (MCP closes the input of
+// the server to end it): the contexts of the calls that run or wait are done
+// then, and the calls are answered as they end. When ctx is done, as on a
+// signal to end the server, the context of the call that runs is done too,
+// and Serve returns nil once the call ends, without the calls that wait.
+func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	o := &output{enc: json.NewEncoder(out)}
 	o.enc.SetEscapeHTML(false)
 	q := &requests{pending: map[string]*request{}, wake: make(chan struct{}, 1)}
+	q.base, q.endBase = context.WithCancel(ctx)
+	defer q.endBase()
 	go q.read(in)
 	for {
-		r, ok := q.next()
+		r, ok := q.next(ctx)
 		if !ok {
+			if ctx.Err() != nil {
+				return nil
+			}
 			return q.err
 		}
 		var res any
@@ -142,6 +153,10 @@ type requests struct {
 	ended   bool                // the input ended
 	err     error               // why it ended, if not at its end
 	wake    chan struct{}       // tells next that the queue changed
+	// base is the context the contexts of the requests come from: endBase
+	// ends it when the input ends.
+	base    context.Context
+	endBase context.CancelFunc
 }
 
 // read reads the messages of in into the queue until in ends.
@@ -165,7 +180,7 @@ func (q *requests) read(in io.Reader) {
 			// no method: neither gets an answer.
 			continue
 		}
-		r.ctx, r.cancel = context.WithCancel(context.Background())
+		r.ctx, r.cancel = context.WithCancel(q.base)
 		q.mu.Lock()
 		q.queue = append(q.queue, r)
 		if r.err == nil {
@@ -174,6 +189,7 @@ func (q *requests) read(in io.Reader) {
 		q.mu.Unlock()
 		q.signal()
 	}
+	q.endBase()
 	q.mu.Lock()
 	q.ended, q.err = true, sc.Err()
 	q.mu.Unlock()
@@ -189,9 +205,12 @@ func (q *requests) signal() {
 }
 
 // next returns the first request of the queue, waiting for one; ok is false
-// once the input ended and no request waits.
-func (q *requests) next() (r *request, ok bool) {
+// once the input ended and no request waits, or once ctx is done.
+func (q *requests) next(ctx context.Context) (r *request, ok bool) {
 	for {
+		if ctx.Err() != nil {
+			return nil, false
+		}
 		q.mu.Lock()
 		if len(q.queue) > 0 {
 			r = q.queue[0]
@@ -204,7 +223,10 @@ func (q *requests) next() (r *request, ok bool) {
 		if ended {
 			return nil, false
 		}
-		<-q.wake
+		select {
+		case <-q.wake:
+		case <-ctx.Done():
+		}
 	}
 }
 

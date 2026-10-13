@@ -320,7 +320,7 @@ func TestEnd(t *testing.T) {
 
 // TestRunNotReady checks that a command that Ready does not allow is ended
 // at once, before the process it would start, and Run returns the error of
-// Ready.
+// Ready; the command leaves no file of output.
 func TestRunNotReady(t *testing.T) {
 	c := command(t, "tree", "")
 	marker := filepath.Join(c.Dir, "marker")
@@ -329,6 +329,9 @@ func TestRunNotReady(t *testing.T) {
 	c.Ready = func() error { return stop }
 	if _, err := Run(context.Background(), c); !errors.Is(err, stop) {
 		t.Errorf("Run: %v", err)
+	}
+	if _, err := os.Stat(c.Log); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a file of output: %v", err)
 	}
 	time.Sleep(2 * time.Second)
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {

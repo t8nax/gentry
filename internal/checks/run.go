@@ -77,7 +77,8 @@ var ProgressEvery = 5 * time.Second
 // command leaves behind when it ends are ended too. A program not found
 // gives *NotFoundError, and a program the system does not start gives
 // *NotStartedError; the file of the output is left only once the program
-// starts, and is not made if ctx is done already.
+// runs, or when ctx is done while it starts, and is not made if ctx is done
+// already.
 func Run(ctx context.Context, c Command) (code int, err error) {
 	program, err := lookPath(c.Dir, c.Args[0])
 	if err != nil {
@@ -104,14 +105,17 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 	cmd.Cancel = tree.kill
 	if err := tree.start(); err != nil {
 		// The context may end the command while it starts: on Windows a
-		// command ended before it is resumed fails to resume.
+		// command ended before it is resumed fails to resume. The refusal
+		// for the time names the file of output, which is kept.
 		if ctx.Err() != nil {
 			return 0, ctx.Err()
 		}
+		// Else the command did not run — the system did not start it, or
+		// Ready did not allow it — and leaves no file of output.
+		out.Close()
+		os.Remove(c.Log)
 		var se *startError
 		if errors.As(err, &se) {
-			out.Close()
-			os.Remove(c.Log)
 			return 0, &NotStartedError{Program: c.Args[0], Reason: se.reason()}
 		}
 		return 0, err

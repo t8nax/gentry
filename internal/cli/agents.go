@@ -330,7 +330,7 @@ func writeLayoutTrouble(p *page, l *contract.AgentsLayout) {
 	}
 	if l.Error != nil {
 		fmt.Fprintf(p, "\n%s\n%s\n", msg.Text(msg.AgentsSyncFailed), msg.Text(msg.AgentsSyncFailedReason, *l.Error))
-		p.hints(hintOf(msg.HintAgentsSyncFailed))
+		p.hints(hintOf(msg.HintAgentsDeployFailed))
 	}
 }
 

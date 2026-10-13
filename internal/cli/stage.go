@@ -12,10 +12,11 @@ import (
 	"github.com/t8nax/gentry/internal/task"
 )
 
-// exitFields are the fields of stage exit, in the order of the command spec.
+// exitFields are the fields of task stage exit, in the order of the command
+// spec.
 var exitFields = textFields("kind", "text", "artifact", "to", "reason")
 
-// skipFields are the fields of stage skip.
+// skipFields are the fields of task stage skip.
 var skipFields = textFields("reason", "to")
 
 // exitKinds are the kinds of an exit as --kind names them.
@@ -181,9 +182,9 @@ func runStageClose(cmd string, args []string, env Env) int {
 	return emit(env, out, func(p *page, out contract.TaskStageCloseOutput) { stageCloseText(p, out, x) })
 }
 
-// stageCloseExtra is what the text of stage exit and stage skip has apart
-// from the contract: the title of the stage closed, by the snapshot, and the
-// hints for the task.
+// stageCloseExtra is what the text of task stage exit and task stage skip has
+// apart from the contract: the title of the stage closed, by the snapshot, and
+// the hints for the task.
 type stageCloseExtra struct {
 	title string
 	hints []hint
@@ -218,9 +219,9 @@ func stageCloseText(p *page, out contract.TaskStageCloseOutput, x stageCloseExtr
 	p.hints(x.hints...)
 }
 
-// checkClose refuses the fields of stage exit or stage skip that are missing
-// or wrong before the task is looked at: the transition and its reason at a
-// fork are checked with the stage.
+// checkClose refuses the fields of task stage exit or task stage skip that are
+// missing or wrong before the task is looked at: the transition and its reason
+// at a fork are checked with the stage.
 func checkClose(cmd string, req task.Close, fromInput bool) *failure {
 	refuse := func(f failure) *failure { return &f }
 	help := helpHint(msg.HintCommandHelp, cmd)

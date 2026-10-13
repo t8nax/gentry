@@ -53,7 +53,7 @@ func TestProcessRemoteText(t *testing.T) {
 			"  "+msg.Text(msg.KindFlow, "shop"),
 			"  "+msg.Text(msg.KindShared),
 			"",
-			hintLineOf(msg.HintProcessStatus, "process_show"),
+			hintLineOf(msg.HintProcessShow, "process_show"),
 		)},
 	}
 	for _, tt := range tests {
@@ -61,7 +61,7 @@ func TestProcessRemoteText(t *testing.T) {
 	}
 }
 
-func TestProcessStatusText(t *testing.T) {
+func TestProcessShowText(t *testing.T) {
 	inUTC(t)
 	none := []contract.ProcessItem{}
 	tests := []struct {

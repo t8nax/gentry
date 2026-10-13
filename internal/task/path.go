@@ -491,7 +491,7 @@ func closeData(p state.Pass, returns int, finished bool) any {
 	return d
 }
 
-// StageView is the current stage of a task, as stage show gives it.
+// StageView is the current stage of a task, as task stage show gives it.
 type StageView struct {
 	View
 	Node        flow.Node

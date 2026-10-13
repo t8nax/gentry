@@ -55,7 +55,7 @@ var (
 	laidOut = clitest.Lines(msg.Text(msg.AgentsFreeSynced, "shop"), msg.Text(msg.AgentsNextSession))
 )
 
-func TestProcessRemote(t *testing.T) {
+func TestProcessRemoteSet(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	root := filepath.Dir(os.Getenv(home.EnvVar))
 	remote := filepath.Join(root, "remote.git")

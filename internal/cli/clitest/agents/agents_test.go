@@ -205,7 +205,7 @@ func TestFlowApplyRemoves(t *testing.T) {
 	}
 }
 
-func TestAgentsSync(t *testing.T) {
+func TestAgentsDeploy(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	gone := filepath.Join(filepath.Dir(shop), "shop-gone")
@@ -293,7 +293,7 @@ func TestLayoutFailure(t *testing.T) {
 
 	code, stdout, _ := clitest.Run("worktree", "add", extra)
 	head := clitest.Lines(msg.Text(msg.WorktreeAdded, "shop", extra), "", msg.Text(msg.AgentsSyncFailed))
-	tail := clitest.Lines("", cli.HintText(msg.HintAgentsSyncFailed))
+	tail := clitest.Lines("", cli.HintText(msg.HintAgentsDeployFailed))
 	if code != contract.ExitOK || !strings.HasPrefix(stdout, head+msg.Text(msg.AgentsSyncFailedReason, "")) || !strings.HasSuffix(stdout, tail) {
 		t.Errorf("exit code %d, output:\n%s", code, stdout)
 	}

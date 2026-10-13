@@ -62,10 +62,10 @@ func push(r *process.Repo, s *process.Sync) *failure {
 
 // syncDone finishes the synchronization inside a command: it records what it
 // did as an event, lays out the free worktrees of the projects whose flow or
-// shared subagents it changed and, in text, prints both on stderr before the output of
-// the command. apply tells a command that commits, for which an unavailable
-// remote repository defers the sending. It returns what the layout did, for
-// the output in JSON.
+// shared subagents it changed and, in text, prints both on stderr before the
+// output of the command. apply tells a command that commits, for which an
+// unavailable remote repository defers the sending. It returns what the layout
+// did, for the output in JSON.
 func syncDone(env Env, r *process.Repo, s *process.Sync, apply bool) *contract.AgentsLayout {
 	if s == nil {
 		return nil
@@ -547,7 +547,7 @@ func processRemoteSetText(p *page, out contract.ProcessRemoteSetOutput) {
 	if len(out.Drafts) > 0 {
 		p.WriteString("\n")
 		writeList(&p.Builder, msg.Text(msg.ProcessDrafts), itemNames(out.Drafts))
-		p.hints(hintOf(msg.HintProcessStatus))
+		p.hints(hintOf(msg.HintProcessShow))
 	}
 }
 

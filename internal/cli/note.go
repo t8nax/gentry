@@ -10,7 +10,7 @@ import (
 	"github.com/t8nax/gentry/internal/task"
 )
 
-// noteFields are the fields of note add; the text is the argument.
+// noteFields are the fields of task note add; the text is the argument.
 var noteFields = textFields("text")
 
 func runNoteAdd(args []string, env Env) int {

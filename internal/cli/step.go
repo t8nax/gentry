@@ -68,7 +68,8 @@ func runStepDrop(args []string, env Env) int {
 	return runStepClose("task step drop", args, env)
 }
 
-// runStepClose marks a step done for step done, or drops it for step drop.
+// runStepClose marks a step done for task step done, or drops it for task
+// step drop.
 func runStepClose(cmd string, args []string, env Env) int {
 	done := cmd == "task step done"
 	fields, textField := stepDoneFields, "check"

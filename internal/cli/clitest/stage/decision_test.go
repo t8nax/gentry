@@ -31,9 +31,9 @@ var (
 	operator = msg.Text(msg.TaskSourceOperator)
 )
 
-// TestOperatorRecord records decisions of the operator with and without a
+// TestDecisionAdd records decisions of the operator with and without a
 // question and shows them with the statement.
-func TestOperatorRecord(t *testing.T) {
+func TestDecisionAdd(t *testing.T) {
 	_, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
@@ -105,7 +105,7 @@ func TestOperatorRecord(t *testing.T) {
 		ds[1].Question != nil || ds[1].Source != "agent" || ds[1].Stage != "plan-feature" || ds[2].Number != 3 {
 		t.Errorf("task show --json: %s", out)
 	}
-	clitest.WantSameTime(t, "the time of the decision in operator record and task show --json",
+	clitest.WantSameTime(t, "the time of the decision in task decision add and task show --json",
 		written, clitest.JSONAt(t, out, "operator_decisions.2.recorded"))
 
 	_, events, _ := clitest.Run("events")
@@ -130,9 +130,9 @@ func TestOperatorRecord(t *testing.T) {
 	}
 }
 
-// TestOperatorRecordRefusals refuses a decision without an answer and
+// TestDecisionAddRefusals refuses a decision without an answer and
 // options of an answer that cannot be taken.
-func TestOperatorRecordRefusals(t *testing.T) {
+func TestDecisionAddRefusals(t *testing.T) {
 	_, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)

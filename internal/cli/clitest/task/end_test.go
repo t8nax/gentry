@@ -260,7 +260,7 @@ func TestTaskCancel(t *testing.T) {
 	attempts := clitest.WantJSON(t, contract.ExitOK, "schemas/task-attempt-list.json", "task", "attempt", "list", "--task", "SHOP-3")
 	clitest.WantSameTime(t, "the time of cancelling in task cancel, task show and task attempt list --json",
 		clitest.JSONAt(t, out, "task.ended.time"), clitest.JSONAt(t, show, "task.ended.time"), clitest.JSONAt(t, attempts, "attempts.0.ended.time"))
-	clitest.WantSameTime(t, "the time of taking in task cancel and task attempts --json",
+	clitest.WantSameTime(t, "the time of taking in task cancel and task attempt list --json",
 		clitest.JSONAt(t, out, "task.taken"), clitest.JSONAt(t, attempts, "attempts.0.taken"))
 	clitest.WantRun(t, contract.ExitUsage, "", clitest.Lines(msg.Text(msg.ErrConflictingFlags, "--reason", "--input"), "", cli.HintText(msg.HintCommandHelp, "task cancel")),
 		"task", "cancel", "SHOP-3", "--reason", "Причина", "--input", input)
@@ -394,7 +394,7 @@ func TestTaskTakeAgain(t *testing.T) {
 		[]string{"1", msg.Text(msg.TaskStateCancelled), "Фича", at, at, "Отложено."},
 		[]string{"2", msg.Text(msg.TaskStateActive), "Баг", at, clitest.None, clitest.None}) + "\n" + cli.HintFor(msg.HintAttempt, "task", "SHOP-1") + "\n"
 	if clitest.Masked(stdout) != clitest.Masked(want) {
-		t.Errorf("task attempts:\n%s\nwant:\n%s", stdout, want)
+		t.Errorf("task attempt list:\n%s\nwant:\n%s", stdout, want)
 	}
 	attempts := clitest.WantJSON(t, contract.ExitOK, "schemas/task-attempt-list.json", "task", "attempt", "list", "--task", "SHOP-1")
 	clitest.WantSameTime(t, "the time of taking the second attempt in task show and task attempt list --json", taken, clitest.JSONAt(t, attempts, "attempts.1.taken"))

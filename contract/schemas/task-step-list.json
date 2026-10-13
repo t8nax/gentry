@@ -28,7 +28,7 @@
       }
     },
     "added": {
-      "description": "Numbers of the steps added; only for step add.",
+      "description": "Numbers of the steps added; only for task step add.",
       "type": "array",
       "items": {
         "type": "integer",

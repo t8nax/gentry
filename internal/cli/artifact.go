@@ -12,7 +12,8 @@ import (
 	"github.com/t8nax/gentry/internal/task"
 )
 
-// artifactFields are the fields of artifact save; the name is the argument.
+// artifactFields are the fields of task artifact save; the name is the
+// argument.
 var artifactFields = textFields("name", "file", "url")
 
 func runArtifactSave(args []string, env Env) int {

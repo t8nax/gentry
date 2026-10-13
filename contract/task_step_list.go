@@ -9,7 +9,7 @@ import "unicode/utf8"
 // Output of `gentry task step add`, `gentry task step done` and `gentry task step
 // drop` with --json: the steps of the current pass.
 type TaskStepListOutput struct {
-	// Numbers of the steps added; only for step add.
+	// Numbers of the steps added; only for task step add.
 	Added []int `json:"added,omitempty,omitzero"`
 
 	// Node of the current pass.

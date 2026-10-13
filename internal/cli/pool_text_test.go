@@ -201,14 +201,14 @@ func TestWorktreeAddText(t *testing.T) {
 			"Субагентов не удалось разложить.",
 			"Причина: not a directory",
 			"",
-			hintLineOf(msg.HintAgentsSyncFailed, "gentry agents deploy"),
+			hintLineOf(msg.HintAgentsDeployFailed, "gentry agents deploy"),
 		), lines(
 			msg.Text(msg.WorktreeAdded, "shop", shopFix),
 			"",
 			"Субагентов не удалось разложить.",
 			"Причина: not a directory",
 			"",
-			hintLineOf(msg.HintAgentsSyncFailed, "agents_deploy"),
+			hintLineOf(msg.HintAgentsDeployFailed, "agents_deploy"),
 		)},
 	}
 	for _, tt := range tests {
@@ -265,7 +265,7 @@ func TestWorktreeFailureText(t *testing.T) {
 	}
 }
 
-func TestAgentsSyncText(t *testing.T) {
+func TestAgentsDeployText(t *testing.T) {
 	missing := true
 	worktrees := func(added ...string) []contract.AgentsWorktree {
 		return []contract.AgentsWorktree{

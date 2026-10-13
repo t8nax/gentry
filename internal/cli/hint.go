@@ -54,7 +54,7 @@ var hintSpecs = map[msg.Key]hint{
 	msg.HintFlowApply:             {cmd: "flow apply"},
 	msg.HintFlowObjects:           {cmd: "flow show"},
 	msg.HintDraftObjects:          {cmd: "flow show", params: []param{flag("draft")}},
-	msg.HintProcessStatus:         {cmd: "process show"},
+	msg.HintProcessShow:           {cmd: "process show"},
 	msg.HintProcessRemote:         {cmd: "process remote set", params: []param{arg("remote")}},
 	msg.HintProcessSync:           {cmd: "process sync"},
 	msg.HintFlowDiffProject:       {cmd: "flow diff", params: []param{flag("project")}},
@@ -84,7 +84,7 @@ var hintSpecs = map[msg.Key]hint{
 	msg.HintAttempt:               {cmd: "task attempt show", params: []param{arg("attempt")}},
 	msg.HintWorktreeListProject:   {cmd: "worktree list", params: []param{flag("project")}},
 	msg.HintAgentsConflictWarning: {cmd: "agents deploy"},
-	msg.HintAgentsSyncFailed:      {cmd: "agents deploy"},
+	msg.HintAgentsDeployFailed:    {cmd: "agents deploy"},
 	msg.HintAgentsDeployAll:       {cmd: "agents deploy", params: []param{flag("project")}},
 }
 

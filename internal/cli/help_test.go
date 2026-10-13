@@ -161,7 +161,7 @@ func TestDescribeProjectAdd(t *testing.T) {
 	}
 }
 
-func TestDescribeOperatorRecordOptions(t *testing.T) {
+func TestDescribeDecisionAddOptions(t *testing.T) {
 	c, _ := lookup("task decision add")
 	got := describe(c)
 	fields := msg.Text(msg.FlagInputFields, "question, options, answer, allow_return")

@@ -135,8 +135,8 @@ func words(s string) []string {
 }
 
 // tool names the tool of cmd with the fields of the arguments words:
-// stage_exit (kind, text), task_show (task: SHOP-1). A placeholder names the
-// field alone.
+// task_stage_exit (kind, text), task_show (task: SHOP-1). A placeholder names
+// the field alone.
 func tool(cmd string, words []string) string {
 	var fields []string
 	field := func(name, value string) {

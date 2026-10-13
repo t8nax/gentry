@@ -93,12 +93,12 @@ func runDecisionAdd(args []string, env Env) int {
 		out.Return = &contract.TaskDecisionAddOutputReturn{Node: r.Node, To: r.To, Returns: r.Returns,
 			MaxReturns: r.Limit, AllowedReturns: r.Allowed}
 	}
-	return emit(env, out, func(p *page, out contract.TaskDecisionAddOutput) { operatorRecordText(p, out, n) })
+	return emit(env, out, func(p *page, out contract.TaskDecisionAddOutput) { decisionAddText(p, out, n) })
 }
 
-// operatorRecordText prints the decision recorded and the return it allows,
+// decisionAddText prints the decision recorded and the return it allows,
 // the node of the return named by n, the names of the snapshot of the task.
-func operatorRecordText(p *page, out contract.TaskDecisionAddOutput, n names) {
+func decisionAddText(p *page, out contract.TaskDecisionAddOutput, n names) {
 	fmt.Fprintln(p, msg.Text(msg.DecisionRecorded))
 	if r := out.Return; r != nil {
 		fmt.Fprintln(p, msg.Text(msg.AllowedReturnLine, named(n.nodeTitle(r.To), r.To)))

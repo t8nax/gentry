@@ -207,7 +207,7 @@ func TestHintText(t *testing.T) {
 		{msg.HintIntroPluginStale, nil, "Сообщить оператору и по его слову обновить плагин"},
 		{msg.HintAgentsConflict, nil, "Необходимо переименовать субагента во флоу или удалить файл из рабочей копии, затем повторить команду."},
 		{msg.HintAgentsConflictWarning, nil, "Разложить субагентов после разбора файлов"},
-		{msg.HintAgentsSyncFailed, nil, "Повторить раскладку"},
+		{msg.HintAgentsDeployFailed, nil, "Повторить раскладку"},
 		{msg.HintHookEvents, []any{"session-start"}, "Допустимые значения: session-start"},
 		{msg.HintSetupPermission, []any{"mcp__plugin_gentry_gentry"}, "Разрешить инструменты вручную: правило mcp__plugin_gentry_gentry в permissions.allow"},
 		{msg.HintToolNotFound, []any{"Claude Code"}, "Установите Claude Code и повторите"},

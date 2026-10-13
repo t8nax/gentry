@@ -11,16 +11,16 @@ import (
 	"github.com/t8nax/gentry/internal/task"
 )
 
-func TestOperatorRecordText(t *testing.T) {
+func TestDecisionAddText(t *testing.T) {
 	decision := contract.OperatorDecision{Number: 1, Answer: "Да.", Node: "review", Stage: "review", Round: 2,
 		Source: contract.OperatorDecisionSourceOperator, Recorded: shopTime}
 	wantText(t, "recorded", func(p *page) {
-		operatorRecordText(p, contract.TaskDecisionAddOutput{Task: "SHOP-1", Decision: decision}, shopNames())
+		decisionAddText(p, contract.TaskDecisionAddOutput{Task: "SHOP-1", Decision: decision}, shopNames())
 	}, "Решение оператора записано.\n", "")
 	allowed := decision
 	allowed.AllowReturn = ptr("implementation")
 	wantText(t, "return allowed", func(p *page) {
-		operatorRecordText(p, contract.TaskDecisionAddOutput{Task: "SHOP-1", Decision: allowed, Return: &contract.TaskDecisionAddOutputReturn{
+		decisionAddText(p, contract.TaskDecisionAddOutput{Task: "SHOP-1", Decision: allowed, Return: &contract.TaskDecisionAddOutputReturn{
 			Node: "review", To: "implementation", Returns: 1, MaxReturns: 2, AllowedReturns: 1}}, shopNames())
 	}, lines(
 		"Решение оператора записано.",

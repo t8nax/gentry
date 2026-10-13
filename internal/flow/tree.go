@@ -58,18 +58,18 @@ func (t *tree) entries(rel string) []entry {
 	return out
 }
 
-// library is where the subagents of the library are read from: its directory
+// sharedSource is where the shared subagents are read from: their directory
 // or the copies in a snapshot. Only the subagents a flow names are read.
-type library interface {
-	// file returns the text of file name of the library, normalized; ok is
-	// false if there is no such file.
+type sharedSource interface {
+	// file returns the text of file name of the shared subagents, normalized;
+	// ok is false if there is no such file.
 	file(name string) (text []byte, ok bool, err error)
 }
 
-// dirLibrary is the library directory, process/agents.
-type dirLibrary string
+// dirShared is the directory of the shared subagents, process/agents.
+type dirShared string
 
-func (d dirLibrary) file(name string) ([]byte, bool, error) {
+func (d dirShared) file(name string) ([]byte, bool, error) {
 	b, err := os.ReadFile(filepath.Join(string(d), name))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
@@ -80,10 +80,10 @@ func (d dirLibrary) file(name string) ([]byte, bool, error) {
 	return process.Normalize(b), true, nil
 }
 
-// mapLibrary is the copies of library subagents in a snapshot, by file name.
-type mapLibrary map[string]string
+// mapShared is the copies of shared subagents in a snapshot, by file name.
+type mapShared map[string]string
 
-func (m mapLibrary) file(name string) ([]byte, bool, error) {
+func (m mapShared) file(name string) ([]byte, bool, error) {
 	text, ok := m[name]
 	return []byte(text), ok, nil
 }

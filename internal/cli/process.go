@@ -220,7 +220,7 @@ func conflictFailure(r *process.Repo, c process.Conflict, project string) failur
 		hints:   []hint{hintOf(msg.HintFlowDiffProject).set("project", project)},
 		details: map[string]any{"project": project, "conflict_dir": x.dir},
 	}
-	if !c.Kind.IsLibrary() {
+	if !c.Kind.IsShared() {
 		f.message = msg.Text(msg.SyncFlowConflict, c.Kind.Project)
 	}
 	return f
@@ -282,7 +282,7 @@ func itemNames(kinds []contract.ProcessItem) []string {
 func items(kinds []process.Kind) []contract.ProcessItem {
 	out := []contract.ProcessItem{}
 	for _, k := range kinds {
-		if k.IsLibrary() {
+		if k.IsShared() {
 			out = append(out, contract.ProcessItem{Kind: contract.ProcessItemKindShared})
 			continue
 		}

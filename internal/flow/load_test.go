@@ -17,7 +17,7 @@ import (
 )
 
 // shop copies the process of testdata — the flow of the shop and the
-// library of subagents — into a temporary directory, applies changes and
+// shared subagents — into a temporary directory, applies changes and
 // returns the places of the flow of the shop. A change is the new text of a
 // file by its path inside the flow; an empty text removes the file or
 // directory.
@@ -27,7 +27,7 @@ func shop(t *testing.T, changes map[string]string) Places {
 	if err := os.CopyFS(process, os.DirFS("testdata/process")); err != nil {
 		t.Fatal(err)
 	}
-	p := Places{Project: "shop", Dir: filepath.Join(process, "shop", "flow"), Library: filepath.Join(process, "agents")}
+	p := Places{Project: "shop", Dir: filepath.Join(process, "shop", "flow"), Shared: filepath.Join(process, "agents")}
 	for rel, text := range changes {
 		full := filepath.Join(p.Dir, filepath.FromSlash(rel))
 		if text == "" {
@@ -49,7 +49,7 @@ func shop(t *testing.T, changes map[string]string) Places {
 // readShop reads the flow of p.
 func readShop(t *testing.T, p Places) *Result {
 	t.Helper()
-	res, err := ReadDir(p.Dir, p.Library)
+	res, err := ReadDir(p.Dir, p.Shared)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,8 +117,8 @@ func TestLoadShop(t *testing.T) {
 	if p, _ := f.Part("review-checklist"); len(f.Parts) != 2 || p.Text != "## Список ревью\n- поведение\n- тесты\n- тексты\n" {
 		t.Errorf("parts %+v", f.Parts)
 	}
-	// The library subagent a stage names is part of the flow.
-	if want := []Agent{{ID: "reviewer", Library: true, Purpose: "ревью изменений задачи — поведение и текст",
+	// The shared subagent a stage names is part of the flow.
+	if want := []Agent{{ID: "reviewer", Shared: true, Purpose: "ревью изменений задачи — поведение и текст",
 		Capabilities: []string{"read", "search"}, Instruction: "Проверить изменения задачи: поведение, тесты и тексты для оператора.\n"}}; !reflect.DeepEqual(f.Agents, want) {
 		t.Errorf("agents %+v, want %+v", f.Agents, want)
 	}
@@ -217,7 +217,7 @@ func TestModelsInContract(t *testing.T) {
 func TestReadDirMissing(t *testing.T) {
 	p := shop(t, nil)
 	var pe *fs.PathError
-	if _, err := ReadDir(filepath.Join(p.Dir, "none"), p.Library); !errors.As(err, &pe) {
+	if _, err := ReadDir(filepath.Join(p.Dir, "none"), p.Shared); !errors.As(err, &pe) {
 		t.Errorf("got %v, want a path error", err)
 	}
 }

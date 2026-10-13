@@ -46,14 +46,14 @@ func scenarioDiff(old, cur *flow.Flow, id string, stages map[string]string, unre
 	return d
 }
 
-// libraryChange is the change of shared subagent id from the files old to
+// sharedChange is the change of shared subagent id from the files old to
 // cur; projects are those whose flows name it.
-func libraryChange(id, change string, old, cur process.Files, projects ...string) flow.LibraryChange {
-	c := flow.LibraryChange{ID: id, Change: change, Projects: append([]string{}, projects...)}
-	if a, ok := flow.LibraryAgents(old)[id]; ok {
+func sharedChange(id, change string, old, cur process.Files, projects ...string) flow.SharedChange {
+	c := flow.SharedChange{ID: id, Change: change, Projects: append([]string{}, projects...)}
+	if a, ok := flow.SharedAgents(old)[id]; ok {
 		c.Old = &a
 	}
-	if a, ok := flow.LibraryAgents(cur)[id]; ok {
+	if a, ok := flow.SharedAgents(cur)[id]; ok {
 		c.New = &a
 	}
 	return c
@@ -72,10 +72,10 @@ var reviewerRuns = map[string]string{
 
 // reviewerChanged is the shared subagents with reviewerRuns, the subagent
 // named by the projects given.
-func reviewerChanged(t *testing.T, projects ...string) *flow.LibraryDiffResult {
+func reviewerChanged(t *testing.T, projects ...string) *flow.SharedDiffResult {
 	lib := testdataFiles(t, "agents", nil)
-	return &flow.LibraryDiffResult{Applied: applied, Changes: []flow.LibraryChange{
-		libraryChange("reviewer", flow.Modified, lib, testdataFiles(t, "agents", reviewerRuns), projects...),
+	return &flow.SharedDiffResult{Applied: applied, Changes: []flow.SharedChange{
+		sharedChange("reviewer", flow.Modified, lib, testdataFiles(t, "agents", reviewerRuns), projects...),
 	}}
 }
 
@@ -121,7 +121,7 @@ func diffExample(t *testing.T) flow.DiffResult {
 			scenarioDiff(old.Read, cur.Read, "bug", stages, false),
 			scenarioDiff(old.Read, cur.Read, "feature", stages, false),
 		},
-		Library: reviewerChanged(t, "shop"),
+		Shared: reviewerChanged(t, "shop"),
 	}
 }
 
@@ -171,10 +171,10 @@ func diffProblems(t *testing.T) flow.DiffResult {
 	}
 }
 
-// diffLibrary is the draft of the shared subagents alone.
-func diffLibrary(t *testing.T) flow.DiffResult {
+// diffShared is the draft of the shared subagents alone.
+func diffShared(t *testing.T) flow.DiffResult {
 	old := readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
-	return flow.DiffResult{Applied: applied, Old: old.Read, New: old.Read, Library: reviewerChanged(t, "shop")}
+	return flow.DiffResult{Applied: applied, Old: old.Read, New: old.Read, Shared: reviewerChanged(t, "shop")}
 }
 
 // diffUnused is the draft of the shared subagents with a subagent of the
@@ -188,20 +188,20 @@ func diffUnused(t *testing.T) flow.DiffResult {
 	}), testdataFiles(t, "agents", reviewerRuns))
 	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read,
 		Changes: []flow.Change{change(flow.ObjectAgent, "reviewer", flow.Added)},
-		Library: reviewerChanged(t),
+		Shared:  reviewerChanged(t),
 	}
 }
 
 func TestDiffText(t *testing.T) {
 	inUTC(t)
-	head := func(applied, library bool) string {
+	head := func(applied, shared bool) string {
 		h := msg.Text(msg.FlowProject, "shop") + "\n"
 		if applied {
 			h += msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30") + "\n"
 		} else {
 			h += msg.Text(msg.FlowAppliedAt, noValue) + "\n"
 		}
-		if library {
+		if shared {
 			h += "Общие субагенты применены: 2026-10-09 12:30\n"
 		}
 		return h + "Файл изменений: /work/process/shop/changes.md\n\n"
@@ -284,7 +284,7 @@ func TestDiffText(t *testing.T) {
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft")},
 			[]string{hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)")}},
-		{"library alone", diffLibrary(t), head(true, true) + lines(
+		{"shared subagents alone", diffShared(t), head(true, true) + lines(
 			"Флоу проекта не изменён.",
 			"",
 			msg.Text(msg.DiffSharedAgents),
@@ -293,7 +293,7 @@ func TestDiffText(t *testing.T) {
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
 			[]string{hintLineOf(msg.HintFlowApply, "flow_apply")}},
-		{"library unused", diffUnused(t), head(true, true) + lines(
+		{"shared subagent unused", diffUnused(t), head(true, true) + lines(
 			msg.Text(msg.DiffAgents),
 			"  + reviewer",
 			"",

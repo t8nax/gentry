@@ -5,17 +5,16 @@ import (
 	"github.com/t8nax/gentry/internal/process"
 )
 
-// ActiveFlow returns the last change of the active flow of the project of
-// the task of v if the active flow changed since the task was taken: the flow
-// a task taken now would get differs from the flow of the task. That flow is
-// the one task take keeps: the files of the flow of the project and the
-// library subagents its stages name, so a change of a subagent no stage
-// names does not count, nor does a change of line ends alone. The last change
-// is the later of the commits that applied the flow of the project and the
-// library. It is nil for a task closed or cancelled, which follows no flow,
-// for a project with no active flow, and for a snapshot that cannot be
-// decoded, as a later Gentry may have written it. The snapshot is the one
-// Views read.
+// ActiveFlow returns the last change of the active flow of the project of the
+// task of v if the active flow changed since the task was taken: the flow a
+// task taken now would get differs from the flow of the task. That flow is the
+// one task take keeps: the files of the flow of the project and the shared
+// subagents its stages name, so a change of a subagent no stage names does not
+// count, nor does a change of line ends alone. The last change is the later of
+// the commits that applied the flow of the project and the shared subagents. It
+// is nil for a task closed or cancelled, which follows no flow, for a project
+// with no active flow, and for a snapshot that cannot be decoded, as a later
+// Gentry may have written it. The snapshot is the one Views read.
 func ActiveFlow(r *process.Repo, v View) (*process.Applied, error) {
 	if v.IsEnded() || v.Snapshot == nil {
 		return nil, nil
@@ -27,7 +26,7 @@ func ActiveFlow(r *process.Repo, v View) (*process.Applied, error) {
 	if len(flow.Diff(*v.Snapshot, res.Snapshot)) == 0 {
 		return nil, nil
 	}
-	last, ok, err := r.LastApplied(process.FlowOf(v.Project), process.Library)
+	last, ok, err := r.LastApplied(process.FlowOf(v.Project), process.Shared)
 	if err != nil || !ok {
 		return nil, err
 	}

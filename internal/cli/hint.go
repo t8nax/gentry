@@ -7,11 +7,11 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
-// A hint tells what to do next: «Посмотреть этап: gentry task stage show». It is
-// an element of the output of its own: what to do is a text of the catalog,
+// A hint tells what to do next: «Посмотреть этап: gentry task stage show». It
+// is an element of the output of its own: what to do is a text of the catalog,
 // the command and its values are data. The channel decides the form: the
-// command line names the command, the channel of the agent names the tool
-// and its fields: «Посмотреть этап: task_stage_show». So a change of the words in
+// command line names the command, the channel of the agent names the tool and
+// its fields: «Посмотреть этап: task_stage_show». So a change of the words in
 // the catalog changes the hint in both channels.
 
 // hint is a hint of an output.

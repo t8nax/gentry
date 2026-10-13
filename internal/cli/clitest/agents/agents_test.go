@@ -49,7 +49,7 @@ func changed(change string) string { return msg.Text(msg.AgentsWorktreeChanged, 
 // it by flow apply of the shop.
 func changeShared(t *testing.T, text string) string {
 	t.Helper()
-	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": text})
+	clitest.WriteFiles(t, clitest.ShopPlaces().Shared, map[string]string{"reviewer.md": text})
 	_, stdout, _ := clitest.Run("flow", "apply")
 	return stdout
 }

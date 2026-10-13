@@ -17,9 +17,9 @@ const changesFile = "changes.md"
 
 // excludeEntries keep the files of changes out of git status: they are
 // local to the machine, so the entries go to .git/info/exclude and not to the
-// committed .gitignore. The instruction of a subagent of the library named
+// committed .gitignore. The instruction of a shared subagent named
 // changes stays seen.
-var excludeEntries = []string{"/*/" + changesFile, "!/" + libraryDir + "/" + changesFile}
+var excludeEntries = []string{"/*/" + changesFile, "!/" + sharedDir + "/" + changesFile}
 
 // ChangesFile returns the path of the file of changes of project.
 func (r *Repo) ChangesFile(project string) string {
@@ -79,10 +79,10 @@ func (r *Repo) excludeChanges() error {
 }
 
 // removeChanges removes the files of changes that kind k makes stale: of its
-// project for a flow, of every project for the library, which every flow
-// may name.
+// project for a flow, of every project for the shared subagents, which every
+// flow may name.
 func (r *Repo) removeChanges(k Kind) error {
-	if !k.IsLibrary() {
+	if !k.IsShared() {
 		return removeFile(r.ChangesFile(k.Project))
 	}
 	des, err := os.ReadDir(r.Dir)
@@ -91,7 +91,7 @@ func (r *Repo) removeChanges(k Kind) error {
 	}
 	for _, de := range des {
 		name := de.Name()
-		if !de.IsDir() || strings.HasPrefix(name, ".") || name == libraryDir || name == conflictDir {
+		if !de.IsDir() || strings.HasPrefix(name, ".") || name == sharedDir || name == conflictDir {
 			continue
 		}
 		if err := removeFile(r.ChangesFile(name)); err != nil {

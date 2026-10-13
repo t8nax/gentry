@@ -264,8 +264,8 @@ func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	kinds = append(kinds, restoredKinds(s.Restored)...)
 	out := map[string]bool{}
 	for _, k := range kinds {
-		if k.IsLibrary() {
-			maps.Copy(out, libraryProjects(r))
+		if k.IsShared() {
+			maps.Copy(out, sharedProjects(r))
 			continue
 		}
 		out[k.Project] = true
@@ -273,16 +273,16 @@ func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	return out
 }
 
-// libraryProjects returns the projects whose active flow has shared
+// sharedProjects returns the projects whose active flow has shared
 // subagents.
-func libraryProjects(r *process.Repo) map[string]bool {
+func sharedProjects(r *process.Repo) map[string]bool {
 	out := map[string]bool{}
 	kinds, err := r.Kinds()
 	if err != nil {
 		return out
 	}
 	for _, k := range kinds {
-		if k.IsLibrary() {
+		if k.IsShared() {
 			continue
 		}
 		list, ok, err := activeAgents(r, k.Project)
@@ -290,7 +290,7 @@ func libraryProjects(r *process.Repo) map[string]bool {
 			continue
 		}
 		for _, a := range list {
-			if a.Library {
+			if a.Shared {
 				out[k.Project] = true
 			}
 		}

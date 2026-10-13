@@ -20,7 +20,7 @@ import (
 // plan: the reviewer runs the tests.
 func reviewerRuns(t *testing.T, p flow.Places) {
 	t.Helper()
-	clitest.WriteFiles(t, p.Library, map[string]string{
+	clitest.WriteFiles(t, p.Shared, map[string]string{
 		"reviewer.yaml": "purpose: ревью изменений задачи — поведение и текст\ncapabilities: [read, search, run]\n",
 		"reviewer.md":   "Проверить изменения задачи: поведение, тесты и тексты для оператора.\nЗапустить тесты проекта и приложить результат к замечаниям.\n",
 	})
@@ -41,11 +41,11 @@ func reportOf(t *testing.T, p flow.Places) string {
 // package cli state them.
 
 // diffHead is the head of the summary of flow diff of the shop: when the flow
-// and, with library, the shared subagents were applied, and the file of
+// and, with shared, the shared subagents were applied, and the file of
 // changes.
-func diffHead(applied string, library bool, report string) string {
+func diffHead(applied string, shared bool, report string) string {
 	h := clitest.Lines(msg.Text(msg.FlowProject, "shop"), msg.Text(msg.FlowAppliedAt, applied))
-	if library {
+	if shared {
 		h += msg.Text(msg.SharedAppliedAt, "<время>") + "\n"
 	}
 	return h + msg.Text(msg.DiffReportFile, report) + "\n\n"
@@ -198,7 +198,7 @@ flowchart TD
 	}
 
 	// The file is not a part of the process.
-	if status := gittest.Run(t, filepath.Dir(p.Library), "status", "--porcelain", "--untracked-files=all"); strings.Contains(status, "changes.md") {
+	if status := gittest.Run(t, filepath.Dir(p.Shared), "status", "--porcelain", "--untracked-files=all"); strings.Contains(status, "changes.md") {
 		t.Errorf("git sees the file of changes:\n%s", status)
 	}
 	// The flow and the shared subagents are applied at once; the apply

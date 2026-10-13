@@ -6,16 +6,17 @@ import (
 	"github.com/t8nax/gentry/internal/process"
 )
 
-// ReadLibrary checks the files of the library of subagents by section 10.2:
+// ReadShared checks the files of the shared subagents by section 10.2:
 // each subagent is a pair of its fields and its instruction, the fields are
-// valid, and nothing else is there. Paths of problems are inside the library.
-func ReadLibrary(files process.Files) []Problem {
+// valid, and nothing else is there. Paths of problems are inside the
+// directory of the shared subagents.
+func ReadShared(files process.Files) []Problem {
 	inside := map[string]string{}
 	for p, text := range files {
 		inside[agentsDir+"/"+p] = text
 	}
-	l := newLoader(treeOf(inside), mapLibrary(nil))
-	l.inLibrary = true
+	l := newLoader(treeOf(inside), mapShared(nil))
+	l.inShared = true
 	for _, e := range l.src.entries("") {
 		if e.dir && e.name == agentsDir {
 			l.scan(agentsDir)
@@ -30,28 +31,27 @@ func ReadLibrary(files process.Files) []Problem {
 	return problems
 }
 
-// LibraryChange is a subagent of the library that differs from the active
-// library.
-type LibraryChange struct {
+// SharedChange is a shared subagent that differs from the active one.
+type SharedChange struct {
 	ID       string
 	Change   string   // Added, Modified or Removed
 	Old, New *Agent   // as far as they can be read; nil if absent
 	Projects []string // whose flows name the subagent, by DiffDraft only
 }
 
-// LibraryDiffResult is how the shared subagents of the draft differ from
+// SharedDiffResult is how the shared subagents of the draft differ from
 // the active ones.
-type LibraryDiffResult struct {
+type SharedDiffResult struct {
 	Applied *process.Applied // nil if the shared subagents have never been applied
-	Changes []LibraryChange
+	Changes []SharedChange
 }
 
 // sharedDiff compares the shared subagents of the draft d with the active
 // ones.
-func sharedDiff(r *process.Repo, d draftFiles) (LibraryDiffResult, error) {
-	var out LibraryDiffResult
-	if a, ok, err := r.Applied(process.Library); err != nil {
-		return LibraryDiffResult{}, err
+func sharedDiff(r *process.Repo, d draftFiles) (SharedDiffResult, error) {
+	var out SharedDiffResult
+	if a, ok, err := r.Applied(process.Shared); err != nil {
+		return SharedDiffResult{}, err
 	} else if ok {
 		out.Applied = &a
 	}
@@ -62,9 +62,9 @@ func sharedDiff(r *process.Repo, d draftFiles) (LibraryDiffResult, error) {
 		}
 		return s
 	}
-	before, after := LibraryAgents(d.sharedActive), LibraryAgents(d.shared)
+	before, after := SharedAgents(d.sharedActive), SharedAgents(d.shared)
 	for _, c := range Diff(in(d.sharedActive), in(d.shared)) {
-		lc := LibraryChange{ID: c.ID, Change: c.Change}
+		lc := SharedChange{ID: c.ID, Change: c.Change}
 		if a, ok := before[c.ID]; ok {
 			lc.Old = &a
 		}
@@ -80,7 +80,7 @@ func sharedDiff(r *process.Repo, d draftFiles) (LibraryDiffResult, error) {
 // than project that are valid with the active shared subagents and not with
 // shared: a flow with problems before is not the fault of the change.
 func brokenFlows(r *process.Repo, shared process.Files, project string) ([]FlowProblems, error) {
-	active, err := r.Active(process.Library)
+	active, err := r.Active(process.Shared)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func brokenFlows(r *process.Repo, shared process.Files, project string) ([]FlowP
 	}
 	var out []FlowProblems
 	for _, k := range kinds {
-		if k.IsLibrary() || k.Project == project {
+		if k.IsShared() || k.Project == project {
 			continue
 		}
 		files, err := r.Active(k)

@@ -29,7 +29,7 @@ func withCRM(t *testing.T, p flow.Places) flow.Places {
 	t.Chdir(crm)
 	clitest.MustRun(t, "project", "add", "crm", "--knowledge", "../crm-knowledge")
 	c := p
-	c.Project, c.Dir, c.Conflict = "crm", filepath.Join(filepath.Dir(p.Library), "crm", "flow"), filepath.Join(filepath.Dir(p.Library), "crm", "conflict")
+	c.Project, c.Dir, c.Conflict = "crm", filepath.Join(filepath.Dir(p.Shared), "crm", "flow"), filepath.Join(filepath.Dir(p.Shared), "crm", "conflict")
 	clitest.CopyShopFlow(t, c)
 	clitest.MustRun(t, "flow", "apply")
 	t.Chdir(shop)
@@ -54,11 +54,11 @@ func lastEvent(t *testing.T) contract.Event {
 func TestFlowApplyShared(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	withCRM(t, p)
-	text, err := os.ReadFile(filepath.Join(p.Library, "reviewer.md"))
+	text, err := os.ReadFile(filepath.Join(p.Shared, "reviewer.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.md": string(text) + "Проверить логи.\n"})
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.md": string(text) + "Проверить логи.\n"})
 	stdout := clitest.WantJSON(t, contract.ExitOK, "schemas/flow-apply.json", "flow", "apply")
 	var out contract.FlowApplyOutput
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
@@ -95,7 +95,7 @@ func TestFlowApplyBreaksOther(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	withCRM(t, p)
 	clitest.WriteDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания записаны\nexecutor: orchestrator\n"})
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
 	unknown := msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer")
 	code, _, stderr := clitest.Run("flow", "apply")
 	want := clitest.Lines(msg.Text(msg.ErrSharedBreaksFlows), msg.Text(msg.FlowDir, p.Dir), "",
@@ -132,15 +132,15 @@ func TestFlowApplyBreaksOther(t *testing.T) {
 func TestFlowDiscardShared(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	crm := withCRM(t, p)
-	active, err := os.ReadFile(filepath.Join(p.Library, "reviewer.md"))
+	active, err := os.ReadFile(filepath.Join(p.Shared, "reviewer.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	clitest.WriteDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку задачи в main после ревью.\n"})
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.md": string(active) + "Проверить логи.\n"})
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.md": string(active) + "Проверить логи.\n"})
 	clitest.WriteDraft(t, crm, map[string]string{"stages/merge.md": "Влить ветку в main.\n"})
 	clitest.MustRun(t, "flow", "discard")
-	if b, _ := os.ReadFile(filepath.Join(p.Library, "reviewer.md")); string(b) != string(active) {
+	if b, _ := os.ReadFile(filepath.Join(p.Shared, "reviewer.md")); string(b) != string(active) {
 		t.Errorf("reviewer.md after discard: %q", b)
 	}
 	if e := lastEvent(t); e.Type != flow.EventDraftDiscarded || e.Project == nil || *e.Project != "shop" {

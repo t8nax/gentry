@@ -46,13 +46,13 @@ func newProcessShop(t *testing.T) processShop {
 	}
 	t.Cleanup(r.Close)
 	s := processShop{t: t, r: r, shop: PlacesOf(r, "shop"), crm: PlacesOf(r, "crm")}
-	for dir, from := range map[string]string{s.shop.Library: "agents", s.shop.Dir: "shop/flow", s.crm.Dir: "shop/flow"} {
+	for dir, from := range map[string]string{s.shop.Shared: "agents", s.shop.Dir: "shop/flow", s.crm.Dir: "shop/flow"} {
 		if err := os.CopyFS(dir, os.DirFS(filepath.Join("testdata", "process", filepath.FromSlash(from)))); err != nil {
 			t.Fatal(err)
 		}
 	}
 	var kinds []process.KindFiles
-	for _, k := range []process.Kind{process.Library, process.FlowOf("shop"), process.FlowOf("crm")} {
+	for _, k := range []process.Kind{process.Shared, process.FlowOf("shop"), process.FlowOf("crm")} {
 		files, err := r.Working(k)
 		if err != nil {
 			t.Fatal(err)
@@ -87,7 +87,7 @@ func (s processShop) write(dir string, files map[string]string) {
 func (s processShop) drafts() []bool {
 	s.t.Helper()
 	var out []bool
-	for _, k := range []process.Kind{process.FlowOf("shop"), process.FlowOf("crm"), process.Library} {
+	for _, k := range []process.Kind{process.FlowOf("shop"), process.FlowOf("crm"), process.Shared} {
 		d, err := s.r.HasDraft(k)
 		if err != nil {
 			s.t.Fatal(err)
@@ -108,17 +108,17 @@ func TestDraftShared(t *testing.T) {
 		t.Fatalf("no draft: %v, %v", ok, err)
 	}
 
-	s.write(s.shop.Library, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
+	s.write(s.shop.Shared, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
 	res, ok, err := Draft(s.r, s.shop)
 	if !ok || err != nil || res.Flow == nil {
 		t.Fatalf("a draft of the shared subagents alone: %v, %v, %+v", ok, err, res)
 	}
-	if a, _ := res.Flow.Agent("reviewer"); !a.Library || a.Instruction != "Проверить изменения и логи.\n" {
+	if a, _ := res.Flow.Agent("reviewer"); !a.Shared || a.Instruction != "Проверить изменения и логи.\n" {
 		t.Errorf("reviewer of the draft: %+v", a)
 	}
 
 	// A new shared subagent named by a stage of the draft.
-	s.write(s.shop.Library, map[string]string{
+	s.write(s.shop.Shared, map[string]string{
 		"auditor.yaml": "purpose: аудит изменений\ncapabilities: [read]\n",
 		"auditor.md":   "Проверить риски.\n",
 	})
@@ -130,7 +130,7 @@ func TestDraftShared(t *testing.T) {
 	// A problem of a shared subagent a stage names is told once; one of a
 	// subagent no stage names is a problem of the draft too, without a file.
 	s.write(s.shop.Dir, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания записаны\nexecutor: reviewer\n"})
-	s.write(s.shop.Library, map[string]string{
+	s.write(s.shop.Shared, map[string]string{
 		"reviewer.yaml": "capabilities: [read, search]\n",
 		"linter.yaml":   "purpose: проверка стиля\n",
 		"linter.md":     "Проверить стиль.\n",
@@ -165,7 +165,7 @@ func TestApplyShared(t *testing.T) {
 	}
 
 	s.write(s.shop.Dir, map[string]string{"stages/merge.md": "Влить ветку после ревью.\n"})
-	s.write(s.shop.Library, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
+	s.write(s.shop.Shared, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
 	applied, err := Apply(s.r, s.shop)
 	if err != nil {
 		t.Fatal(err)
@@ -173,7 +173,7 @@ func TestApplyShared(t *testing.T) {
 	if !slices.Equal(applied.Projects, []string{"crm"}) {
 		t.Errorf("projects: %v", applied.Projects)
 	}
-	for _, k := range []process.Kind{process.FlowOf("shop"), process.Library} {
+	for _, k := range []process.Kind{process.FlowOf("shop"), process.Shared} {
 		if a, _, err := s.r.Applied(k); err != nil || a.Commit != applied.Commit {
 			t.Errorf("%v applied by %s, not %s: %v", k, a.Commit, applied.Commit, err)
 		}
@@ -193,7 +193,7 @@ func TestApplyShared(t *testing.T) {
 	if err := s.r.EnsureFlowDir("blog"); err != nil {
 		t.Fatal(err)
 	}
-	s.write(s.shop.Library, map[string]string{"reviewer.md": "Проверить изменения.\n"})
+	s.write(s.shop.Shared, map[string]string{"reviewer.md": "Проверить изменения.\n"})
 	if applied, err = Apply(s.r, blog); err != nil || !slices.Equal(applied.Projects, []string{"crm", "shop"}) {
 		t.Errorf("from a project without a flow: %v, %v", applied.Projects, err)
 	}
@@ -209,7 +209,7 @@ func TestApplyBreaksOther(t *testing.T) {
 	t.Parallel()
 	s := newProcessShop(t)
 	s.write(s.shop.Dir, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания записаны\nexecutor: orchestrator\n"})
-	s.write(s.shop.Library, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
+	s.write(s.shop.Shared, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
 	_, err := Apply(s.r, s.shop)
 	var invalid *DraftInvalidError
 	if !errors.As(err, &invalid) || len(invalid.Problems) != 0 || len(invalid.Flows) != 1 || invalid.Flows[0].Project != "crm" ||
@@ -231,7 +231,7 @@ func TestDiscardShared(t *testing.T) {
 		t.Errorf("no draft: %v", err)
 	}
 	s.write(s.shop.Dir, map[string]string{"stages/merge.md": "Влить ветку после ревью.\n"})
-	s.write(s.shop.Library, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
+	s.write(s.shop.Shared, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
 	s.write(s.crm.Dir, map[string]string{"stages/merge.md": "Влить ветку в main.\n"})
 	if err := Discard(s.r, s.shop); err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestDiscardShared(t *testing.T) {
 		t.Errorf("drafts after discard: %v", d)
 	}
 	// The shared subagents alone are a draft of the shop too.
-	s.write(s.shop.Library, map[string]string{"reviewer.md": "Проверить логи.\n"})
+	s.write(s.shop.Shared, map[string]string{"reviewer.md": "Проверить логи.\n"})
 	if err := Discard(s.r, s.shop); err != nil {
 		t.Fatal(err)
 	}
@@ -258,13 +258,13 @@ func TestDiffShared(t *testing.T) {
 	if _, err := DiffDraft(s.r, s.shop); !errors.As(err, new(*NoDraftError)) {
 		t.Errorf("no draft: %v", err)
 	}
-	s.write(s.shop.Library, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
+	s.write(s.shop.Shared, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
 	res, err := DiffDraft(s.r, s.shop)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Draft || len(res.Changes) != 0 || len(res.Problems) != 0 || res.Library == nil || len(res.Library.Changes) != 1 ||
-		res.Library.Changes[0].ID != "reviewer" || !slices.Equal(res.Library.Changes[0].Projects, []string{"crm", "shop"}) {
-		t.Errorf("diff: %+v, shared %+v", res, res.Library)
+	if res.Draft || len(res.Changes) != 0 || len(res.Problems) != 0 || res.Shared == nil || len(res.Shared.Changes) != 1 ||
+		res.Shared.Changes[0].ID != "reviewer" || !slices.Equal(res.Shared.Changes[0].Projects, []string{"crm", "shop"}) {
+		t.Errorf("diff: %+v, shared %+v", res, res.Shared)
 	}
 }

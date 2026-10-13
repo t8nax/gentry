@@ -189,7 +189,7 @@ func TestFlowDraft(t *testing.T) {
 		msg.Text(msg.FlowAppliedAt, "<время>"), "", msg.Text(msg.AgentsFreeSynced, "shop"), msg.Text(msg.AgentsNextSession)) {
 		t.Errorf("apply:\n%s", stdout)
 	}
-	process := filepath.Dir(p.Library)
+	process := filepath.Dir(p.Shared)
 	if log := gittest.Run(t, process, "log", "-1", "--format=%s|%b"); log != "Apply the flow of shop|Gentry: flow apply shop\n\n" {
 		t.Errorf("commit: %q", log)
 	}
@@ -455,8 +455,8 @@ func TestFlowDraftInvalid(t *testing.T) {
 func TestFlowInvalid(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	clitest.WriteDraft(t, p, map[string]string{"flow.yaml": "on_take: x\n"})
-	gittest.Run(t, filepath.Dir(p.Library), "add", "--all")
-	gittest.Run(t, filepath.Dir(p.Library), "commit", "--quiet", "-am", "Apply the flow of shop\n\nGentry: flow apply shop")
+	gittest.Run(t, filepath.Dir(p.Shared), "add", "--all")
+	gittest.Run(t, filepath.Dir(p.Shared), "commit", "--quiet", "-am", "Apply the flow of shop\n\nGentry: flow apply shop")
 	code, stdout, stderr := clitest.Run("flow", "show")
 	want := clitest.Lines(msg.Text(msg.ErrFlowInvalid, "shop"), msg.Text(msg.FlowDir, p.Dir), "", msg.Text(msg.FlowProblems),
 		"  "+msg.Text(msg.ProblemUnsupportedField, msg.Text(msg.FlowObjCommon), "on_take"))
@@ -481,7 +481,7 @@ func TestFlowInvalid(t *testing.T) {
 // TestFlowBypass checks a change of the flow committed around Gentry.
 func TestFlowBypass(t *testing.T) {
 	p := clitest.ShopFlow(t)
-	process := filepath.Dir(p.Library)
+	process := filepath.Dir(p.Shared)
 	// Without problems it is taken as it is.
 	clitest.WriteDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку задачи в main вручную.\n"})
 	gittest.Run(t, process, "commit", "--quiet", "-am", "by hand")
@@ -511,7 +511,7 @@ func TestFlowBypass(t *testing.T) {
 // applied with it at once.
 func TestFlowExecutorInDraftShared(t *testing.T) {
 	p := clitest.ShopFlow(t)
-	clitest.WriteFiles(t, p.Library, map[string]string{
+	clitest.WriteFiles(t, p.Shared, map[string]string{
 		"tester.yaml": "purpose: тесты\ncapabilities: [read, run]\n",
 		"tester.md":   "Прогнать тесты.\n",
 	})

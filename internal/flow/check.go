@@ -9,7 +9,7 @@ import (
 
 // check checks what the files of the flow refer to and the graph of each
 // scenario. Problems of a file itself are reported as it is read. It returns
-// an error only if the library of subagents cannot be read.
+// an error only if the shared subagents cannot be read.
 func (l *loader) check() error {
 	if l.scenarioCount == 0 {
 		l.report(contract.ProblemNoScenarios, "", 0, msg.ProblemNoScenarios)

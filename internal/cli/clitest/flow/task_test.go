@@ -196,7 +196,7 @@ func TestTaskFlowShow(t *testing.T) {
 // package task checks.
 func TestTaskFlowShowShared(t *testing.T) {
 	_, _, _ = takeInFix(t)
-	lib := clitest.ShopPlaces().Library
+	lib := clitest.ShopPlaces().Shared
 	text, err := os.ReadFile(filepath.Join(lib, "reviewer.md"))
 	if err != nil {
 		t.Fatal(err)

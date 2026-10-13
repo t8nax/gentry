@@ -67,7 +67,7 @@ func flowDiffOutput(project string, res flow.DiffResult, report string, sync *co
 		}
 		out.Changes = append(out.Changes, cc)
 	}
-	if lib := res.Library; lib != nil {
+	if lib := res.Shared; lib != nil {
 		out.Shared = &contract.FlowDiffOutputShared{Applied: appliedJSON(lib.Applied), Changes: []contract.FlowDiffSharedChange{}}
 		for _, c := range lib.Changes {
 			out.Shared.Changes = append(out.Shared.Changes, contract.FlowDiffSharedChange{

@@ -250,7 +250,7 @@ func projectFlow(r *process.Repo, places flow.Places, draft bool, out *contract.
 	fail := func(f failure) (*flow.Flow, *failure) { return nil, &f }
 	k := process.FlowOf(places.Project)
 	hasDraft := false
-	for _, kind := range []process.Kind{k, process.Library} {
+	for _, kind := range []process.Kind{k, process.Shared} {
 		changed, err := r.HasDraft(kind)
 		if err != nil {
 			return fail(flowFailure(err, places))
@@ -294,7 +294,7 @@ func projectFlow(r *process.Repo, places flow.Places, draft bool, out *contract.
 		out.Draft = &contract.FlowDraftInfo{}
 		// A conflict of the flow directory is told before one of the shared
 		// subagents: its folder is named.
-		for _, kind := range []process.Kind{k, process.Library} {
+		for _, kind := range []process.Kind{k, process.Shared} {
 			objects, conflict, err := flow.ConflictObjects(r, kind)
 			if err != nil {
 				return fail(flowFailure(err, places))
@@ -679,7 +679,7 @@ func flowJSON(out contract.FlowShowOutput, fl *flow.Flow) contract.FlowShowOutpu
 	}
 	for _, a := range fl.Agents {
 		ca := contract.FlowAgent{
-			Id: a.ID, Source: contract.FlowShowOutputAgentsElemSource(flowSource(a.Library)), Purpose: a.Purpose,
+			Id: a.ID, Source: contract.FlowShowOutputAgentsElemSource(flowSource(a.Shared)), Purpose: a.Purpose,
 			Capabilities: []contract.FlowShowOutputAgentsElemCapabilitiesElem{}, Instruction: a.Instruction,
 		}
 		for _, c := range a.Capabilities {
@@ -735,7 +735,7 @@ func changeObject(c flow.Change) string {
 	case flow.ObjectPart:
 		return msg.Text(msg.FlowObjPart, c.ID)
 	case flow.ObjectAgent:
-		if c.Library {
+		if c.Shared {
 			return msg.Text(msg.FlowObjSharedAgent, c.ID)
 		}
 		return msg.Text(msg.FlowObjAgent, c.ID)
@@ -771,7 +771,7 @@ func runFlowApply(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	if code, refused := refuseOnConflict(env, r, s, places.Project, process.FlowOf(places.Project), process.Library); refused {
+	if code, refused := refuseOnConflict(env, r, s, places.Project, process.FlowOf(places.Project), process.Shared); refused {
 		return code
 	}
 	applied, err := flow.Apply(r, places)
@@ -943,7 +943,7 @@ func flowFailure(err error, places flow.Places) failure {
 		}
 	case errors.As(err, &ioErr):
 		k := map[string]msg.Key{flow.OpRead: msg.ErrDraftRead, flow.OpWrite: msg.ErrDraftWrite}[ioErr.Op]
-		if ioErr.Library && ioErr.Op == flow.OpRead {
+		if ioErr.Shared && ioErr.Op == flow.OpRead {
 			// The reason names the file.
 			return failure{
 				exit:    contract.ExitError,

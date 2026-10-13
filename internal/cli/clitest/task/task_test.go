@@ -460,7 +460,7 @@ func TestTaskSnapshot(t *testing.T) {
 	}
 
 	// The shared reviewer, named by the review stage, changes.
-	lib := clitest.ShopPlaces().Library
+	lib := clitest.ShopPlaces().Shared
 	text, err := os.ReadFile(filepath.Join(lib, "reviewer.md"))
 	if err != nil {
 		t.Fatal(err)

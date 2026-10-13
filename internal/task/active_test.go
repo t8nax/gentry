@@ -14,8 +14,8 @@ import (
 )
 
 // activeShop is a store with the shop and its worktree, and a process
-// repository with the flow and the library of the flow testdata applied;
-// the library also has translator, which no stage names.
+// repository with the flow and the shared subagents of the flow testdata
+// applied; the shared subagents also have translator, which no stage names.
 type activeShop struct {
 	t        *testing.T
 	st       *state.Store
@@ -48,12 +48,12 @@ func newActiveShop(t *testing.T) activeShop {
 	}
 	t.Cleanup(s.r.Close)
 	testdata := filepath.Join("..", "flow", "testdata", "process")
-	for k, dir := range map[process.Kind]string{process.Library: "agents", process.FlowOf("shop"): filepath.Join("shop", "flow")} {
+	for k, dir := range map[process.Kind]string{process.Shared: "agents", process.FlowOf("shop"): filepath.Join("shop", "flow")} {
 		if err := os.CopyFS(s.r.KindDir(k), os.DirFS(filepath.Join(testdata, dir))); err != nil {
 			t.Fatal(err)
 		}
 	}
-	s.write(process.Library, map[string]string{
+	s.write(process.Shared, map[string]string{
 		"translator.yaml": "purpose: перевод текстов витрины\ncapabilities: [read]\n",
 		"translator.md":   "Перевести тексты витрины.\n",
 	})
@@ -71,13 +71,13 @@ func (s activeShop) write(k process.Kind, files map[string]string) {
 	}
 }
 
-// apply applies the working files of the library, unless they are applied
-// already, and then those of kind k, and returns the commit of k.
+// apply applies the working files of the shared subagents, unless they are
+// applied already, and then those of kind k, and returns the commit of k.
 func (s activeShop) apply(k process.Kind) process.Applied {
 	s.t.Helper()
 	var applied process.Applied
-	kinds := []process.Kind{process.Library, k}
-	if k.IsLibrary() {
+	kinds := []process.Kind{process.Shared, k}
+	if k.IsShared() {
 		kinds = kinds[1:]
 	}
 	for _, kind := range kinds {
@@ -111,14 +111,14 @@ func (s activeShop) take() state.Task {
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	library, _, err := s.r.Applied(process.Library)
+	shared, _, err := s.r.Applied(process.Shared)
 	if err != nil {
 		s.t.Fatal(err)
 	}
 	sc, _ := res.Flow.Scenario("feature")
 	t, err := Take(s.st, TakeRequest{
 		Project: "shop", Worktree: s.worktree, Scenario: sc, Title: "Частичный возврат", Statement: "Вернуть часть заказа.",
-		Source: state.SourceOperator, Snapshot: res.Snapshot, Flow: applied, Library: library,
+		Source: state.SourceOperator, Snapshot: res.Snapshot, Flow: applied, Shared: shared,
 	})
 	if err != nil {
 		s.t.Fatal(err)
@@ -155,20 +155,20 @@ func TestActiveFlow(t *testing.T) {
 			return &a
 		}, true},
 		{"a subagent of a stage", func(s activeShop) *process.Applied {
-			s.write(process.Library, map[string]string{"reviewer.md": "Проверить изменения задачи и логи.\n"})
-			a := s.apply(process.Library)
+			s.write(process.Shared, map[string]string{"reviewer.md": "Проверить изменения задачи и логи.\n"})
+			a := s.apply(process.Shared)
 			return &a
 		}, true},
 		{"a subagent no stage names", func(s activeShop) *process.Applied {
-			s.write(process.Library, map[string]string{"translator.md": "Перевести тексты витрины и писем.\n"})
-			s.apply(process.Library)
+			s.write(process.Shared, map[string]string{"translator.md": "Перевести тексты витрины и писем.\n"})
+			s.apply(process.Shared)
 			return nil
 		}, false},
 		{"a subagent no stage names after the flow", func(s activeShop) *process.Applied {
 			s.write(flowKind, map[string]string{"stages/branch.md": "Создать ветку.\n"})
 			s.apply(flowKind)
-			s.write(process.Library, map[string]string{"translator.md": "Перевести тексты витрины и писем.\n"})
-			a := s.apply(process.Library)
+			s.write(process.Shared, map[string]string{"translator.md": "Перевести тексты витрины и писем.\n"})
+			a := s.apply(process.Shared)
 			return &a
 		}, true},
 		{"line ends alone", func(s activeShop) *process.Applied {

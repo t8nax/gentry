@@ -19,14 +19,14 @@ const (
 type Places struct {
 	Project  string
 	Dir      string // the flow directory: the active flow and the draft over it
-	Library  string // the library of subagents
+	Shared   string // the directory of the shared subagents
 	Conflict string // the variants of another machine while the flow is in conflict
 }
 
 // PlacesOf returns the places of the flow of project in repository r.
 func PlacesOf(r *process.Repo, project string) Places {
 	k := process.FlowOf(project)
-	return Places{Project: project, Dir: r.KindDir(k), Library: r.KindDir(process.Library), Conflict: r.ConflictDir(k)}
+	return Places{Project: project, Dir: r.KindDir(k), Shared: r.KindDir(process.Shared), Conflict: r.ConflictDir(k)}
 }
 
 // NoFlowError means the project has no active flow.
@@ -65,35 +65,37 @@ const (
 	OpDelete = "delete"
 )
 
-// DraftIOError means the files of the flow, or of the library, cannot be
-// read or written.
+// DraftIOError means the files of the flow, or of the shared subagents, cannot
+// be read or written.
 type DraftIOError struct {
-	Op      string // OpRead, OpWrite or OpDelete
-	Path    string
-	Library bool // the library of subagents, not the flow
-	Err     error
+	Op     string // OpRead, OpWrite or OpDelete
+	Path   string
+	Shared bool // the shared subagents, not the flow
+	Err    error
 }
 
 func (e *DraftIOError) Error() string { return e.Op + " " + e.Path + ": " + e.Err.Error() }
 func (e *DraftIOError) Unwrap() error { return e.Err }
 
-// ioError wraps an error of the files of the flow or of the library in dir.
-func ioError(op, dir string, library bool, err error) error {
+// ioError wraps an error of the files of the flow or of the shared subagents in
+// dir.
+func ioError(op, dir string, shared bool, err error) error {
 	var pe *fs.PathError
 	if errors.As(err, &pe) {
-		return &DraftIOError{Op: op, Path: pe.Path, Library: library, Err: err}
+		return &DraftIOError{Op: op, Path: pe.Path, Shared: shared, Err: err}
 	}
 	return err
 }
 
 // Check checks the content of a kind of the process for package process: a
-// flow with the library of the same commit, or the library itself.
-func Check(k process.Kind, files, library process.Files) ([]string, error) {
+// flow with the shared subagents of the same commit, or the shared subagents
+// themselves.
+func Check(k process.Kind, files, shared process.Files) ([]string, error) {
 	var problems []Problem
-	if k.IsLibrary() {
-		problems = ReadLibrary(files)
+	if k.IsShared() {
+		problems = ReadShared(files)
 	} else {
-		res, err := Read(files, library)
+		res, err := Read(files, shared)
 		if err != nil {
 			return nil, err
 		}
@@ -113,11 +115,11 @@ func Active(r *process.Repo, project string) (res *Result, ok bool, err error) {
 	if err != nil || len(files) == 0 {
 		return nil, false, err
 	}
-	library, err := r.Active(process.Library)
+	shared, err := r.Active(process.Shared)
 	if err != nil {
 		return nil, false, err
 	}
-	if res, err = Read(files, library); err != nil {
+	if res, err = Read(files, shared); err != nil {
 		return nil, false, err
 	}
 	return res, true, nil
@@ -142,10 +144,10 @@ func readDraft(r *process.Repo, p Places) (draftFiles, error) {
 	if d.flowActive, err = r.Active(k); err != nil {
 		return d, err
 	}
-	if d.shared, err = r.Working(process.Library); err != nil {
-		return d, ioError(OpRead, p.Library, true, err)
+	if d.shared, err = r.Working(process.Shared); err != nil {
+		return d, ioError(OpRead, p.Shared, true, err)
 	}
-	d.sharedActive, err = r.Active(process.Library)
+	d.sharedActive, err = r.Active(process.Shared)
 	return d, err
 }
 
@@ -172,7 +174,7 @@ func (d draftFiles) read() (*Result, error) {
 		res.Problems = nil
 	}
 	if d.sharedChanged() {
-		res.Problems = withShared(res.Problems, ReadLibrary(d.shared))
+		res.Problems = withShared(res.Problems, ReadShared(d.shared))
 	}
 	res.Flow = res.Read
 	if len(res.Problems) > 0 {
@@ -223,9 +225,9 @@ type DiffResult struct {
 	// Old is the active flow and New the draft, as far as they can be read;
 	// New is Old without changes of the flow directory. Neither is nil.
 	Old, New  *Flow
-	Scenarios []ScenarioDiff     // of the changed scenarios, by identifier
-	Problems  []Problem          // of the draft: of the flow with the shared subagents and of the shared subagents
-	Library   *LibraryDiffResult // nil without changes of the shared subagents
+	Scenarios []ScenarioDiff    // of the changed scenarios, by identifier
+	Problems  []Problem         // of the draft: of the flow with the shared subagents and of the shared subagents
+	Shared    *SharedDiffResult // nil without changes of the shared subagents
 }
 
 // DiffDraft compares the draft of the flow of a project, its flow directory
@@ -289,29 +291,29 @@ func DiffDraft(r *process.Repo, p Places) (DiffResult, error) {
 		if err != nil {
 			return DiffResult{}, err
 		}
-		if err := libraryUsers(r, p.Project, out.New, &lib); err != nil {
+		if err := changeUsers(r, p.Project, out.New, &lib); err != nil {
 			return DiffResult{}, err
 		}
-		out.Library = &lib
+		out.Shared = &lib
 	}
 	return out, nil
 }
 
-// libraryUsers notes the projects whose flows name each changed shared
+// changeUsers notes the projects whose flows name each changed shared
 // subagent: project by flow, its draft as it stands, the others by their
 // active flows.
-func libraryUsers(r *process.Repo, project string, flow *Flow, lib *LibraryDiffResult) error {
+func changeUsers(r *process.Repo, project string, flow *Flow, lib *SharedDiffResult) error {
 	kinds, err := r.Kinds()
 	if err != nil {
 		return err
 	}
-	active, err := r.Active(process.Library)
+	active, err := r.Active(process.Shared)
 	if err != nil {
 		return err
 	}
 	flows := map[string]*Flow{}
 	for _, k := range kinds {
-		if k.IsLibrary() {
+		if k.IsShared() {
 			continue
 		}
 		if k.Project == project {
@@ -390,7 +392,7 @@ func Apply(r *process.Repo, p Places) (Applied, error) {
 		if out.Projects, err = sharedUsers(r, d, p.Project, res.Read); err != nil {
 			return Applied{}, err
 		}
-		kinds = append(kinds, process.KindFiles{Kind: process.Library, Files: d.shared})
+		kinds = append(kinds, process.KindFiles{Kind: process.Shared, Files: d.shared})
 		subject += " and the shared subagents"
 	}
 	out.Applied, err = r.ApplyKinds(kinds, subject, "flow apply "+p.Project)
@@ -405,7 +407,7 @@ func sharedUsers(r *process.Repo, d draftFiles, project string, fl *Flow) ([]str
 	if err != nil {
 		return nil, err
 	}
-	if err := libraryUsers(r, project, fl, &lib); err != nil {
+	if err := changeUsers(r, project, fl, &lib); err != nil {
 		return nil, err
 	}
 	out := []string{}
@@ -425,15 +427,15 @@ func sharedUsers(r *process.Repo, d draftFiles, project string, fl *Flow) ([]str
 // another machine of a conflict of either.
 func Discard(r *process.Repo, p Places) error {
 	var kinds []process.Kind
-	for _, k := range []process.Kind{process.FlowOf(p.Project), process.Library} {
+	for _, k := range []process.Kind{process.FlowOf(p.Project), process.Shared} {
 		dir, conflictDir := r.KindDir(k), r.ConflictDir(k)
 		draft, err := r.HasDraft(k)
 		if err != nil {
-			return ioError(OpRead, dir, k.IsLibrary(), err)
+			return ioError(OpRead, dir, k.IsShared(), err)
 		}
 		_, conflict, err := r.Conflict(k)
 		if err != nil {
-			return ioError(OpRead, conflictDir, k.IsLibrary(), err)
+			return ioError(OpRead, conflictDir, k.IsShared(), err)
 		}
 		if draft || conflict {
 			kinds = append(kinds, k)
@@ -444,14 +446,14 @@ func Discard(r *process.Repo, p Places) error {
 	}
 	for _, k := range kinds {
 		if err := r.Discard(k); err != nil {
-			return ioError(OpWrite, r.KindDir(k), k.IsLibrary(), err)
+			return ioError(OpWrite, r.KindDir(k), k.IsShared(), err)
 		}
 	}
 	return nil
 }
 
-// ConflictObjects returns the objects of the flow, or of the library, whose
-// variants of another machine are in the conflict directory of kind k, as
+// ConflictObjects returns the objects of the flow, or of the shared subagents,
+// whose variants of another machine are in the conflict directory of kind k, as
 // changes without a kind of change; ok is false if k is not in conflict.
 func ConflictObjects(r *process.Repo, k process.Kind) (objects []Change, ok bool, err error) {
 	files, ok, err := r.Conflict(k)
@@ -466,7 +468,7 @@ func ConflictObjects(r *process.Repo, k process.Kind) (objects []Change, ok bool
 func ObjectsOf(k process.Kind, paths []string) []Change {
 	files := map[string]string{}
 	for _, p := range paths {
-		if k.IsLibrary() {
+		if k.IsShared() {
 			p = agentsDir + "/" + p
 		}
 		files[p] = ""

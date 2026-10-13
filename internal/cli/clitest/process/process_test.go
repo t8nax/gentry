@@ -143,7 +143,7 @@ func TestProcessSync(t *testing.T) {
 
 	// The shared subagents go the same way, applied by flow apply.
 	a := clitest.ShopPlaces()
-	clitest.WriteFiles(t, a.Library, map[string]string{"reviewer.md": "Проверить изменения задачи и тексты.\n"})
+	clitest.WriteFiles(t, a.Shared, map[string]string{"reviewer.md": "Проверить изменения задачи и тексты.\n"})
 	if _, stdout, _ := clitest.Run("flow", "apply"); clitest.Masked(stdout) != clitest.Lines(msg.Text(msg.FlowApplied),
 		msg.Text(msg.FlowProject, "shop"), msg.Text(msg.FlowAppliedAt, "<время>"), "", msg.Text(msg.AgentsFreeSynced, "shop"), msg.Text(msg.AgentsNextSession)) {
 		t.Errorf("flow apply of the shared subagents:\n%s", stdout)
@@ -156,11 +156,11 @@ func TestProcessSync(t *testing.T) {
 		t.Errorf("the file of changes on b after a change of the shared subagents: %v", err)
 	}
 	clitest.MustRun(t, "flow", "discard")
-	clitest.WriteFiles(t, b.Library, map[string]string{"reviewer.md": "Черновик.\n"})
+	clitest.WriteFiles(t, b.Shared, map[string]string{"reviewer.md": "Черновик.\n"})
 	if _, stdout, _ := clitest.Run("flow", "discard"); stdout != clitest.Lines(msg.Text(msg.FlowDiscarded), msg.Text(msg.FlowProject, "shop")) {
 		t.Errorf("flow discard of the shared subagents:\n%s", stdout)
 	}
-	if b, _ := os.ReadFile(filepath.Join(b.Library, "reviewer.md")); string(b) != "Проверить изменения задачи и тексты.\n" {
+	if b, _ := os.ReadFile(filepath.Join(b.Shared, "reviewer.md")); string(b) != "Проверить изменения задачи и тексты.\n" {
 		t.Errorf("reviewer after discard: %q", b)
 	}
 }
@@ -261,7 +261,7 @@ func TestProcessOffline(t *testing.T) {
 func TestSharedRefusals(t *testing.T) {
 	clitest.ConnectedShop(t)
 	p := clitest.ShopPlaces()
-	clitest.WriteFiles(t, p.Library, map[string]string{"tester.yaml": "capabilities: [read]\n", "notes.txt": "x\n"})
+	clitest.WriteFiles(t, p.Shared, map[string]string{"tester.yaml": "capabilities: [read]\n", "notes.txt": "x\n"})
 	code, _, stderr := clitest.Run("flow", "apply")
 	tester := msg.Text(msg.FlowObjSharedAgent, "tester")
 	want := clitest.Lines(msg.Text(msg.ErrDraftInvalid, "shop"), msg.Text(msg.FlowDir, p.Dir), "", msg.Text(msg.FlowProblems),
@@ -305,7 +305,7 @@ func TestProcessJSON(t *testing.T) {
 		t.Errorf("remote: %s, want %s", stdout, want)
 	}
 	p := clitest.ShopPlaces()
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.md": "Новая инструкция.\n"})
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.md": "Новая инструкция.\n"})
 	_, stdout, _ = clitest.Run("flow", "diff", "--json")
 	clitest.Validate(t, "schemas/flow-diff.json", stdout)
 	if !strings.Contains(stdout, `"changes":[],"project":"shop","report":`) ||
@@ -317,7 +317,7 @@ func TestProcessJSON(t *testing.T) {
 	if !strings.Contains(stdout, `"projects":[],"sent":true,"sync":{"sent":[{"kind":"shared"}]}`) {
 		t.Errorf("flow apply: %s", stdout)
 	}
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.md": "Ещё.\n"})
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.md": "Ещё.\n"})
 	_, stdout, _ = clitest.Run("process", "show", "--json")
 	clitest.Validate(t, "schemas/process-show.json", stdout)
 	if !strings.Contains(stdout, `"drafts":[{"kind":"shared"}]`) {
@@ -365,7 +365,7 @@ func TestProcessJSON(t *testing.T) {
 func TestProjectAddMakesFlowDir(t *testing.T) {
 	clitest.ConnectedShop(t)
 	p := clitest.ShopPlaces()
-	process := filepath.Dir(p.Library)
+	process := filepath.Dir(p.Shared)
 	if log := gittest.Run(t, process, "log", "--format=%s"); log != "Create the process repository\n" {
 		t.Errorf("log: %q", log)
 	}
@@ -379,7 +379,7 @@ func TestProjectAddMakesFlowDir(t *testing.T) {
 // with a change of the flow that does without the subagent.
 func TestSharedBreaksFlow(t *testing.T) {
 	p := clitest.ShopFlow(t)
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
 	code, stdout, stderr := clitest.Run("flow", "apply")
 	noReviewer := msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer")
 	want := clitest.Lines(msg.Text(msg.ErrDraftInvalid, "shop"), msg.Text(msg.FlowDir, p.Dir), "", msg.Text(msg.FlowProblems), "  "+noReviewer)
@@ -412,7 +412,7 @@ func TestSyncLaysOutFreeWorktrees(t *testing.T) {
 	file := filepath.Join(shop, ".claude", "agents", "reviewer.md")
 
 	m.onA()
-	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
+	clitest.WriteFiles(t, clitest.ShopPlaces().Shared, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
 	clitest.MustRun(t, "flow", "apply")
 	os.Remove(file)
 
@@ -434,7 +434,7 @@ func TestImplicitSyncLaysOut(t *testing.T) {
 	file := filepath.Join(shop, ".claude", "agents", "reviewer.md")
 
 	m.onA()
-	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
+	clitest.WriteFiles(t, clitest.ShopPlaces().Shared, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
 	clitest.MustRun(t, "flow", "apply")
 	os.Remove(file)
 

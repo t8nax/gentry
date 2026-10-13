@@ -236,3 +236,13 @@ func TestAttemptText(t *testing.T) {
 	)
 	wantText(t, "attempt", func(p *page) { attemptText(p, out, shopNames()) }, text, "")
 }
+
+// TestAttemptMissingText checks the refusal of task attempt show without the
+// number of an attempt.
+func TestAttemptMissingText(t *testing.T) {
+	wantRefusal(t, "no attempt", "task attempt show", nil, lines(
+		"Не указан номер попытки.",
+		"",
+		hintLineOf(msg.HintCommandHelp, "gentry task attempt show --help"),
+	), "Не указан номер попытки.\n")
+}

@@ -11,12 +11,15 @@ import (
 )
 
 // Snapshot is the content of a flow version: the files of the draft it was
-// applied from, the project subagents among them, and copies of the library
-// subagents its stages name, so that editing the library does not change a
-// version tasks are pinned to.
+// applied from, the project subagents among them, and copies of the shared
+// subagents its stages name, so that editing a shared subagent does not
+// change a version tasks are pinned to.
 type Snapshot struct {
-	Files   map[string]string `json:"files"`   // by path inside the flow, with forward slashes
-	Library map[string]string `json:"library"` // by file name in the library, such as reviewer.yaml
+	Files map[string]string `json:"files"` // by path inside the flow, with forward slashes
+	// Shared are the copies of the shared subagents the stages name, by file
+	// name, such as reviewer.yaml. The key of JSON is the one of the
+	// snapshots kept in the state store.
+	Shared map[string]string `json:"library"`
 }
 
 // Encode returns the snapshot as stored in the state store.
@@ -31,8 +34,8 @@ func DecodeSnapshot(b []byte) (Snapshot, error) {
 	if s.Files == nil {
 		s.Files = map[string]string{}
 	}
-	if s.Library == nil {
-		s.Library = map[string]string{}
+	if s.Shared == nil {
+		s.Shared = map[string]string{}
 	}
 	return s, nil
 }
@@ -55,23 +58,23 @@ const (
 
 // Change is an object of a flow that differs between two snapshots.
 type Change struct {
-	Object  string // one of Object*
-	ID      string // empty for ObjectCommon
-	Library bool   // a subagent of the library, not of the project
-	Change  string // Added, Modified or Removed
+	Object string // one of Object*
+	ID     string // empty for ObjectCommon
+	Shared bool   // a shared subagent, not one of the project
+	Change string // Added, Modified or Removed
 }
 
 // objectKey identifies an object of a flow across snapshots.
 type objectKey struct {
-	object  string
-	id      string
-	library bool
+	object string
+	id     string
+	shared bool
 }
 
 // rankOf orders the kinds of objects as the flow lists them.
 func rankOf(k objectKey) int {
 	r := slices.Index([]string{ObjectCommon, ObjectScenario, ObjectStage, ObjectPart, ObjectAgent}, k.object)
-	if k.library {
+	if k.shared {
 		r++
 	}
 	return r
@@ -105,24 +108,24 @@ func (s Snapshot) objects() map[objectKey]map[string]string {
 			add(objectKey{object: ObjectAgent, id: id}, p, text)
 		}
 	}
-	for name, text := range s.Library {
+	for name, text := range s.Shared {
 		ext := path.Ext(name)
 		if ext == fieldsExt || ext == textExt {
-			add(objectKey{object: ObjectAgent, id: strings.TrimSuffix(name, ext), library: true}, name, text)
+			add(objectKey{object: ObjectAgent, id: strings.TrimSuffix(name, ext), shared: true}, name, text)
 		}
 	}
 	return out
 }
 
 // Diff returns the objects that differ from old to cur: the common rules
-// first, then scenarios, stages, parts, project subagents and library
+// first, then scenarios, stages, parts, project subagents and shared
 // subagents, each kind by identifier. Texts are compared with line ends
 // normalized.
 func Diff(old, cur Snapshot) []Change {
 	before, after := old.objects(), cur.objects()
 	var changes []Change
 	note := func(k objectKey, change string) {
-		changes = append(changes, Change{Object: k.object, ID: k.id, Library: k.library, Change: change})
+		changes = append(changes, Change{Object: k.object, ID: k.id, Shared: k.shared, Change: change})
 	}
 	for k, files := range after {
 		prev, ok := before[k]
@@ -139,8 +142,8 @@ func Diff(old, cur Snapshot) []Change {
 		}
 	}
 	slices.SortFunc(changes, func(a, b Change) int {
-		ka := objectKey{object: a.Object, id: a.ID, library: a.Library}
-		kb := objectKey{object: b.Object, id: b.ID, library: b.Library}
+		ka := objectKey{object: a.Object, id: a.ID, shared: a.Shared}
+		kb := objectKey{object: b.Object, id: b.ID, shared: b.Shared}
 		return cmp.Or(cmp.Compare(rankOf(ka), rankOf(kb)), strings.Compare(a.ID, b.ID))
 	})
 	return changes

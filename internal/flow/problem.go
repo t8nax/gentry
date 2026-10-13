@@ -12,7 +12,7 @@ import (
 // Problem is one error of a flow.
 type Problem struct {
 	Code    string // kind of the problem, one of contract.Problem*
-	File    string // path inside the flow with forward slashes; empty for the whole flow and the library
+	File    string // path inside the flow with forward slashes; empty for the whole flow and the shared subagents
 	Line    int    // line of File from 1; 0 if unknown
 	Message string // for the operator: names the object, not the file
 }
@@ -25,18 +25,18 @@ func objNode(scenario, id string) string { return msg.Text(msg.FlowObjNode, scen
 func objStage(id string) string          { return msg.Text(msg.FlowObjStage, id) }
 func objPart(id string) string           { return msg.Text(msg.FlowObjPart, id) }
 func objAgent(id string) string          { return msg.Text(msg.FlowObjAgent, id) }
-func objLibraryAgent(id string) string   { return msg.Text(msg.FlowObjSharedAgent, id) }
+func objSharedAgent(id string) string    { return msg.Text(msg.FlowObjSharedAgent, id) }
 
 // report adds a problem of file at line.
 func (l *loader) report(code, file string, line int, k msg.Key, args ...any) {
 	l.problems = append(l.problems, Problem{Code: code, File: file, Line: line, Message: msg.Text(k, args...)})
 }
 
-// reportOn adds a problem of object o at line of its file. A library subagent
+// reportOn adds a problem of object o at line of its file. A shared subagent
 // has no file in the flow, and so no line either.
 func (l *loader) reportOn(o object, code string, line int, k msg.Key, args ...any) {
-	if o.library {
-		l.libProblems = append(l.libProblems, Problem{Code: code, Message: msg.Text(k, args...)})
+	if o.shared {
+		l.sharedProblems = append(l.sharedProblems, Problem{Code: code, Message: msg.Text(k, args...)})
 		return
 	}
 	l.report(code, o.file, line, k, args...)
@@ -65,10 +65,10 @@ func rank(p Problem) int {
 }
 
 // sortProblems puts the problems of the files of the flow in the order of
-// files and lines, and those of library subagents, which have no file in the
+// files and lines, and those of shared subagents, which have no file in the
 // flow, before the files that do not belong to it. Problems of one line keep
 // the order in which they were found.
-func sortProblems(ps, library []Problem) []Problem {
+func sortProblems(ps, shared []Problem) []Problem {
 	slices.SortStableFunc(ps, func(a, b Problem) int {
 		return cmp.Or(cmp.Compare(rank(a), rank(b)), strings.Compare(a.File, b.File), cmp.Compare(a.Line, b.Line))
 	})
@@ -76,15 +76,15 @@ func sortProblems(ps, library []Problem) []Problem {
 	if i < 0 {
 		i = len(ps)
 	}
-	return slices.Concat(ps[:i], library, ps[i:])
+	return slices.Concat(ps[:i], shared, ps[i:])
 }
 
 // agentName names subagent id of the agents directory: a shared subagent
 // when the loader reads the shared subagents, or else a subagent of the
 // project.
 func (l *loader) agentName(id string) string {
-	if l.inLibrary {
-		return objLibraryAgent(id)
+	if l.inShared {
+		return objSharedAgent(id)
 	}
 	return objAgent(id)
 }

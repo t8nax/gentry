@@ -29,7 +29,7 @@ func TestNoOldNames(t *testing.T) {
 			}
 		}
 		if strings.Contains(strings.ToLower(text), "библиот") {
-			t.Errorf("%s names a library of subagents", name)
+			t.Errorf("%s names a library of subagents, not the shared subagents", name)
 		}
 		if regexp.MustCompile(`(?i)\bactive\b`).MatchString(text) {
 			t.Errorf("%s names the field active", name)

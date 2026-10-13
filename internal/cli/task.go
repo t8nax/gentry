@@ -154,7 +154,7 @@ func runTaskTake(args []string, env Env) int {
 	if !ok {
 		return fail(env, objectNotFound(w.Project, 0, fields["scenario"], false))
 	}
-	library, _, err := r.Applied(process.Library)
+	shared, _, err := r.Applied(process.Shared)
 	if err != nil {
 		return fail(env, processFailure(err))
 	}
@@ -175,7 +175,7 @@ func runTaskTake(args []string, env Env) int {
 	t, err := task.Take(st, task.TakeRequest{
 		Project: w.Project, Worktree: w.Path, Scenario: sc,
 		Title: fields["title"], Statement: fields["statement"], Source: source, Again: again,
-		Snapshot: res.Snapshot, Flow: applied, Library: library,
+		Snapshot: res.Snapshot, Flow: applied, Shared: shared,
 	})
 	if err != nil {
 		return fail(env, taskFailure(err))

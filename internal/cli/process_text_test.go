@@ -36,6 +36,25 @@ func TestProcessRemoteText(t *testing.T) {
 			msg.Text(msg.ProcessRemoteSet, shopRemote),
 			"Процесс: совпадает с удалённым репозиторием",
 		), ""},
+		{"merged with drafts", contract.ProcessRemoteSetOutput{Remote: shopRemote, Result: "merged", Drafts: []contract.ProcessItem{flowItem, sharedItem}}, lines(
+			msg.Text(msg.ProcessRemoteSet, shopRemote),
+			msg.Text(msg.ProcessResultMerged),
+			"",
+			msg.Text(msg.ProcessDrafts),
+			"  "+msg.Text(msg.KindFlow, "shop"),
+			"  "+msg.Text(msg.KindShared),
+			"",
+			"Посмотреть черновики: gentry process show",
+		), lines(
+			msg.Text(msg.ProcessRemoteSet, shopRemote),
+			msg.Text(msg.ProcessResultMerged),
+			"",
+			msg.Text(msg.ProcessDrafts),
+			"  "+msg.Text(msg.KindFlow, "shop"),
+			"  "+msg.Text(msg.KindShared),
+			"",
+			hintLineOf(msg.HintProcessStatus, "process_show"),
+		)},
 	}
 	for _, tt := range tests {
 		wantText(t, tt.name, func(p *page) { processRemoteSetText(p, tt.out) }, tt.cli, tt.agent)
@@ -274,8 +293,8 @@ func TestConflictFailureText(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	f := conflictFailure(r, process.Conflict{Kind: process.Library}, "shop")
-	dir := r.ConflictDir(process.Library)
+	f := conflictFailure(r, process.Conflict{Kind: process.Shared}, "shop")
+	dir := r.ConflictDir(process.Shared)
 	if f.code != contract.CodeFlowConflict || f.details["conflict_dir"] != dir || f.details["project"] != "shop" {
 		t.Errorf("refusal: %+v", f)
 	}

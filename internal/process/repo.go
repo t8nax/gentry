@@ -1,5 +1,5 @@
 // Package process is the git repository of the operator's process, by
-// decision R117: the flows of projects and the library of subagents as
+// decision R117: the flows of projects and the shared subagents as
 // files, their versions as commits. What is committed is active; what differs
 // in the working directory is a draft. Gentry alone commits to it, exchanges
 // it with a remote repository, so that the process is the same on every
@@ -33,7 +33,7 @@ const Format = 1
 const (
 	formatFile  = "process.yaml"
 	ignoreFile  = ".gitignore"
-	libraryDir  = "agents"
+	sharedDir   = "agents"
 	flowDir     = "flow"
 	conflictDir = "conflict"
 
@@ -696,32 +696,32 @@ func (r *Repo) markSynced() error {
 	return os.WriteFile(filepath.Join(r.Dir, ".git", syncedFile), []byte(time.Now().UTC().Format(time.RFC3339Nano)+"\n"), 0o644)
 }
 
-// Kind is a kind of the process: the flow of a project or the library of
+// Kind is a kind of the process: the flow of a project or the shared
 // subagents.
 type Kind struct {
-	Project string // empty for the library
+	Project string // empty for the shared subagents
 }
 
-// Library is the library of subagents.
-var Library = Kind{}
+// Shared is the kind of the shared subagents.
+var Shared = Kind{}
 
 // FlowOf returns the flow of project.
 func FlowOf(project string) Kind { return Kind{Project: project} }
 
-// IsLibrary reports whether k is the library of subagents.
-func (k Kind) IsLibrary() bool { return k.Project == "" }
+// IsShared reports whether k is the shared subagents.
+func (k Kind) IsShared() bool { return k.Project == "" }
 
 // root is the directory of k in the repository.
 func (k Kind) root() string {
-	if k.IsLibrary() {
-		return libraryDir
+	if k.IsShared() {
+		return sharedDir
 	}
 	return k.Project + "/" + flowDir
 }
 
 // conflictRoot is the directory of the variants of another machine of k.
 func (k Kind) conflictRoot() string {
-	if k.IsLibrary() {
+	if k.IsShared() {
 		return conflictDir
 	}
 	return k.Project + "/" + conflictDir
@@ -739,8 +739,8 @@ func (r *Repo) ConflictDir(k Kind) string {
 // kindOf returns the kind path p of the repository belongs to and the path
 // inside its directory; ok is false for other files.
 func kindOf(p string) (k Kind, rel string, ok bool) {
-	if rel, ok := strings.CutPrefix(p, libraryDir+"/"); ok {
-		return Library, rel, true
+	if rel, ok := strings.CutPrefix(p, sharedDir+"/"); ok {
+		return Shared, rel, true
 	}
 	project, rest, ok := strings.Cut(p, "/")
 	if !ok || project == "" || strings.HasPrefix(project, ".") {
@@ -752,8 +752,8 @@ func kindOf(p string) (k Kind, rel string, ok bool) {
 	return Kind{}, "", false
 }
 
-// sortKinds returns the kinds of set in order: flows by project, the library
-// last.
+// sortKinds returns the kinds of set in order: flows by project, the shared
+// subagents last.
 func sortKinds(set map[Kind]bool) []Kind {
 	out := make([]Kind, 0, len(set))
 	for k := range set {
@@ -761,9 +761,9 @@ func sortKinds(set map[Kind]bool) []Kind {
 	}
 	slices.SortFunc(out, func(a, b Kind) int {
 		switch {
-		case a.IsLibrary() == b.IsLibrary():
+		case a.IsShared() == b.IsShared():
 			return strings.Compare(a.Project, b.Project)
-		case a.IsLibrary():
+		case a.IsShared():
 			return 1
 		}
 		return -1

@@ -291,7 +291,7 @@ const (
 	ProblemOrphanAgentInstruction Key = "problem.orphan_agent_instruction"
 )
 
-// Texts of the process repository: the flow, the library and the
+// Texts of the process repository: the flow, the shared subagents and the
 // synchronization (part 7 of stage 6).
 const (
 	FlowAppliedAt              Key = "flow.applied_at"

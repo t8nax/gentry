@@ -97,9 +97,9 @@ func TestFlowShowText(t *testing.T) {
 		[]string{"review", "Ревью", "reviewer", "замечания ревью записаны и разобраны"},
 	) + "\n"
 	agentsHeader := []string{msg.Text(msg.ColAgent), msg.Text(msg.ColSource), msg.Text(msg.ColStages)}
-	libraryWord, projectWord := msg.Text(msg.FlowSourceShared), msg.Text(msg.FlowSourceProject)
-	library := table(agentsHeader, []string{"reviewer", libraryWord, "review"})
-	withAuditor := table(agentsHeader, []string{"auditor", projectWord, "security"}, []string{"reviewer", libraryWord, "review"})
+	sharedWord, projectWord := msg.Text(msg.FlowSourceShared), msg.Text(msg.FlowSourceProject)
+	shared := table(agentsHeader, []string{"reviewer", sharedWord, "review"})
+	withAuditor := table(agentsHeader, []string{"auditor", projectWord, "security"}, []string{"reviewer", sharedWord, "review"})
 	head := lines(
 		"Проект: shop",
 		"Флоу применён: 2026-10-09 12:30",
@@ -148,15 +148,15 @@ func TestFlowShowText(t *testing.T) {
 		x          flowShowExtra
 		cli, agent string
 	}{
-		{"flow", shown(nil, true, nil), flowShowExtra{}, head + "\n" + tables + library + "\n" +
+		{"flow", shown(nil, true, nil), flowShowExtra{}, head + "\n" + tables + shared + "\n" +
 			lines(hintLineOf(msg.HintFlowStage, "gentry flow show --stage "+msg.Text(msg.ArgStage))),
-			head + "\n" + tables + library + "\n" + lines(hintLineOf(msg.HintFlowStage, "flow_show (stage)"))},
-		{"flow with a draft", shown(nil, true, &contract.FlowDraftInfo{}), flowShowExtra{}, head + "Черновик существует.\n\n" + tables + library + "\n" +
+			head + "\n" + tables + shared + "\n" + lines(hintLineOf(msg.HintFlowStage, "flow_show (stage)"))},
+		{"flow with a draft", shown(nil, true, &contract.FlowDraftInfo{}), flowShowExtra{}, head + "Черновик существует.\n\n" + tables + shared + "\n" +
 			lines(hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft")),
-			head + "Черновик существует.\n\n" + tables + library + "\n" + lines(hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)"))},
-		{"draft never applied", shown(nil, false, &contract.FlowDraftInfo{}), flowShowExtra{draft: true}, draftHead + "\n" + tables + library + "\n" +
+			head + "Черновик существует.\n\n" + tables + shared + "\n" + lines(hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)"))},
+		{"draft never applied", shown(nil, false, &contract.FlowDraftInfo{}), flowShowExtra{draft: true}, draftHead + "\n" + tables + shared + "\n" +
 			lines(hintLineOf(msg.HintFlowApply, "gentry flow apply")),
-			draftHead + "\n" + tables + library + "\n" + lines(hintLineOf(msg.HintFlowApply, "flow_apply"))},
+			draftHead + "\n" + tables + shared + "\n" + lines(hintLineOf(msg.HintFlowApply, "flow_apply"))},
 		{"draft with a subagent of the project", shown(security(t), true, &contract.FlowDraftInfo{}), flowShowExtra{draft: true},
 			securityText + lines(hintLineOf(msg.HintFlowApply, "gentry flow apply")),
 			securityText + lines(hintLineOf(msg.HintFlowApply, "flow_apply"))},
@@ -405,7 +405,7 @@ func TestFlowFailureText(t *testing.T) {
 			"Ошибки флоу проекта crm:",
 			"  "+msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer"),
 		)},
-		{"shared subagents unreadable", flowFailure(&flow.DraftIOError{Op: flow.OpRead, Path: "/work/process/agents/reviewer.md", Library: true,
+		{"shared subagents unreadable", flowFailure(&flow.DraftIOError{Op: flow.OpRead, Path: "/work/process/agents/reviewer.md", Shared: true,
 			Err: errors.New("open /work/process/agents/reviewer.md: access denied")}, places), lines(
 			"Не удалось прочитать папку общих субагентов: open /work/process/agents/reviewer.md: access denied",
 		)},

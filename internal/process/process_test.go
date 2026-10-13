@@ -28,16 +28,17 @@ func TestMain(m *testing.M) {
 }
 
 // check is a checker for tests: a file with BAD in it is a problem, as is a
-// flow that names a subagent missing from the library by a line "uses: id".
-func check(k Kind, files, library Files) ([]string, error) {
+// flow that names a subagent missing from the shared subagents by a line
+// "uses: id".
+func check(k Kind, files, shared Files) ([]string, error) {
 	var problems []string
 	for _, p := range slices.Sorted(mapKeys(files)) {
 		text := files[p]
 		if strings.Contains(text, "BAD") {
 			problems = append(problems, p+": bad")
 		}
-		if id, ok := strings.CutPrefix(strings.TrimSpace(text), "uses: "); ok && !k.IsLibrary() {
-			if _, found := library[id+".yaml"]; !found {
+		if id, ok := strings.CutPrefix(strings.TrimSpace(text), "uses: "); ok && !k.IsShared() {
+			if _, found := shared[id+".yaml"]; !found {
 				problems = append(problems, p+": no "+id)
 			}
 		}
@@ -315,25 +316,25 @@ func TestDraft(t *testing.T) {
 func TestLastApplied(t *testing.T) {
 	t.Parallel()
 	m := open(t, filepath.Join(t.TempDir(), "process"))
-	if _, ok, err := m.LastApplied(shop, Library); ok || err != nil {
+	if _, ok, err := m.LastApplied(shop, Shared); ok || err != nil {
 		t.Errorf("nothing applied: %v, %v", ok, err)
 	}
 	m.write(shop, map[string]string{"flow.yaml": "a\n"})
 	m.apply(shop)
-	m.write(Library, map[string]string{"reviewer.yaml": "a\n"})
-	m.apply(Library)
-	library, _, _ := m.Applied(Library)
-	if a, ok, err := m.LastApplied(shop, Library); !ok || err != nil || !same(a, library) {
-		t.Errorf("after the library: %+v, %v, %v; want %+v", a, ok, err, library)
+	m.write(Shared, map[string]string{"reviewer.yaml": "a\n"})
+	m.apply(Shared)
+	shared, _, _ := m.Applied(Shared)
+	if a, ok, err := m.LastApplied(shop, Shared); !ok || err != nil || !same(a, shared) {
+		t.Errorf("after the shared subagents: %+v, %v, %v; want %+v", a, ok, err, shared)
 	}
 	m.write(shop, map[string]string{"flow.yaml": "b\n"})
 	m.apply(shop)
 	flow, _, _ := m.Applied(shop)
-	if a, ok, err := m.LastApplied(shop, Library); !ok || err != nil || !same(a, flow) {
+	if a, ok, err := m.LastApplied(shop, Shared); !ok || err != nil || !same(a, flow) {
 		t.Errorf("after the flow: %+v, %v, %v; want %+v", a, ok, err, flow)
 	}
-	if a, ok, err := m.LastApplied(Library); !ok || err != nil || !same(a, library) {
-		t.Errorf("of the library alone: %+v, %v, %v; want %+v", a, ok, err, library)
+	if a, ok, err := m.LastApplied(Shared); !ok || err != nil || !same(a, shared) {
+		t.Errorf("of the shared subagents alone: %+v, %v, %v; want %+v", a, ok, err, shared)
 	}
 }
 
@@ -458,13 +459,13 @@ func TestSyncConflictWithDraft(t *testing.T) {
 func TestSyncConflictByCheck(t *testing.T) {
 	t.Parallel()
 	a, b, _ := pair(t)
-	a.write(Library, map[string]string{"reviewer.yaml": "r\n"})
-	a.apply(Library)
+	a.write(Shared, map[string]string{"reviewer.yaml": "r\n"})
+	a.apply(Shared)
 	a.sync()
 	b.sync()
 	// a removes the subagent, b starts to use it: each is valid alone.
-	a.write(Library, map[string]string{"reviewer.yaml": ""})
-	a.apply(Library)
+	a.write(Shared, map[string]string{"reviewer.yaml": ""})
+	a.apply(Shared)
 	a.sync()
 	b.write(shop, map[string]string{"stages/check.yaml": "uses: reviewer\n"})
 	b.apply(shop)
@@ -475,8 +476,8 @@ func TestSyncConflictByCheck(t *testing.T) {
 	if _, ok := b.active(shop)["stages/check.yaml"]; ok {
 		t.Error("the flow with problems is active")
 	}
-	if len(b.active(Library)) != 0 {
-		t.Error("the library change of a is not taken")
+	if len(b.active(Shared)) != 0 {
+		t.Error("the change of the shared subagents of a is not taken")
 	}
 	if got := b.working(shop)["stages/check.yaml"]; got != "uses: reviewer\n" {
 		t.Errorf("b draft: %q", got)

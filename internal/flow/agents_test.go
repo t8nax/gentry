@@ -42,7 +42,7 @@ func TestProjectAgents(t *testing.T) {
 	if !ok || !reflect.DeepEqual(a, want) {
 		t.Errorf("auditor: %+v, want %+v", a, want)
 	}
-	// The project subagents are files of the flow; only the library ones the
+	// The project subagents are files of the flow; only the shared ones the
 	// stages name are copied.
 	if res.Snapshot.Files["agents/auditor.md"] != auditor["agents/auditor.md"] {
 		t.Errorf("snapshot files: %v", res.Snapshot.Files)
@@ -50,22 +50,22 @@ func TestProjectAgents(t *testing.T) {
 	if want := (map[string]string{
 		"reviewer.yaml": "purpose: ревью изменений задачи — поведение и текст\ncapabilities: [read, search]\n",
 		"reviewer.md":   "Проверить изменения задачи: поведение, тесты и тексты для оператора.\n",
-	}); !reflect.DeepEqual(res.Snapshot.Library, want) {
-		t.Errorf("snapshot library: %v, want %v", res.Snapshot.Library, want)
+	}); !reflect.DeepEqual(res.Snapshot.Shared, want) {
+		t.Errorf("snapshot shared: %v, want %v", res.Snapshot.Shared, want)
 	}
 
-	// A subagent of the project replaces the library one of the same name.
+	// A subagent of the project replaces the shared one of the same name.
 	res = readShop(t, shop(t, with(auditor, map[string]string{
 		"agents/reviewer.yaml": "purpose: ревью проекта\ncapabilities: []\n",
 		"agents/reviewer.md":   "Ревью по правилам проекта.\n",
 	})))
-	if r, _ := res.Flow.Agent("reviewer"); r.Library || r.Purpose != "ревью проекта" || len(res.Snapshot.Library) != 0 {
-		t.Errorf("reviewer: %+v, library %v", r, res.Snapshot.Library)
+	if r, _ := res.Flow.Agent("reviewer"); r.Shared || r.Purpose != "ревью проекта" || len(res.Snapshot.Shared) != 0 {
+		t.Errorf("reviewer: %+v, shared %v", r, res.Snapshot.Shared)
 	}
 
-	// A subagent no stage names is part of the flow too; an unused library one
+	// A subagent no stage names is part of the flow too; an unused shared one
 	// is not.
-	if err := os.WriteFile(filepath.Join(p.Library, "linter.yaml"), []byte("purpose: x\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(p.Shared, "linter.yaml"), []byte("purpose: x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	res = readShop(t, shop(t, with(auditor, map[string]string{"stages/security.yaml": "title: Безопасность\nexit: пройдена\nexecutor: orchestrator\n"})))
@@ -78,7 +78,7 @@ func TestAgentProblems(t *testing.T) {
 	tests := []struct {
 		name    string
 		changes map[string]string
-		library map[string]string
+		shared  map[string]string
 		want    []Problem
 	}{
 		{"fields", map[string]string{
@@ -126,9 +126,9 @@ func TestAgentProblems(t *testing.T) {
 		{"invalid id", map[string]string{"agents/Auditor_2.yaml": "x"}, nil, []Problem{
 			{contract.ProblemInvalidID, "agents/Auditor_2.yaml", 0, msg.Text(msg.ProblemInvalidID, msg.Text(msg.FlowObjAgent, "Auditor_2"))},
 		}},
-		// A library subagent has no file in the flow: its problems name it and
+		// A shared subagent has no file in the flow: its problems name it and
 		// come before files that do not belong to the flow.
-		{"library", map[string]string{"README.md": "x"}, map[string]string{
+		{"shared", map[string]string{"README.md": "x"}, map[string]string{
 			"reviewer.yaml": "purpose: x\ncapabilities: [all]\nmodel: huge\n",
 			"reviewer.md":   "",
 		}, []Problem{
@@ -137,15 +137,15 @@ func TestAgentProblems(t *testing.T) {
 			{contract.ProblemMissingInstruction, "", 0, msg.Text(msg.ProblemMissingInstruction, msg.Text(msg.FlowObjSharedAgent, "reviewer"))},
 			{contract.ProblemExtraFile, "README.md", 0, msg.Text(msg.ProblemExtraFile, "README.md")},
 		}},
-		{"library without fields", nil, map[string]string{"reviewer.yaml": ""}, []Problem{
+		{"shared without fields", nil, map[string]string{"reviewer.yaml": ""}, []Problem{
 			{contract.ProblemUnknownExecutor, "stages/review.yaml", 3, msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer")},
 		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := shop(t, with(auditor, tt.changes))
-			for name, text := range tt.library {
-				path := filepath.Join(p.Library, name)
+			for name, text := range tt.shared {
+				path := filepath.Join(p.Shared, name)
 				var err error
 				if text == "" {
 					err = os.Remove(path)
@@ -177,13 +177,13 @@ func TestAgentGentryCapabilities(t *testing.T) {
 	}
 }
 
-// TestAgentModel checks that a subagent of the project and one of the library
-// may name the model they run on, and that an empty field names none.
+// TestAgentModel checks that a subagent of the project and one of the shared
+// subagents may name the model they run on, and that an empty field names none.
 func TestAgentModel(t *testing.T) {
 	p := shop(t, with(auditor, map[string]string{
 		"agents/auditor.yaml": "purpose: проверка безопасности изменений\ncapabilities: [read, search, run]\nmodel: strong\n",
 	}))
-	if err := os.WriteFile(filepath.Join(p.Library, "reviewer.yaml"), []byte("purpose: ревью\ncapabilities: [read]\nmodel: light\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(p.Shared, "reviewer.yaml"), []byte("purpose: ревью\ncapabilities: [read]\nmodel: light\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	res := readShop(t, p)
@@ -193,7 +193,7 @@ func TestAgentModel(t *testing.T) {
 	if a, _ := res.Flow.Agent("auditor"); a.Model != "strong" {
 		t.Errorf("auditor: model %q", a.Model)
 	}
-	if a, _ := res.Flow.Agent("reviewer"); !a.Library || a.Model != "light" {
+	if a, _ := res.Flow.Agent("reviewer"); !a.Shared || a.Model != "light" {
 		t.Errorf("reviewer: %+v", a)
 	}
 	res = readShop(t, shop(t, with(auditor, map[string]string{

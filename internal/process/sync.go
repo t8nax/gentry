@@ -10,10 +10,10 @@ import (
 	"github.com/t8nax/gentry/internal/git"
 )
 
-// Checker checks the content of a kind: for a flow, library is the library of
-// subagents of the same commit; for the library it is nil. It returns the
-// messages of the problems found, none if the content is valid.
-type Checker func(k Kind, files, library Files) ([]string, error)
+// Checker checks the content of a kind: for a flow, shared are the shared
+// subagents of the same commit; for the shared subagents it is nil. It
+// returns the messages of the problems found, none if the content is valid.
+type Checker func(k Kind, files, shared Files) ([]string, error)
 
 // Sync is what a synchronization with the remote repository did.
 type Sync struct {
@@ -200,7 +200,8 @@ func (r *Repo) merge(check Checker, s *Sync) error {
 // both machines in the same file, or with problems once brought together. A
 // kind with changes of this machine is checked even if only this machine
 // changed it: a flow may name a subagent the other machine removed from the
-// library. The library goes first, as flows are checked with it.
+// shared subagents. The shared subagents go first, as flows are checked with
+// them.
 func (r *Repo) conflicts(check Checker, tBase, tLocal, tRemote tree) (map[Kind]bool, error) {
 	seen := map[Kind]bool{}
 	for _, t := range []tree{tBase, tLocal, tRemote} {
@@ -208,7 +209,7 @@ func (r *Repo) conflicts(check Checker, tBase, tLocal, tRemote tree) (map[Kind]b
 			seen[k] = true
 		}
 	}
-	delete(seen, Library)
+	delete(seen, Shared)
 	flows := sortKinds(seen)
 	out := map[Kind]bool{}
 
@@ -240,38 +241,39 @@ func (r *Repo) conflicts(check Checker, tBase, tLocal, tRemote tree) (map[Kind]b
 		}
 		return merged, true, true
 	}
-	checkKind := func(k Kind, files map[string]entry, library Files) (bool, error) {
+	checkKind := func(k Kind, files map[string]entry, shared Files) (bool, error) {
 		texts, err := r.contents(files)
 		if err != nil {
 			return false, err
 		}
-		if k.IsLibrary() {
-			library = nil
+		if k.IsShared() {
+			shared = nil
 		}
-		problems, err := check(k, texts, library)
+		problems, err := check(k, texts, shared)
 		return len(problems) == 0, err
 	}
 
-	libFiles, libLocal, ok := result(Library)
-	if ok && libLocal {
-		valid, err := checkKind(Library, libFiles, nil)
+	sharedFiles, sharedLocal, ok := result(Shared)
+	if ok && sharedLocal {
+		valid, err := checkKind(Shared, sharedFiles, nil)
 		if err != nil {
 			return nil, err
 		}
 		ok = valid
 	}
-	library, err := r.contents(libFiles)
+	shared, err := r.contents(sharedFiles)
 	if err != nil {
 		return nil, err
 	}
-	// The library of this machine must not break a flow it has not changed.
-	if ok && libLocal {
+	// The shared subagents of this machine must not break a flow it has not
+	// changed.
+	if ok && sharedLocal {
 		for _, k := range flows {
 			files, local, fine := result(k)
 			if !fine || local || len(files) == 0 {
 				continue
 			}
-			valid, err := checkKind(k, files, library)
+			valid, err := checkKind(k, files, shared)
 			if err != nil {
 				return nil, err
 			}
@@ -282,8 +284,8 @@ func (r *Repo) conflicts(check Checker, tBase, tLocal, tRemote tree) (map[Kind]b
 		}
 	}
 	if !ok {
-		out[Library] = true
-		if library, err = r.contents(tRemote.kind(Library)); err != nil {
+		out[Shared] = true
+		if shared, err = r.contents(tRemote.kind(Shared)); err != nil {
 			return nil, err
 		}
 	}
@@ -293,7 +295,7 @@ func (r *Repo) conflicts(check Checker, tBase, tLocal, tRemote tree) (map[Kind]b
 		case !fine:
 			out[k] = true
 		case local && len(files) > 0:
-			valid, err := checkKind(k, files, library)
+			valid, err := checkKind(k, files, shared)
 			if err != nil {
 				return nil, err
 			}
@@ -592,22 +594,22 @@ func (r *Repo) checkBypass(check Checker, head, checked string, bypass map[Kind]
 	if err != nil {
 		return "", err
 	}
-	library, err := r.contents(tHead.kind(Library))
+	shared, err := r.contents(tHead.kind(Shared))
 	if err != nil {
 		return "", err
 	}
 	kinds := sortKinds(bypass)
-	// The library goes first: flows are checked with it.
-	if bypass[Library] {
-		kinds = append([]Kind{Library}, kinds[:len(kinds)-1]...)
+	// The shared subagents go first: flows are checked with it.
+	if bypass[Shared] {
+		kinds = append([]Kind{Shared}, kinds[:len(kinds)-1]...)
 	}
 	for _, k := range kinds {
 		files, err := r.contents(tHead.kind(k))
 		if err != nil {
 			return "", err
 		}
-		lib := library
-		if k.IsLibrary() {
+		lib := shared
+		if k.IsShared() {
 			lib = nil
 		}
 		problems, err := check(k, files, lib)
@@ -628,8 +630,8 @@ func (r *Repo) checkBypass(check Checker, head, checked string, bypass map[Kind]
 			changes[k.root()+"/"+rel] = &e
 		}
 		subject, action := "Restore the flow of "+k.Project, "restore flow "+k.Project
-		if k.IsLibrary() {
-			subject, action = "Restore the library of subagents", "restore library"
+		if k.IsShared() {
+			subject, action = "Restore the shared subagents", "restore shared"
 		}
 		c, err := r.commit(head, changes, message(subject, action), nil)
 		if err != nil {
@@ -639,8 +641,8 @@ func (r *Repo) checkBypass(check Checker, head, checked string, bypass map[Kind]
 			return "", err
 		}
 		head = c
-		if k.IsLibrary() {
-			if library, err = r.contents(good); err != nil {
+		if k.IsShared() {
+			if shared, err = r.contents(good); err != nil {
 				return "", err
 			}
 		}

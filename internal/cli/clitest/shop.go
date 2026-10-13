@@ -103,7 +103,7 @@ func ShopPlaces() flow.Places {
 	return flow.Places{
 		Project:  "shop",
 		Dir:      filepath.Join(process, "shop", "flow"),
-		Library:  filepath.Join(process, "agents"),
+		Shared:   filepath.Join(process, "agents"),
 		Conflict: filepath.Join(process, "shop", "conflict"),
 	}
 }
@@ -115,7 +115,7 @@ func EmptyShopFlow(t *testing.T) flow.Places {
 	t.Helper()
 	Layer(t, "shared", func() {
 		ConnectedShop(t)
-		if err := os.CopyFS(ShopPlaces().Library, os.DirFS(filepath.Join(flowTestdata, "agents"))); err != nil {
+		if err := os.CopyFS(ShopPlaces().Shared, os.DirFS(filepath.Join(flowTestdata, "agents"))); err != nil {
 			t.Fatal(err)
 		}
 		MustRun(t, "flow", "apply")

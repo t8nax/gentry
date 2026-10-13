@@ -3,7 +3,7 @@
 // the pairs of stage and subagent files, references to stages, parts and
 // subagents, and the graph of each scenario. The flow lives in the process
 // repository (package process): the active flow is committed, the draft is
-// what differs in the flow directory. So does the library of subagents.
+// what differs in the flow directory. So do the shared subagents.
 package flow
 
 import (
@@ -66,7 +66,7 @@ type Flow struct {
 	Scenarios []Scenario // by identifier
 	Stages    []Stage    // by identifier
 	Parts     []Part     // by identifier
-	Agents    []Agent    // the project subagents and the library ones the stages name, by identifier
+	Agents    []Agent    // the project subagents and the shared ones the stages name, by identifier
 }
 
 // Scenario is the graph of a scenario.
@@ -118,10 +118,10 @@ type Part struct {
 	Text string // markdown
 }
 
-// Agent is a subagent of the flow: of the project or of the library.
+// Agent is a subagent of the flow: of the project or of the shared subagents.
 type Agent struct {
 	ID           string
-	Library      bool // from the library of subagents, not of the project
+	Shared       bool // a shared subagent, not one of the project
 	Purpose      string
 	Capabilities []string // in the order of the file
 	Model        string   // one of Models; empty without the field
@@ -257,7 +257,7 @@ func ValidID(id string) bool { return idPattern.MatchString(id) }
 type Result struct {
 	Flow     *Flow     // nil if there are problems
 	Problems []Problem // in the order of files and lines
-	// Snapshot holds the files of the flow and the library subagents its
+	// Snapshot holds the files of the flow and the shared subagents its
 	// stages name. With problems it is as complete as the problems allow.
 	Snapshot Snapshot
 	// Read is the flow as far as it can be read, with problems too: the
@@ -268,11 +268,11 @@ type Result struct {
 	Unreadable map[string]bool
 }
 
-// ReadDir reads and checks the flow in directory dir; the library of
-// subagents is in directory library. It returns an error satisfying
+// ReadDir reads and checks the flow in directory dir; the shared subagents
+// are in directory shared. It returns an error satisfying
 // errors.As(err, *fs.PathError) if a file cannot be read or dir does not
 // exist.
-func ReadDir(dir, library string) (*Result, error) {
+func ReadDir(dir, shared string) (*Result, error) {
 	if _, err := os.Stat(dir); err != nil {
 		return nil, err
 	}
@@ -280,21 +280,22 @@ func ReadDir(dir, library string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return readFlow(treeOf(files), dirLibrary(library))
+	return readFlow(treeOf(files), dirShared(shared))
 }
 
-// Read checks the flow of files with the shared subagents of library.
-func Read(files, library process.Files) (*Result, error) {
-	return readFlow(treeOf(files), mapLibrary(library))
+// Read checks the flow of files with the files of the shared subagents
+// shared.
+func Read(files, shared process.Files) (*Result, error) {
+	return readFlow(treeOf(files), mapShared(shared))
 }
 
 // ReadSnapshot checks the flow of a snapshot.
 func ReadSnapshot(s Snapshot) (*Result, error) {
-	return readFlow(treeOf(s.Files), mapLibrary(s.Library))
+	return readFlow(treeOf(s.Files), mapShared(s.Shared))
 }
 
 // newLoader returns a loader of the files of t with the subagents of lib.
-func newLoader(t *tree, lib library) *loader {
+func newLoader(t *tree, lib sharedSource) *loader {
 	return &loader{
 		src:         t,
 		lib:         lib,
@@ -305,13 +306,13 @@ func newLoader(t *tree, lib library) *loader {
 		agentTexts:  map[string]bool{},
 		stages:      map[string]*stage{},
 		agents:      map[string]*agent{},
-		library:     map[string]*agent{},
-		libFiles:    map[string]string{},
+		shared:      map[string]*agent{},
+		sharedFiles: map[string]string{},
 		contents:    map[string]string{},
 	}
 }
 
-func readFlow(t *tree, lib library) (*Result, error) {
+func readFlow(t *tree, lib sharedSource) (*Result, error) {
 	l := newLoader(t, lib)
 	if err := l.load(); err != nil {
 		return nil, err
@@ -323,13 +324,13 @@ func readFlow(t *tree, lib library) (*Result, error) {
 	for p, b := range t.files {
 		files[p] = string(b)
 	}
-	res := &Result{Snapshot: Snapshot{Files: files, Library: l.libFiles}, Read: l.flow(), Unreadable: map[string]bool{}}
+	res := &Result{Snapshot: Snapshot{Files: files, Shared: l.sharedFiles}, Read: l.flow(), Unreadable: map[string]bool{}}
 	for _, sc := range l.scenarios {
 		if sc.malformed {
 			res.Unreadable[sc.id] = true
 		}
 	}
-	if problems := sortProblems(l.problems, l.libProblems); len(problems) > 0 {
+	if problems := sortProblems(l.problems, l.sharedProblems); len(problems) > 0 {
 		res.Problems = problems
 		return res, nil
 	}
@@ -339,11 +340,11 @@ func readFlow(t *tree, lib library) (*Result, error) {
 
 // loader reads a flow and collects its problems.
 type loader struct {
-	src         *tree
-	lib         library
-	inLibrary   bool // the loader reads the library of subagents, not a flow
-	problems    []Problem
-	libProblems []Problem // of library subagents, in the order they are found
+	src            *tree
+	lib            sharedSource
+	inShared       bool // the loader reads the shared subagents, not a flow
+	problems       []Problem
+	sharedProblems []Problem // of shared subagents, in the order they are found
 
 	common        bool            // flow.yaml exists
 	scenarioFiles []string        // identifiers of the scenario files with valid names
@@ -354,12 +355,12 @@ type loader struct {
 	agentFields   map[string]bool // project subagents with fields
 	agentTexts    map[string]bool // project subagents with an instruction
 
-	scenarios []*scenario
-	stages    map[string]*stage
-	agents    map[string]*agent // project subagents as read
-	library   map[string]*agent // library subagents the stages name; nil if there is none
-	libFiles  map[string]string // the files of the library subagents read, for the snapshot
-	contents  map[string]string // texts of instructions and parts, by path
+	scenarios   []*scenario
+	stages      map[string]*stage
+	agents      map[string]*agent // project subagents as read
+	shared      map[string]*agent // shared subagents the stages name; nil if there is none
+	sharedFiles map[string]string // the files of the shared subagents read, for the snapshot
+	contents    map[string]string // texts of instructions and parts, by path
 }
 
 // scenario is a scenario as read, with the lines of its parts.
@@ -400,7 +401,7 @@ type stage struct {
 // agent is a subagent as read.
 type agent struct {
 	id           string
-	library      bool
+	shared       bool
 	purpose      string
 	capabilities []string
 	model        string
@@ -507,13 +508,13 @@ func (l *loader) scan(sub string) {
 }
 
 // extra reports a file or directory that does not belong to the flow, or to
-// the library.
+// the shared subagents.
 func (l *loader) extra(e entry) {
 	k, rel := msg.ProblemExtraFile, e.rel
 	if e.dir {
 		k = msg.ProblemExtraDir
 	}
-	if l.inLibrary {
+	if l.inShared {
 		k, rel = msg.ProblemSharedExtraFile, strings.TrimPrefix(rel, agentsDir+"/")
 		if e.dir {
 			k = msg.ProblemSharedExtraDir
@@ -802,11 +803,11 @@ func (l *loader) capabilities(o object, m map[string]field) []string {
 }
 
 // object is what problems are about: the name messages give it and its file.
-// A subagent of the library has no file in the flow.
+// A shared subagent has no file in the flow.
 type object struct {
-	name    string
-	file    string
-	library bool
+	name   string
+	file   string
+	shared bool
 }
 
 // mapping returns the fields of v, which must be a mapping or empty, by name.
@@ -869,8 +870,8 @@ func (l *loader) text(o object, m map[string]field, name string, line int) (stri
 }
 
 // subagent reports whether subagent id exists: among the subagents of the
-// project, or else in the library. A library subagent is read and checked
-// the first time a stage names it, and its files go to the snapshot.
+// project, or else in the shared subagents. A shared subagent is read and
+// checked the first time a stage names it, and its files go to the snapshot.
 func (l *loader) subagent(id string) (bool, error) {
 	if !ValidID(id) {
 		return false, nil
@@ -878,18 +879,18 @@ func (l *loader) subagent(id string) (bool, error) {
 	if l.agentFields[id] {
 		return true, nil
 	}
-	if a, ok := l.library[id]; ok {
+	if a, ok := l.shared[id]; ok {
 		return a != nil, nil
 	}
 	fields, ok, err := l.lib.file(id + fieldsExt)
 	if err != nil || !ok {
-		l.library[id] = nil
+		l.shared[id] = nil
 		return false, err
 	}
-	o := object{name: objLibraryAgent(id), library: true}
-	a := &agent{id: id, library: true}
-	l.library[id] = a
-	l.libFiles[id+fieldsExt] = string(fields)
+	o := object{name: objSharedAgent(id), shared: true}
+	a := &agent{id: id, shared: true}
+	l.shared[id] = a
+	l.sharedFiles[id+fieldsExt] = string(fields)
 	if v, ok := l.readYAML(fields, o); ok {
 		l.loadAgent(o, v, a)
 	}
@@ -902,7 +903,7 @@ func (l *loader) subagent(id string) (bool, error) {
 	case !utf8.Valid(text):
 		l.reportOn(o, contract.ProblemSyntax, 0, msg.ProblemEncoding, o.name)
 	default:
-		l.libFiles[id+textExt] = string(text)
+		l.sharedFiles[id+textExt] = string(text)
 		a.instruction = string(text)
 	}
 	return true, nil
@@ -937,7 +938,7 @@ func (l *loader) flow() *Flow {
 	for _, a := range l.agents {
 		agents = append(agents, a)
 	}
-	for _, a := range l.library {
+	for _, a := range l.shared {
 		if a != nil {
 			agents = append(agents, a)
 		}
@@ -945,7 +946,7 @@ func (l *loader) flow() *Flow {
 	slices.SortFunc(agents, func(a, b *agent) int { return strings.Compare(a.id, b.id) })
 	for _, a := range agents {
 		f.Agents = append(f.Agents, Agent{
-			ID: a.id, Library: a.library, Purpose: a.purpose,
+			ID: a.id, Shared: a.shared, Purpose: a.purpose,
 			Capabilities: append([]string{}, a.capabilities...), Model: a.model, Instruction: a.instruction,
 		})
 	}

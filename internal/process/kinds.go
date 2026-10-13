@@ -229,7 +229,7 @@ func (r *Repo) Conflict(k Kind) (files Files, ok bool, err error) {
 }
 
 // Kinds returns the kinds the process has, committed or only in the working
-// directory: flows by project, the library last.
+// directory: flows by project, the shared subagents last.
 func (r *Repo) Kinds() ([]Kind, error) {
 	head, err := r.head()
 	if err != nil {
@@ -243,8 +243,8 @@ func (r *Repo) Kinds() ([]Kind, error) {
 	for _, k := range t.kinds() {
 		seen[k] = true
 	}
-	if _, err := os.Stat(r.KindDir(Library)); err == nil {
-		seen[Library] = true
+	if _, err := os.Stat(r.KindDir(Shared)); err == nil {
+		seen[Shared] = true
 	}
 	des, err := os.ReadDir(r.Dir)
 	if err != nil {
@@ -252,7 +252,7 @@ func (r *Repo) Kinds() ([]Kind, error) {
 	}
 	for _, de := range des {
 		name := de.Name()
-		if !de.IsDir() || strings.HasPrefix(name, ".") || name == libraryDir || name == conflictDir {
+		if !de.IsDir() || strings.HasPrefix(name, ".") || name == sharedDir || name == conflictDir {
 			continue
 		}
 		if fi, err := os.Stat(filepath.Join(r.Dir, name, flowDir)); err == nil && fi.IsDir() {

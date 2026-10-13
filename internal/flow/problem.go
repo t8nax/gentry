@@ -25,7 +25,7 @@ func objNode(scenario, id string) string { return msg.Text(msg.FlowObjNode, scen
 func objStage(id string) string          { return msg.Text(msg.FlowObjStage, id) }
 func objPart(id string) string           { return msg.Text(msg.FlowObjPart, id) }
 func objAgent(id string) string          { return msg.Text(msg.FlowObjAgent, id) }
-func objLibraryAgent(id string) string   { return msg.Text(msg.FlowObjLibraryAgent, id) }
+func objLibraryAgent(id string) string   { return msg.Text(msg.FlowObjSharedAgent, id) }
 
 // report adds a problem of file at line.
 func (l *loader) report(code, file string, line int, k msg.Key, args ...any) {
@@ -77,4 +77,14 @@ func sortProblems(ps, library []Problem) []Problem {
 		i = len(ps)
 	}
 	return slices.Concat(ps[:i], library, ps[i:])
+}
+
+// agentName names subagent id of the agents directory: a shared subagent
+// when the loader reads the shared subagents, or else a subagent of the
+// project.
+func (l *loader) agentName(id string) string {
+	if l.inLibrary {
+		return objLibraryAgent(id)
+	}
+	return objAgent(id)
 }

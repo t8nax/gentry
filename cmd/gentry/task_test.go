@@ -22,8 +22,9 @@ import (
 // writers is the number of gentry processes that take tasks at once.
 const writers = 8
 
-// shopWithFlow connects a shop with the flow of the flow testdata through
-// the binary, adds n worktrees to its pool and returns their paths.
+// shopWithFlow connects a shop with the flow and the shared subagents of the
+// flow testdata, applied at once through the binary, adds n worktrees to its
+// pool and returns their paths.
 func shopWithFlow(t *testing.T, bin string, n int) []string {
 	t.Helper()
 	root, err := paths.Canonical(t.TempDir())
@@ -40,7 +41,6 @@ func shopWithFlow(t *testing.T, bin string, n int) []string {
 	if err := os.CopyFS(filepath.Join(process, "agents"), os.DirFS(filepath.Join(testdata, "agents"))); err != nil {
 		t.Fatal(err)
 	}
-	gentry(t, bin, shop, "library", "apply")
 	if err := os.CopyFS(filepath.Join(process, "shop", "flow"), os.DirFS(filepath.Join(testdata, "shop", "flow"))); err != nil {
 		t.Fatal(err)
 	}

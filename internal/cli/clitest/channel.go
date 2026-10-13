@@ -103,7 +103,7 @@ func lineFor(line string, agent bool) (string, bool) {
 
 // isGroup reports whether name is a group of commands or a part of a group.
 func isGroup(name string) bool {
-	return slices.Contains([]string{"project", "worktree", "agents", "flow", "library", "process", "task",
+	return slices.Contains([]string{"project", "worktree", "agents", "flow", "process", "task",
 		"process remote", "task flow", "task stage", "task step", "task note", "task artifact", "task decision", "task attempt"}, name)
 }
 

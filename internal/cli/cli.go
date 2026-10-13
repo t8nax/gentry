@@ -212,14 +212,6 @@ func commands() []command {
 			},
 		},
 		{
-			name: "library", section: msg.HelpSectionProcess, summary: msg.CmdLibrarySummary, desc: msg.CmdLibraryDesc,
-			actions: []command{
-				{name: "library diff", summary: msg.CmdLibraryDiffSummary, desc: msg.CmdLibraryDiffDesc, flags: []flagSpec{jsonFlag}, run: runLibraryDiff},
-				{name: "library apply", summary: msg.CmdLibraryApplySummary, desc: msg.CmdLibraryApplyDesc, flags: []flagSpec{jsonFlag}, run: runLibraryApply},
-				{name: "library discard", summary: msg.CmdLibraryDiscardSummary, desc: msg.CmdLibraryDiscardDesc, flags: []flagSpec{jsonFlag}, run: runLibraryDiscard},
-			},
-		},
-		{
 			name: "process", section: msg.HelpSectionProcess, summary: msg.CmdProcessSummary, desc: msg.CmdProcessDesc,
 			actions: []command{
 				{

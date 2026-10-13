@@ -108,17 +108,17 @@ func ShopPlaces() flow.Places {
 	}
 }
 
-// EmptyShopFlow connects the shop and applies the library of the flow
-// testdata; the shop has no flow. It returns the places of the flow. The test
-// runs in the main worktree of the shop.
+// EmptyShopFlow connects the shop and applies the shared subagents of the
+// flow testdata by flow apply of the shop, which has no flow. It returns the
+// places of the flow. The test runs in the main worktree of the shop.
 func EmptyShopFlow(t *testing.T) flow.Places {
 	t.Helper()
-	Layer(t, "library", func() {
+	Layer(t, "shared", func() {
 		ConnectedShop(t)
 		if err := os.CopyFS(ShopPlaces().Library, os.DirFS(filepath.Join(flowTestdata, "agents"))); err != nil {
 			t.Fatal(err)
 		}
-		MustRun(t, "library", "apply")
+		MustRun(t, "flow", "apply")
 	})
 	return ShopPlaces()
 }
@@ -197,7 +197,7 @@ func ShopTables() string {
 		[]string{"review", "Ревью", "reviewer", "замечания ревью записаны и разобраны"},
 	) + "\n" + Table(
 		[]string{msg.Text(msg.ColAgent), msg.Text(msg.ColSource), msg.Text(msg.ColStages)},
-		[]string{"reviewer", msg.Text(msg.FlowSourceLibrary), "review"},
+		[]string{"reviewer", msg.Text(msg.FlowSourceShared), "review"},
 	)
 }
 

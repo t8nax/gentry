@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"maps"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,7 @@ func testdataFiles(t *testing.T, rel string, changes map[string]string) process.
 // readShopFlow reads the flow of the shop with changes of its files.
 func readShopFlow(t *testing.T, changes map[string]string) *flow.Result {
 	t.Helper()
-	res, err := flow.Read(testdataFiles(t, "shop/flow", changes), testdataFiles(t, "agents", nil), nil)
+	res, err := flow.Read(testdataFiles(t, "shop/flow", changes), testdataFiles(t, "agents", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +97,7 @@ func TestFlowShowText(t *testing.T) {
 		[]string{"review", "Ревью", "reviewer", "замечания ревью записаны и разобраны"},
 	) + "\n"
 	agentsHeader := []string{msg.Text(msg.ColAgent), msg.Text(msg.ColSource), msg.Text(msg.ColStages)}
-	libraryWord, projectWord := msg.Text(msg.FlowSourceLibrary), msg.Text(msg.FlowSourceProject)
+	libraryWord, projectWord := msg.Text(msg.FlowSourceShared), msg.Text(msg.FlowSourceProject)
 	library := table(agentsHeader, []string{"reviewer", libraryWord, "review"})
 	withAuditor := table(agentsHeader, []string{"auditor", projectWord, "security"}, []string{"reviewer", libraryWord, "review"})
 	head := lines(
@@ -232,7 +233,7 @@ func TestFlowShowText(t *testing.T) {
 		), ""},
 		{"subagent", reviewer, reviewerX, lines(
 			"Субагент: reviewer",
-			"Источник: "+msg.Text(msg.FlowSourceLibrary),
+			"Источник: "+msg.Text(msg.FlowSourceShared),
 			"Назначение: ревью изменений задачи — поведение и текст",
 			"Возможности: read, search",
 			msg.Text(msg.FlowModel, noValue),
@@ -352,6 +353,21 @@ func TestFlowApplyText(t *testing.T) {
 		msg.Text(msg.AgentsFreeSynced, "shop"),
 		msg.Text(msg.AgentsNextSession),
 	), "")
+	// Changes of the shared subagents name the other projects they concern;
+	// the layout is of the free worktrees of them all.
+	out.Projects = []string{"blog", "crm"}
+	wantText(t, "applied for other projects", func(p *page) { flowApplyText(p, out) }, lines(
+		msg.Text(msg.FlowApplied),
+		msg.Text(msg.FlowProject, "shop"),
+		msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30"),
+		"",
+		"Изменения общих субагентов касаются других проектов:",
+		"  blog",
+		"  crm",
+		"",
+		msg.Text(msg.AgentsFreeSyncedAll),
+		msg.Text(msg.AgentsNextSession),
+	), "")
 	wantText(t, "discarded", func(p *page) {
 		flowDiscardText(p, contract.FlowDiscardOutput{Project: "shop", Dir: shopFlowDir})
 	}, lines(
@@ -376,8 +392,22 @@ func TestFlowFailureText(t *testing.T) {
 			msg.Text(msg.FlowDir, shopFlowDir),
 		)},
 		{"no draft", flowFailure(&flow.NoDraftError{Project: "shop", Dir: shopFlowDir}, places), lines(
-			"У проекта shop нет черновика флоу.",
+			"Ни у флоу проекта shop, ни у общих субагентов нет черновика.",
 			msg.Text(msg.FlowDir, shopFlowDir),
+		)},
+		{"shared subagents break another flow", flowFailure(&flow.DraftInvalidError{Dir: shopFlowDir, Flows: []flow.FlowProblems{
+			{Project: "crm", Problems: []flow.Problem{{Code: contract.ProblemUnknownExecutor, File: "stages/review.yaml",
+				Message: msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer")}}},
+		}}, places), lines(
+			"Изменения общих субагентов вносят ошибки во флоу других проектов.",
+			msg.Text(msg.FlowDir, shopFlowDir),
+			"",
+			"Ошибки флоу проекта crm:",
+			"  "+msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer"),
+		)},
+		{"shared subagents unreadable", flowFailure(&flow.DraftIOError{Op: flow.OpRead, Path: "/work/process/agents/reviewer.md", Library: true,
+			Err: errors.New("open /work/process/agents/reviewer.md: access denied")}, places), lines(
+			"Не удалось прочитать папку общих субагентов: open /work/process/agents/reviewer.md: access denied",
 		)},
 		{"draft with problems", flowFailure(&flow.DraftInvalidError{Dir: shopFlowDir, Problems: problems}, places), lines(
 			"В черновике флоу проекта shop есть ошибки.",

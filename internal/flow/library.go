@@ -6,33 +6,6 @@ import (
 	"github.com/t8nax/gentry/internal/process"
 )
 
-// Event types of the library of subagents.
-const (
-	EventLibraryApplied        = "library.applied"
-	EventLibraryDraftDiscarded = "library.draft_discarded"
-)
-
-// NoLibraryDraftError means the library directory has no changes.
-type NoLibraryDraftError struct{ Dir string }
-
-func (e *NoLibraryDraftError) Error() string { return e.Dir + ": no library draft" }
-
-// LibraryInvalidError means the draft of the library has problems, or
-// breaks the active flow of a project.
-type LibraryInvalidError struct {
-	Dir      string
-	Problems []Problem      // of the library itself
-	Flows    []FlowProblems // of the flows the draft breaks, by project
-}
-
-// FlowProblems are the problems of the flow of a project.
-type FlowProblems struct {
-	Project  string
-	Problems []Problem
-}
-
-func (e *LibraryInvalidError) Error() string { return e.Dir + ": problems in the library draft" }
-
 // ReadLibrary checks the files of the library of subagents by section 10.2:
 // each subagent is a pair of its fields and its instruction, the fields are
 // valid, and nothing else is there. Paths of problems are inside the library.
@@ -66,36 +39,16 @@ type LibraryChange struct {
 	Projects []string // whose flows name the subagent, by DiffDraft only
 }
 
-// LibraryDiffResult is how the draft of the library differs from the active
-// one.
+// LibraryDiffResult is how the shared subagents of the draft differ from
+// the active ones.
 type LibraryDiffResult struct {
-	Applied  *process.Applied // nil if the library has never been applied
-	Changes  []LibraryChange
-	Problems []Problem // of the draft, with paths inside the library
+	Applied *process.Applied // nil if the shared subagents have never been applied
+	Changes []LibraryChange
 }
 
-// libraryDraft returns the working files of the library and whether they
-// differ from the active library.
-func libraryDraft(r *process.Repo) (working, active process.Files, ok bool, err error) {
-	dir := r.KindDir(process.Library)
-	if working, err = r.Working(process.Library); err != nil {
-		return nil, nil, false, ioError(OpRead, dir, true, err)
-	}
-	if active, err = r.Active(process.Library); err != nil {
-		return nil, nil, false, err
-	}
-	return working, active, !working.Equal(active), nil
-}
-
-// LibraryDiff compares the draft of the library with the active library.
-func LibraryDiff(r *process.Repo) (LibraryDiffResult, error) {
-	working, active, ok, err := libraryDraft(r)
-	if err != nil {
-		return LibraryDiffResult{}, err
-	}
-	if !ok {
-		return LibraryDiffResult{}, &NoLibraryDraftError{Dir: r.KindDir(process.Library)}
-	}
+// sharedDiff compares the shared subagents of the draft d with the active
+// ones.
+func sharedDiff(r *process.Repo, d draftFiles) (LibraryDiffResult, error) {
 	var out LibraryDiffResult
 	if a, ok, err := r.Applied(process.Library); err != nil {
 		return LibraryDiffResult{}, err
@@ -109,8 +62,8 @@ func LibraryDiff(r *process.Repo) (LibraryDiffResult, error) {
 		}
 		return s
 	}
-	before, after := LibraryAgents(active), LibraryAgents(working)
-	for _, c := range Diff(in(active), in(working)) {
+	before, after := LibraryAgents(d.sharedActive), LibraryAgents(d.shared)
+	for _, c := range Diff(in(d.sharedActive), in(d.shared)) {
 		lc := LibraryChange{ID: c.ID, Change: c.Change}
 		if a, ok := before[c.ID]; ok {
 			lc.Old = &a
@@ -120,38 +73,13 @@ func LibraryDiff(r *process.Repo) (LibraryDiffResult, error) {
 		}
 		out.Changes = append(out.Changes, lc)
 	}
-	out.Problems = ReadLibrary(working)
 	return out, nil
 }
 
-// LibraryApply makes the draft of the library active with a commit. A draft
-// with problems is not applied, and nothing changes.
-func LibraryApply(r *process.Repo) (process.Applied, error) {
-	working, _, ok, err := libraryDraft(r)
-	if err != nil {
-		return process.Applied{}, err
-	}
-	dir := r.KindDir(process.Library)
-	if !ok {
-		return process.Applied{}, &NoLibraryDraftError{Dir: dir}
-	}
-	if problems := ReadLibrary(working); len(problems) > 0 {
-		return process.Applied{}, &LibraryInvalidError{Dir: dir, Problems: problems}
-	}
-	broken, err := brokenFlows(r, working)
-	if err != nil {
-		return process.Applied{}, err
-	}
-	if len(broken) > 0 {
-		return process.Applied{}, &LibraryInvalidError{Dir: dir, Flows: broken}
-	}
-	return r.Apply(process.Library, working, "Apply the library of subagents", "library apply")
-}
-
-// brokenFlows returns the problems of the active flows that are valid with
-// the active library and not with library: a flow with problems before is
-// not the fault of the library.
-func brokenFlows(r *process.Repo, library process.Files) ([]FlowProblems, error) {
+// brokenFlows returns the problems of the active flows of the projects other
+// than project that are valid with the active shared subagents and not with
+// shared: a flow with problems before is not the fault of the change.
+func brokenFlows(r *process.Repo, shared process.Files, project string) ([]FlowProblems, error) {
 	active, err := r.Active(process.Library)
 	if err != nil {
 		return nil, err
@@ -162,7 +90,7 @@ func brokenFlows(r *process.Repo, library process.Files) ([]FlowProblems, error)
 	}
 	var out []FlowProblems
 	for _, k := range kinds {
-		if k.IsLibrary() {
+		if k.IsLibrary() || k.Project == project {
 			continue
 		}
 		files, err := r.Active(k)
@@ -172,14 +100,14 @@ func brokenFlows(r *process.Repo, library process.Files) ([]FlowProblems, error)
 		if len(files) == 0 {
 			continue
 		}
-		before, err := Read(files, active, nil)
+		before, err := Read(files, active)
 		if err != nil {
 			return nil, err
 		}
 		if len(before.Problems) > 0 {
 			continue
 		}
-		after, err := Read(files, library, nil)
+		after, err := Read(files, shared)
 		if err != nil {
 			return nil, err
 		}
@@ -188,22 +116,4 @@ func brokenFlows(r *process.Repo, library process.Files) ([]FlowProblems, error)
 		}
 	}
 	return out, nil
-}
-
-// LibraryDiscard brings the library directory back to the active library and
-// removes the variants of another machine of a conflict.
-func LibraryDiscard(r *process.Repo) error {
-	_, _, draft, err := libraryDraft(r)
-	if err != nil {
-		return err
-	}
-	_, conflict, err := r.Conflict(process.Library)
-	if err != nil {
-		return ioError(OpRead, r.ConflictDir(process.Library), true, err)
-	}
-	dir := r.KindDir(process.Library)
-	if !draft && !conflict {
-		return &NoLibraryDraftError{Dir: dir}
-	}
-	return ioError(OpWrite, dir, true, r.Discard(process.Library))
 }

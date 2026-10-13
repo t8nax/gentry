@@ -252,9 +252,9 @@ func layoutAdded(st *state.Store, r *process.Repo, project string, paths []strin
 }
 
 // syncProjects returns the projects whose free worktrees a synchronization
-// changed the active flow or library of: those of the flows received, in
-// conflict or restored, and those whose flow uses the library if the library
-// is.
+// changed the active flow or shared subagents of: those of the flows
+// received, in conflict or restored, and those whose flow names shared
+// subagents if the shared subagents are.
 func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	if s == nil {
 		return nil
@@ -273,8 +273,8 @@ func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	return out
 }
 
-// libraryProjects returns the projects whose active flow has subagents of the
-// library.
+// libraryProjects returns the projects whose active flow has shared
+// subagents.
 func libraryProjects(r *process.Repo) map[string]bool {
 	out := map[string]bool{}
 	kinds, err := r.Kinds()

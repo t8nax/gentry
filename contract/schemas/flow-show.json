@@ -25,7 +25,7 @@
           "$ref": "./applied.json"
         },
         "active_flow": {
-          "description": "The last change of the active flow: the later of the commits that applied the flow of the project and the library. Present only if the active flow changed after the task was taken: the flow a task taken now would get differs from the flow of the task in a scenario, stage, part, subagent of the project, library subagent its stages name or the common rules; line ends alone do not count.",
+          "description": "The last change of the active flow: the later of the commits that applied the flow of the project and the shared subagents. Present only if the active flow changed after the task was taken: the flow a task taken now would get differs from the flow of the task in a scenario, stage, part, subagent of the project, shared subagent its stages name or the common rules; line ends alone do not count.",
           "$ref": "./applied.json"
         }
       },
@@ -173,7 +173,7 @@
             "minLength": 1
           },
           "executor": {
-            "description": "Who carries out the stage: orchestrator for the main agent session, operator for the operator, otherwise the identifier of a subagent of the project or of the library.",
+            "description": "Who carries out the stage: orchestrator for the main agent session, operator for the operator, otherwise the identifier of a subagent of the project or of a shared subagent.",
             "type": "string",
             "minLength": 1
           },
@@ -228,7 +228,7 @@
       }
     },
     "agents": {
-      "description": "Subagents by identifier: those of the project and those of the library the stages name. A project subagent replaces a library one of the same identifier.",
+      "description": "Subagents by identifier: those of the project and the shared subagents the stages name. A project subagent replaces a shared one of the same identifier.",
       "type": "array",
       "items": {
         "title": "FlowAgent",
@@ -240,9 +240,9 @@
             "minLength": 1
           },
           "source": {
-            "description": "Where the subagent comes from: project for a subagent of the flow, library for a subagent of the library.",
+            "description": "Where the subagent comes from: project for a subagent of the flow, shared for a shared subagent.",
             "type": "string",
-            "enum": ["project", "library"]
+            "enum": ["project", "shared"]
           },
           "purpose": {
             "description": "What the subagent is for.",

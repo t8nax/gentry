@@ -14,7 +14,7 @@ type FlowInvalidDetails struct {
 
 	// All problems of the flow in the order of files and lines: problems of the whole
 	// flow first, then the common rules, scenarios, stages, parts, project subagents,
-	// library subagents, and files that do not belong to the flow last.
+	// shared subagents, and files that do not belong to the flow last.
 	Problems []FlowProblem `json:"problems"`
 
 	// Identifier of the project.

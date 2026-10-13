@@ -39,8 +39,8 @@ func showJSON(t *testing.T, args ...string) contract.FlowShowOutput {
 	return out
 }
 
-// applyJSON runs flow apply or library apply with --json and returns the
-// commit it applied.
+// applyJSON runs apply of group kind with --json and returns the commit it
+// applied.
 func applyJSON(t *testing.T, kind string) contract.Applied {
 	t.Helper()
 	var out struct {
@@ -190,11 +190,11 @@ func TestTaskFlowShow(t *testing.T) {
 	}
 }
 
-// TestTaskFlowShowLibrary checks a library subagent of the flow of a task
-// after the library changed it: as the task has it, with the hint to the
-// active flow. Which changes of the library count, TestActiveFlow of
+// TestTaskFlowShowShared checks a shared subagent of the flow of a task
+// after a change of it is applied: as the task has it, with the hint to the
+// active flow. Which changes of the shared subagents count, TestActiveFlow of
 // package task checks.
-func TestTaskFlowShowLibrary(t *testing.T) {
+func TestTaskFlowShowShared(t *testing.T) {
 	_, _, _ = takeInFix(t)
 	lib := clitest.ShopPlaces().Library
 	text, err := os.ReadFile(filepath.Join(lib, "reviewer.md"))
@@ -202,7 +202,7 @@ func TestTaskFlowShowLibrary(t *testing.T) {
 		t.Fatal(err)
 	}
 	clitest.WriteFiles(t, lib, map[string]string{"reviewer.md": string(text) + "Проверить логи.\n"})
-	clitest.MustRun(t, "library", "apply")
+	clitest.MustRun(t, "flow", "apply")
 	_, stdout, _ := clitest.Run("task", "flow", "show", "--agent", "reviewer")
 	if strings.Contains(stdout, "Проверить логи.") || !strings.HasSuffix(stdout, "\n\n"+cli.HintText(msg.HintFlowActive)+"\n") {
 		t.Errorf("--agent reviewer:\n%s", stdout)

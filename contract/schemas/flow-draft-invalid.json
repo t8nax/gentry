@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-draft-invalid.json",
   "title": "FlowDraftInvalidDetails",
-  "description": "Details of the error flow_draft_invalid: the flow draft of a project has problems, so it is neither shown nor applied.",
+  "description": "Details of the error flow_draft_invalid: the draft of the flow of a project has problems, so it is neither shown nor applied; or its changes of the shared subagents bring problems into the active flows of other projects, so it is not applied.",
   "type": "object",
   "properties": {
     "project": {
@@ -16,10 +16,31 @@
       "minLength": 1
     },
     "problems": {
-      "description": "All problems of the draft in the order of files and lines: problems of the whole flow first, then the common rules, scenarios, stages, parts, project subagents, library subagents, and files that do not belong to the flow last.",
+      "description": "All problems of the draft in the order of files and lines: problems of the whole flow first, then the common rules, scenarios, stages, parts, project subagents, shared subagents, and files that do not belong to the flow last. Empty if the draft itself is valid and only breaks the flows of other projects.",
       "type": "array",
-      "minItems": 1,
       "items": { "$ref": "./flow-problem.json" }
+    },
+    "flows": {
+      "description": "Active flows of other projects that are valid with the active shared subagents and not with those of the draft, by project; absent if there are none. A valid draft is refused for them.",
+      "type": "array",
+      "items": {
+        "title": "FlowBrokenFlow",
+        "type": "object",
+        "properties": {
+          "project": {
+            "description": "Identifier of the project.",
+            "type": "string",
+            "minLength": 1
+          },
+          "problems": {
+            "description": "Problems of the flow with the shared subagents of the draft, in the order of files and lines.",
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "./flow-problem.json" }
+          }
+        },
+        "required": ["project", "problems"]
+      }
     }
   },
   "required": ["project", "dir", "problems"]

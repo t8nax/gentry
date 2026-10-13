@@ -45,12 +45,12 @@ var (
 // changed is the line of the subagents of one worktree changed.
 func changed(change string) string { return msg.Text(msg.AgentsWorktreeChanged, change) }
 
-// changeLibrary rewrites the instruction of reviewer in the library and
-// applies it.
-func changeLibrary(t *testing.T, text string) string {
+// changeShared rewrites the instruction of the shared reviewer and applies
+// it by flow apply of the shop.
+func changeShared(t *testing.T, text string) string {
 	t.Helper()
 	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": text})
-	_, stdout, _ := clitest.Run("library", "apply")
+	_, stdout, _ := clitest.Run("flow", "apply")
 	return stdout
 }
 
@@ -166,9 +166,9 @@ func TestApplyLaysOutFreeWorktreesOnly(t *testing.T) {
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	before := read(t, reviewerFile(fix))
 
-	stdout := changeLibrary(t, "Проверить изменения и тексты.\n")
-	if !strings.HasSuffix(clitest.Masked(stdout), "\n\n"+clitest.Lines(msg.Text(msg.AgentsFreeSyncedAll), nextSession)) {
-		t.Errorf("library apply:\n%s", stdout)
+	stdout := changeShared(t, "Проверить изменения и тексты.\n")
+	if !strings.HasSuffix(clitest.Masked(stdout), "\n\n"+clitest.Lines(msg.Text(msg.AgentsFreeSynced, "shop"), nextSession)) {
+		t.Errorf("flow apply:\n%s", stdout)
 	}
 	if !strings.Contains(read(t, reviewerFile(shop)), "Проверить изменения и тексты.") {
 		t.Error("the free worktree keeps the old reviewer")

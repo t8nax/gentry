@@ -37,11 +37,7 @@ func (l *loader) check() error {
 			if err != nil {
 				return err
 			}
-			switch {
-			case found:
-			case l.draftLibrary[e]:
-				l.report(contract.ProblemUnknownExecutor, st.file, st.executorLine, msg.ProblemExecutorInDraftLibrary, objStage(id), e)
-			default:
+			if !found {
 				l.report(contract.ProblemUnknownExecutor, st.file, st.executorLine, msg.ProblemUnknownExecutor, objStage(id), e)
 			}
 		}
@@ -66,12 +62,12 @@ func (l *loader) check() error {
 func (l *loader) checkAgents() {
 	for _, id := range sorted(l.agentFields) {
 		if !l.agentTexts[id] {
-			l.report(contract.ProblemMissingInstruction, agentsDir+"/"+id+fieldsExt, 0, msg.ProblemMissingInstruction, objAgent(id))
+			l.report(contract.ProblemMissingInstruction, agentsDir+"/"+id+fieldsExt, 0, msg.ProblemMissingInstruction, l.agentName(id))
 		}
 	}
 	for _, id := range sorted(l.agentTexts) {
 		if !l.agentFields[id] {
-			l.report(contract.ProblemOrphanInstruction, agentsDir+"/"+id+textExt, 0, msg.ProblemOrphanAgentInstruction, objAgent(id))
+			l.report(contract.ProblemOrphanInstruction, agentsDir+"/"+id+textExt, 0, msg.ProblemOrphanAgentInstruction, l.agentName(id))
 		}
 	}
 }

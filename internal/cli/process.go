@@ -62,7 +62,7 @@ func push(r *process.Repo, s *process.Sync) *failure {
 
 // syncDone finishes the synchronization inside a command: it records what it
 // did as an event, lays out the free worktrees of the projects whose flow or
-// library it changed and, in text, prints both on stderr before the output of
+// shared subagents it changed and, in text, prints both on stderr before the output of
 // the command. apply tells a command that commits, for which an unavailable
 // remote repository defers the sending. It returns what the layout did, for
 // the output in JSON.
@@ -154,7 +154,7 @@ func writeSync(p *page, s *contract.Sync, x syncExtra, what syncText) {
 			break
 		}
 		if c.Project == nil {
-			fmt.Fprintln(p, msg.Text(msg.SyncLibraryConflict))
+			fmt.Fprintln(p, msg.Text(msg.SyncSharedConflict))
 		} else {
 			fmt.Fprintln(p, msg.Text(msg.SyncFlowConflict, *c.Project))
 		}
@@ -168,7 +168,7 @@ func writeSync(p *page, s *contract.Sync, x syncExtra, what syncText) {
 	}
 	for i, rs := range s.Restored {
 		if rs.Project == nil {
-			fmt.Fprintln(p, msg.Text(msg.SyncLibraryRestored))
+			fmt.Fprintln(p, msg.Text(msg.SyncSharedRestored))
 		} else {
 			fmt.Fprintln(p, msg.Text(msg.SyncFlowRestored, *rs.Project))
 		}
@@ -179,28 +179,32 @@ func writeSync(p *page, s *contract.Sync, x syncExtra, what syncText) {
 	}
 }
 
-// sameItem reports whether a and b are the same flow or the library.
+// sameItem reports whether a and b are the same flow or the shared
+// subagents.
 func sameItem(a, b contract.ProcessItem) bool {
 	return a.Kind == b.Kind && (a.Project == nil) == (b.Project == nil) && (a.Project == nil || *a.Project == *b.Project)
 }
 
-// takeConflict removes the conflict of kind k from s and returns it; ok is
-// false if k is not in conflict. A command that applies k refuses then: the
-// operator compares the variants first.
-func takeConflict(s *process.Sync, k process.Kind) (c process.Conflict, ok bool) {
-	for i, c := range s.Conflicts {
-		if c.Kind == k {
-			s.Conflicts = append(s.Conflicts[:i:i], s.Conflicts[i+1:]...)
-			return c, true
+// takeConflict removes the first conflict of kinds ks from s and returns
+// it; ok is false if none of ks is in conflict. A command that applies them
+// refuses then: the operator compares the variants first.
+func takeConflict(s *process.Sync, ks ...process.Kind) (c process.Conflict, ok bool) {
+	for _, k := range ks {
+		for i, c := range s.Conflicts {
+			if c.Kind == k {
+				s.Conflicts = append(s.Conflicts[:i:i], s.Conflicts[i+1:]...)
+				return c, true
+			}
 		}
 	}
 	return process.Conflict{}, false
 }
 
-// conflictFailure is the refusal of apply when the synchronization before it
-// found the kind changed on another machine: the draft stays, with the
-// variants of the other machine to compare.
-func conflictFailure(r *process.Repo, c process.Conflict) failure {
+// conflictFailure is the refusal of flow apply of project when the
+// synchronization before it found the flow of the project or the shared
+// subagents changed on another machine: the draft stays, with the variants
+// of the other machine to compare.
+func conflictFailure(r *process.Repo, c process.Conflict, project string) failure {
 	x := conflictExtraOf(r, c)
 	var more strings.Builder
 	fmt.Fprintln(&more, msg.Text(msg.SyncConflictDir, x.dir))
@@ -210,24 +214,23 @@ func conflictFailure(r *process.Repo, c process.Conflict) failure {
 	}
 	f := failure{
 		exit:    contract.ExitError,
-		code:    contract.CodeLibraryConflict,
-		message: msg.Text(msg.SyncLibraryConflict),
+		code:    contract.CodeFlowConflict,
+		message: msg.Text(msg.SyncSharedConflict),
 		more:    more.String(),
-		hints:   []hint{diffHint(items([]process.Kind{c.Kind})[0])},
-		details: map[string]any{"conflict_dir": x.dir},
+		hints:   []hint{hintOf(msg.HintFlowDiffProject).set("project", project)},
+		details: map[string]any{"project": project, "conflict_dir": x.dir},
 	}
 	if !c.Kind.IsLibrary() {
-		f.code, f.message = contract.CodeFlowConflict, msg.Text(msg.SyncFlowConflict, c.Kind.Project)
-		f.details["project"] = c.Kind.Project
+		f.message = msg.Text(msg.SyncFlowConflict, c.Kind.Project)
 	}
 	return f
 }
 
-// refuseOnConflict refuses an apply of kind k if the synchronization before
-// it found k in conflict: what was synchronized is sent and told, and the
-// conflict is the refusal.
-func refuseOnConflict(env Env, r *process.Repo, s *process.Sync, k process.Kind) (int, bool) {
-	c, ok := takeConflict(s, k)
+// refuseOnConflict refuses flow apply of project if the synchronization
+// before it found one of kinds ks in conflict: what was synchronized is sent
+// and told, and the conflict is the refusal.
+func refuseOnConflict(env Env, r *process.Repo, s *process.Sync, project string, ks ...process.Kind) (int, bool) {
+	c, ok := takeConflict(s, ks...)
 	if !ok {
 		return 0, false
 	}
@@ -240,28 +243,29 @@ func refuseOnConflict(env Env, r *process.Repo, s *process.Sync, k process.Kind)
 	}
 	rest := *s
 	rest.Conflicts = s.Conflicts[:len(s.Conflicts)-1]
-	rest.Received = slices.DeleteFunc(slices.Clone(s.Received), func(x process.Kind) bool { return x == k })
+	rest.Received = slices.DeleteFunc(slices.Clone(s.Received), func(x process.Kind) bool { return x == c.Kind })
 	cs, x := syncJSON(&rest, nil), syncExtraOf(r, &rest, false)
 	warn(env, func(p *page) { writeSync(p, cs, x, syncText{received: true, conflicts: true}) })
 	// The variant of the other machine is active: the free worktrees get it.
 	layoutRefused(env, r, s)
 	s.Conflicts = s.Conflicts[:len(s.Conflicts)-1]
-	return fail(env, conflictFailure(r, c)), true
+	return fail(env, conflictFailure(r, c, project)), true
 }
 
-// diffHint is the hint to compare the draft of the flow or the library k
-// with its active variant.
+// diffHint is the hint to compare the draft of the flow or of the shared
+// subagents k with its active variant: flow diff of the project, any project
+// for the shared subagents.
 func diffHint(k contract.ProcessItem) hint {
 	if k.Project == nil {
-		return hintOf(msg.HintLibraryDiff)
+		return hintOf(msg.HintFlowDiffProject)
 	}
 	return hintOf(msg.HintFlowDiffProject).set("project", *k.Project)
 }
 
-// itemName names the flow or the library k for the operator.
+// itemName names the flow or the shared subagents k for the operator.
 func itemName(k contract.ProcessItem) string {
 	if k.Project == nil {
-		return msg.Text(msg.KindLibrary)
+		return msg.Text(msg.KindShared)
 	}
 	return msg.Text(msg.KindFlow, *k.Project)
 }
@@ -279,7 +283,7 @@ func items(kinds []process.Kind) []contract.ProcessItem {
 	out := []contract.ProcessItem{}
 	for _, k := range kinds {
 		if k.IsLibrary() {
-			out = append(out, contract.ProcessItem{Kind: contract.ProcessItemKindLibrary})
+			out = append(out, contract.ProcessItem{Kind: contract.ProcessItemKindShared})
 			continue
 		}
 		project := k.Project

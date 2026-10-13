@@ -107,6 +107,19 @@ func parseApplied(out string) (Applied, bool, error) {
 // makes stale. The working files stay as they are: they now have no draft
 // over them.
 func (r *Repo) Apply(k Kind, files Files, subject, action string) (Applied, error) {
+	return r.ApplyKinds([]KindFiles{{Kind: k, Files: files}}, subject, action)
+}
+
+// KindFiles are the files of a kind to apply.
+type KindFiles struct {
+	Kind  Kind
+	Files Files
+}
+
+// ApplyKinds commits the files of several kinds as their content with one
+// commit of subject for action, as Apply does for one: one application is
+// one commit, such as the flow of a project with the shared subagents.
+func (r *Repo) ApplyKinds(kinds []KindFiles, subject, action string) (Applied, error) {
 	head, err := r.head()
 	if err != nil {
 		return Applied{}, err
@@ -115,21 +128,24 @@ func (r *Repo) Apply(k Kind, files Files, subject, action string) (Applied, erro
 	if err != nil {
 		return Applied{}, err
 	}
-	old := t.kind(k)
-	current, err := r.contents(old)
-	if err != nil {
-		return Applied{}, err
-	}
 	changes := map[string]*entry{}
-	for rel := range old {
-		if _, ok := files[rel]; !ok {
-			changes[k.root()+"/"+rel] = nil
-		}
-	}
 	texts := map[string]string{}
-	for rel, text := range files {
-		if cur, ok := current[rel]; !ok || cur != text {
-			texts[k.root()+"/"+rel] = text
+	for _, kf := range kinds {
+		k := kf.Kind
+		old := t.kind(k)
+		current, err := r.contents(old)
+		if err != nil {
+			return Applied{}, err
+		}
+		for rel := range old {
+			if _, ok := kf.Files[rel]; !ok {
+				changes[k.root()+"/"+rel] = nil
+			}
+		}
+		for rel, text := range kf.Files {
+			if cur, ok := current[rel]; !ok || cur != text {
+				texts[k.root()+"/"+rel] = text
+			}
 		}
 	}
 	written, err := r.hashAll(texts)
@@ -149,11 +165,13 @@ func (r *Repo) Apply(k Kind, files Files, subject, action string) (Applied, erro
 	if err := r.setChecked(c); err != nil {
 		return Applied{}, err
 	}
-	if err := os.RemoveAll(r.ConflictDir(k)); err != nil {
-		return Applied{}, err
-	}
-	if err := r.removeChanges(k); err != nil {
-		return Applied{}, err
+	for _, kf := range kinds {
+		if err := os.RemoveAll(r.ConflictDir(kf.Kind)); err != nil {
+			return Applied{}, err
+		}
+		if err := r.removeChanges(kf.Kind); err != nil {
+			return Applied{}, err
+		}
 	}
 	out, err := r.git("log", "-1", "--format=%H %cI", c)
 	if err != nil {

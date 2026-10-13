@@ -20,9 +20,9 @@ func (d diffView) report(now time.Time) string {
 	b.WriteString("\n")
 	head := []string{msg.Text(msg.FlowProject, d.project), flowAppliedLine(d.res)}
 	if res.Library != nil {
-		head = append(head, msg.Text(msg.LibraryAppliedAt, appliedText(appliedJSON(res.Library.Applied))))
+		head = append(head, msg.Text(msg.SharedAppliedAt, appliedText(appliedJSON(res.Library.Applied))))
 	}
-	problems := d.problems()
+	problems := d.res.Problems
 	if len(problems) == 0 {
 		head = append(head, msg.Text(msg.ReportProblemsNone))
 	}
@@ -51,7 +51,7 @@ func (d diffView) report(now time.Time) string {
 	if res.Library != nil {
 		for _, c := range res.Library.Changes {
 			word := changeWord(flow.Change{Object: flow.ObjectAgent, Change: c.Change})
-			rows = append(rows, []string{msg.Text(msg.FlowObjLibraryAgent, c.ID), word + "; " + usedBy(c.Projects)})
+			rows = append(rows, []string{msg.Text(msg.FlowObjSharedAgent, c.ID), word + "; " + usedBy(c.Projects)})
 		}
 	}
 	if len(rows) > 1 {
@@ -83,10 +83,10 @@ func (d diffView) report(now time.Time) string {
 		}
 	}
 	if res.Library != nil && len(res.Library.Changes) > 0 {
-		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.ReportLibrary))
+		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.ReportShared))
 		for _, c := range res.Library.Changes {
 			word := changeWord(flow.Change{Object: flow.ObjectAgent, Change: c.Change})
-			fmt.Fprintf(&b, "\n%s\n\n", msg.Text(msg.ReportLibraryAgent, c.ID, word))
+			fmt.Fprintf(&b, "\n%s\n\n", msg.Text(msg.ReportSharedAgent, c.ID, word))
 			projects := msg.Text(msg.ReportProjects, joined(c.Projects))
 			d.writeAgent(&b, c.Change, c.Old, c.New, func(*flow.Flow) string { return projects })
 		}

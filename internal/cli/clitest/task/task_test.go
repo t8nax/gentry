@@ -439,8 +439,8 @@ func TestTaskWithoutStore(t *testing.T) {
 }
 
 // TestTaskSnapshot checks that tasks of one flow share its snapshot, and that
-// a change of a library subagent the flow names pins later tasks to the
-// commit of the library.
+// a change of a shared subagent the flow names pins later tasks to the
+// commit that applied it.
 func TestTaskSnapshot(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	commitOf := func(args ...string) string {
@@ -459,18 +459,18 @@ func TestTaskSnapshot(t *testing.T) {
 		t.Errorf("one flow, two commits: %s, %s", first, second)
 	}
 
-	// The reviewer of the library, named by the review stage, changes.
+	// The shared reviewer, named by the review stage, changes.
 	lib := clitest.ShopPlaces().Library
 	text, err := os.ReadFile(filepath.Join(lib, "reviewer.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	clitest.WriteFiles(t, lib, map[string]string{"reviewer.md": string(text) + "\nПроверить логи.\n"})
-	_, stdout, _ := clitest.Run("library", "apply", "--json")
-	var applied contract.LibraryApplyOutput
+	_, stdout, _ := clitest.Run("flow", "apply", "--json")
+	var applied contract.FlowApplyOutput
 	json.Unmarshal([]byte(stdout), &applied)
 	if got := commitOf(clitest.TakeArgs("--worktree", third)...); got != applied.Applied.Commit || got == first {
-		t.Errorf("after the library change: %s, want %s", got, applied.Applied.Commit)
+		t.Errorf("after the change of the shared subagent: %s, want %s", got, applied.Applied.Commit)
 	}
 	_, stdout, _ = clitest.Run("task", "show", "SHOP-1", "--json")
 	if !strings.Contains(stdout, `"commit":"`+first+`"`) {

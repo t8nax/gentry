@@ -6,11 +6,12 @@ import "encoding/json"
 import "fmt"
 import "unicode/utf8"
 
-// Output of `gentry flow apply --json`: the draft became the active flow with a
-// commit of the process repository.
+// Output of `gentry flow apply --json`: the draft of the flow of the project, its
+// flow directory and the shared subagents, became active with one commit of the
+// process repository.
 type FlowApplyOutput struct {
-	// What the layout of subagents in the free worktrees of the project did; present
-	// only when there is something to tell.
+	// What the layout of subagents in the free worktrees of the project and of the
+	// other projects in projects did; present only when there is something to tell.
 	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
 
 	// The commit that applied the flow.
@@ -18,6 +19,10 @@ type FlowApplyOutput struct {
 
 	// Identifier of the project.
 	Project string `json:"project"`
+
+	// The other projects whose active flows name the shared subagents the commit
+	// changed, sorted; empty if it changed none or no other project names them.
+	Projects []string `json:"projects"`
 
 	// Whether the commit is sent to the remote repository; false without one or when
 	// it did not answer, and then it is sent by a later command.
@@ -39,6 +44,9 @@ func (j *FlowApplyOutput) UnmarshalJSON(value []byte) error {
 	}
 	if _, ok := raw["project"]; raw != nil && !ok {
 		return fmt.Errorf("field project in FlowApplyOutput: required")
+	}
+	if _, ok := raw["projects"]; raw != nil && !ok {
+		return fmt.Errorf("field projects in FlowApplyOutput: required")
 	}
 	if _, ok := raw["sent"]; raw != nil && !ok {
 		return fmt.Errorf("field sent in FlowApplyOutput: required")

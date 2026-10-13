@@ -24,8 +24,8 @@ type FlowAgent struct {
 	// What the subagent is for.
 	Purpose string `json:"purpose"`
 
-	// Where the subagent comes from: project for a subagent of the flow, library for
-	// a subagent of the library.
+	// Where the subagent comes from: project for a subagent of the flow, shared for a
+	// shared subagent.
 	Source FlowShowOutputAgentsElemSource `json:"source"`
 }
 
@@ -254,8 +254,8 @@ func (j *FlowScenario) UnmarshalJSON(value []byte) error {
 // it refers to: for a scenario its stages, their parts and subagents; for a stage
 // its parts and subagent; for a part or a subagent the object alone.
 type FlowShowOutput struct {
-	// Subagents by identifier: those of the project and those of the library the
-	// stages name. A project subagent replaces a library one of the same identifier.
+	// Subagents by identifier: those of the project and the shared subagents the
+	// stages name. A project subagent replaces a shared one of the same identifier.
 	Agents []FlowAgent `json:"agents"`
 
 	// The commit that applied the active flow; absent if the project has no flow yet,
@@ -365,12 +365,12 @@ func (j *FlowShowOutputAgentsElemModel) UnmarshalJSON(value []byte) error {
 
 type FlowShowOutputAgentsElemSource string
 
-const FlowShowOutputAgentsElemSourceLibrary FlowShowOutputAgentsElemSource = "library"
 const FlowShowOutputAgentsElemSourceProject FlowShowOutputAgentsElemSource = "project"
+const FlowShowOutputAgentsElemSourceShared FlowShowOutputAgentsElemSource = "shared"
 
 var enumValues_FlowShowOutputAgentsElemSource = []interface{}{
 	"project",
-	"library",
+	"shared",
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -469,10 +469,11 @@ func (j *FlowShowOutput) UnmarshalJSON(value []byte) error {
 // with, which it follows to its end; present only in `gentry task flow show`.
 type FlowShowTask struct {
 	// The last change of the active flow: the later of the commits that applied the
-	// flow of the project and the library. Present only if the active flow changed
-	// after the task was taken: the flow a task taken now would get differs from the
-	// flow of the task in a scenario, stage, part, subagent of the project, library
-	// subagent its stages name or the common rules; line ends alone do not count.
+	// flow of the project and the shared subagents. Present only if the active flow
+	// changed after the task was taken: the flow a task taken now would get differs
+	// from the flow of the task in a scenario, stage, part, subagent of the project,
+	// shared subagent its stages name or the common rules; line ends alone do not
+	// count.
 	ActiveFlow *Applied `json:"active_flow,omitempty,omitzero"`
 
 	// The commit that applied the flow of the task, as flow of the task in `gentry
@@ -514,8 +515,8 @@ type FlowStage struct {
 	Checks []string `json:"checks,omitempty,omitzero"`
 
 	// Who carries out the stage: orchestrator for the main agent session, operator
-	// for the operator, otherwise the identifier of a subagent of the project or of
-	// the library.
+	// for the operator, otherwise the identifier of a subagent of the project or of a
+	// shared subagent.
 	Executor string `json:"executor"`
 
 	// Exit of the stage: what must be true to close it.

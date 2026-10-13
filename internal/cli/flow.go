@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -94,8 +95,8 @@ func openFlow(flag string) (*process.Repo, flow.Places, *failure) {
 	return r, flow.PlacesOf(r, id), nil
 }
 
-// syncFlow synchronizes the process inside a flow or library command that
-// does not commit: it takes the changes of the remote repository and sends
+// syncFlow synchronizes the process inside a flow command that does not
+// commit: it takes the changes of the remote repository and sends
 // those of this machine.
 func syncFlow(env Env, r *process.Repo) (*process.Sync, *contract.AgentsLayout, *failure) {
 	s, bad := pull(r)
@@ -243,13 +244,18 @@ func flowObjectOf(cmd string, objects []*stringFlag) (int, string, *failure) {
 
 // projectFlow returns the active flow of the project at places, or with
 // draft its draft, and puts into out when the active flow was applied, the
-// flow directory and the draft.
+// flow directory and the draft: of the flow directory or of the shared
+// subagents.
 func projectFlow(r *process.Repo, places flow.Places, draft bool, out *contract.FlowShowOutput) (*flow.Flow, *failure) {
 	fail := func(f failure) (*flow.Flow, *failure) { return nil, &f }
 	k := process.FlowOf(places.Project)
-	hasDraft, err := r.HasDraft(k)
-	if err != nil {
-		return fail(flowFailure(err, places))
+	hasDraft := false
+	for _, kind := range []process.Kind{k, process.Library} {
+		changed, err := r.HasDraft(kind)
+		if err != nil {
+			return fail(flowFailure(err, places))
+		}
+		hasDraft = hasDraft || changed
 	}
 	dir := places.Dir
 	out.Dir = &dir
@@ -286,13 +292,21 @@ func projectFlow(r *process.Repo, places flow.Places, draft bool, out *contract.
 	}
 	if hasDraft {
 		out.Draft = &contract.FlowDraftInfo{}
-		objects, conflict, err := flow.ConflictObjects(r, k)
-		if err != nil {
-			return fail(flowFailure(err, places))
-		}
-		if conflict {
-			out.Draft.ConflictDir = &places.Conflict
-			out.Draft.Conflicts = []contract.FlowObject{}
+		// A conflict of the flow directory is told before one of the shared
+		// subagents: its folder is named.
+		for _, kind := range []process.Kind{k, process.Library} {
+			objects, conflict, err := flow.ConflictObjects(r, kind)
+			if err != nil {
+				return fail(flowFailure(err, places))
+			}
+			if !conflict {
+				continue
+			}
+			if out.Draft.ConflictDir == nil {
+				dir := r.ConflictDir(kind)
+				out.Draft.ConflictDir = &dir
+				out.Draft.Conflicts = []contract.FlowObject{}
+			}
 			for _, o := range objects {
 				co := contract.FlowObject{Object: contract.FlowShowOutputDraftConflictsElemObject(o.Object)}
 				if o.ID != "" {
@@ -595,8 +609,8 @@ func writeText(b *strings.Builder, heading, text string) {
 
 // agentSource names where a subagent comes from.
 func agentSource(a contract.FlowAgent) string {
-	if a.Source == contract.FlowShowOutputAgentsElemSourceLibrary {
-		return msg.Text(msg.FlowSourceLibrary)
+	if a.Source == contract.FlowShowOutputAgentsElemSourceShared {
+		return msg.Text(msg.FlowSourceShared)
 	}
 	return msg.Text(msg.FlowSourceProject)
 }
@@ -702,9 +716,9 @@ func writeChecks(b *strings.Builder, checks []string, timeout *string) {
 }
 
 // flowSource is where a subagent comes from as the contract names it.
-func flowSource(library bool) string {
-	if library {
-		return "library"
+func flowSource(shared bool) string {
+	if shared {
+		return "shared"
 	}
 	return "project"
 }
@@ -722,7 +736,7 @@ func changeObject(c flow.Change) string {
 		return msg.Text(msg.FlowObjPart, c.ID)
 	case flow.ObjectAgent:
 		if c.Library {
-			return msg.Text(msg.FlowObjLibraryAgent, c.ID)
+			return msg.Text(msg.FlowObjSharedAgent, c.ID)
 		}
 		return msg.Text(msg.FlowObjAgent, c.ID)
 	}
@@ -757,7 +771,7 @@ func runFlowApply(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	if code, refused := refuseOnConflict(env, r, s, process.FlowOf(places.Project)); refused {
+	if code, refused := refuseOnConflict(env, r, s, places.Project, process.FlowOf(places.Project), process.Library); refused {
 		return code
 	}
 	applied, err := flow.Apply(r, places)
@@ -765,24 +779,40 @@ func runFlowApply(args []string, env Env) int {
 		syncDone(env, r, s, false)
 		return fail(env, flowFailure(err, places))
 	}
+	// The free worktrees of the project and of the other projects the
+	// shared subagents concern get the flow applied.
+	projects := map[string]bool{places.Project: true}
+	for _, id := range applied.Projects {
+		projects[id] = true
+	}
 	if bad := push(r, s); bad != nil {
-		layoutRefused(env, r, s, places.Project)
+		layoutRefused(env, r, s, slices.Collect(maps.Keys(projects))...)
 		return fail(env, *bad)
 	}
-	record(event{typ: flow.EventApplied, project: places.Project, data: contract.FlowAppliedData{Commit: applied.Commit}})
+	record(event{typ: flow.EventApplied, project: places.Project, data: contract.FlowAppliedData{Commit: applied.Commit, Projects: applied.Projects}})
 	synced := syncDone(env, r, s, true)
-	layout, laidPool := layoutFree(r, map[string]bool{places.Project: true})
-	out := contract.FlowApplyOutput{Project: places.Project, Applied: *appliedJSON(&applied), Sent: s.Remote && !s.Unavailable, Sync: syncJSON(s, synced), Agents: layout.json(laidPool)}
+	layout, laidPool := layoutFree(r, projects)
+	out := contract.FlowApplyOutput{
+		Project: places.Project, Applied: *appliedJSON(&applied.Applied), Projects: applied.Projects,
+		Sent: s.Remote && !s.Unavailable, Sync: syncJSON(s, synced), Agents: layout.json(laidPool),
+	}
 	return emit(env, out, flowApplyText)
 }
 
-// flowApplyText prints the flow applied and the layout of the free
-// worktrees of its project.
+// flowApplyText prints the flow applied, the other projects its changes of
+// the shared subagents concern and the layout of the free worktrees.
 func flowApplyText(p *page, out contract.FlowApplyOutput) {
 	fmt.Fprintln(p, msg.Text(msg.FlowApplied))
 	fmt.Fprintln(p, msg.Text(msg.FlowProject, out.Project))
 	fmt.Fprintln(p, msg.Text(msg.FlowAppliedAt, localTime(out.Applied.Time)))
-	writeLayout(p, out.Agents, false, out.Project)
+	project := out.Project
+	if len(out.Projects) > 0 {
+		p.WriteString("\n")
+		writeList(&p.Builder, msg.Text(msg.FlowApplyAffects), out.Projects)
+		// The layout is of the free worktrees of several projects.
+		project = ""
+	}
+	writeLayout(p, out.Agents, false, project)
 }
 
 func runFlowDiscard(args []string, env Env) int {
@@ -879,26 +909,48 @@ func flowFailure(err error, places flow.Places) failure {
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeFlowDraftNotFound,
-			message: msg.Text(msg.ErrDraftNotFound, id),
+			message: msg.Text(msg.ErrNoDrafts, id),
 			more:    msg.Text(msg.FlowDir, noDraft.Dir) + "\n",
 			details: map[string]any{"project": id, "dir": noDraft.Dir},
 		}
 	case errors.As(err, &invalid):
 		var more strings.Builder
 		fmt.Fprintln(&more, msg.Text(msg.FlowDir, invalid.Dir))
-		more.WriteString("\n")
-		cps := writeProblems(&more, invalid.Problems)
+		cps := []contract.FlowProblem{}
+		if len(invalid.Problems) > 0 {
+			more.WriteString("\n")
+			cps = writeProblems(&more, invalid.Problems)
+		}
+		details := map[string]any{"project": id, "dir": invalid.Dir, "problems": cps}
+		message := msg.Text(msg.ErrDraftInvalid, id)
+		if len(invalid.Flows) > 0 {
+			// The draft is valid itself: its shared subagents break the flows
+			// of other projects.
+			message = msg.Text(msg.ErrSharedBreaksFlows)
+			var flows []map[string]any
+			for _, f := range invalid.Flows {
+				more.WriteString("\n")
+				flows = append(flows, map[string]any{"project": f.Project, "problems": writeProblemsAs(&more, msg.Text(msg.FlowProjectProblems, f.Project), f.Problems)})
+			}
+			details["flows"] = flows
+		}
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeFlowDraftInvalid,
-			message: msg.Text(msg.ErrDraftInvalid, id),
+			message: message,
 			more:    more.String(),
-			details: map[string]any{"project": id, "dir": invalid.Dir, "problems": cps},
+			details: details,
 		}
 	case errors.As(err, &ioErr):
 		k := map[string]msg.Key{flow.OpRead: msg.ErrDraftRead, flow.OpWrite: msg.ErrDraftWrite}[ioErr.Op]
 		if ioErr.Library && ioErr.Op == flow.OpRead {
-			k = msg.ErrLibraryRead
+			// The reason names the file.
+			return failure{
+				exit:    contract.ExitError,
+				code:    contract.CodeIOError,
+				message: msg.Text(msg.ErrSharedRead, ioErr.Err),
+				details: map[string]any{"path": ioErr.Path},
+			}
 		}
 		return failure{
 			exit:    contract.ExitError,

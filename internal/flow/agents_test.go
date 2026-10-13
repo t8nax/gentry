@@ -132,9 +132,9 @@ func TestAgentProblems(t *testing.T) {
 			"reviewer.yaml": "purpose: x\ncapabilities: [all]\nmodel: huge\n",
 			"reviewer.md":   "",
 		}, []Problem{
-			{contract.ProblemInvalidValue, "", 0, msg.Text(msg.ProblemCapabilities, msg.Text(msg.FlowObjLibraryAgent, "reviewer"), "read, search, edit, run, web, task, progress")},
-			{contract.ProblemInvalidValue, "", 0, msg.Text(msg.ProblemModel, msg.Text(msg.FlowObjLibraryAgent, "reviewer"), "light, standard, strong")},
-			{contract.ProblemMissingInstruction, "", 0, msg.Text(msg.ProblemMissingInstruction, msg.Text(msg.FlowObjLibraryAgent, "reviewer"))},
+			{contract.ProblemInvalidValue, "", 0, msg.Text(msg.ProblemCapabilities, msg.Text(msg.FlowObjSharedAgent, "reviewer"), "read, search, edit, run, web, task, progress")},
+			{contract.ProblemInvalidValue, "", 0, msg.Text(msg.ProblemModel, msg.Text(msg.FlowObjSharedAgent, "reviewer"), "light, standard, strong")},
+			{contract.ProblemMissingInstruction, "", 0, msg.Text(msg.ProblemMissingInstruction, msg.Text(msg.FlowObjSharedAgent, "reviewer"))},
 			{contract.ProblemExtraFile, "README.md", 0, msg.Text(msg.ProblemExtraFile, "README.md")},
 		}},
 		{"library without fields", nil, map[string]string{"reviewer.yaml": ""}, []Problem{

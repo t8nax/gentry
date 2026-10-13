@@ -7,10 +7,16 @@ import "fmt"
 import "unicode/utf8"
 
 // Data of the flow.applied event: the draft of the flow of the project in the
-// event envelope became active on this machine.
+// event envelope, its flow directory and the shared subagents, became active on
+// this machine. One application is one commit and one event, whichever projects it
+// concerns.
 type FlowAppliedData struct {
 	// Hash of the commit of the process repository that applied the flow.
 	Commit string `json:"commit"`
+
+	// The other projects whose active flows name the shared subagents the commit
+	// changed, sorted; empty if none.
+	Projects []string `json:"projects"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -21,6 +27,9 @@ func (j *FlowAppliedData) UnmarshalJSON(value []byte) error {
 	}
 	if _, ok := raw["commit"]; raw != nil && !ok {
 		return fmt.Errorf("field commit in FlowAppliedData: required")
+	}
+	if _, ok := raw["projects"]; raw != nil && !ok {
+		return fmt.Errorf("field projects in FlowAppliedData: required")
 	}
 	type Plain FlowAppliedData
 	var plain Plain

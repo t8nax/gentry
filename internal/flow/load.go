@@ -280,25 +280,17 @@ func ReadDir(dir, library string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return readFlow(treeOf(files), dirLibrary(library), nil)
+	return readFlow(treeOf(files), dirLibrary(library))
 }
 
-// Read checks the flow of files with the subagents of library.
-// draftLibrary is the library with its draft, to tell a subagent that exists
-// only there; it may be nil.
-func Read(files, library, draftLibrary process.Files) (*Result, error) {
-	ids := map[string]bool{}
-	for name := range draftLibrary {
-		if id, ok := strings.CutSuffix(name, fieldsExt); ok {
-			ids[id] = true
-		}
-	}
-	return readFlow(treeOf(files), mapLibrary(library), ids)
+// Read checks the flow of files with the shared subagents of library.
+func Read(files, library process.Files) (*Result, error) {
+	return readFlow(treeOf(files), mapLibrary(library))
 }
 
 // ReadSnapshot checks the flow of a snapshot.
 func ReadSnapshot(s Snapshot) (*Result, error) {
-	return readFlow(treeOf(s.Files), mapLibrary(s.Library), nil)
+	return readFlow(treeOf(s.Files), mapLibrary(s.Library))
 }
 
 // newLoader returns a loader of the files of t with the subagents of lib.
@@ -319,9 +311,8 @@ func newLoader(t *tree, lib library) *loader {
 	}
 }
 
-func readFlow(t *tree, lib library, draftLibrary map[string]bool) (*Result, error) {
+func readFlow(t *tree, lib library) (*Result, error) {
 	l := newLoader(t, lib)
-	l.draftLibrary = draftLibrary
 	if err := l.load(); err != nil {
 		return nil, err
 	}
@@ -348,12 +339,11 @@ func readFlow(t *tree, lib library, draftLibrary map[string]bool) (*Result, erro
 
 // loader reads a flow and collects its problems.
 type loader struct {
-	src          *tree
-	lib          library
-	draftLibrary map[string]bool // subagents of the library with its draft; nil if not known
-	inLibrary    bool            // the loader reads the library of subagents, not a flow
-	problems     []Problem
-	libProblems  []Problem // of library subagents, in the order they are found
+	src         *tree
+	lib         library
+	inLibrary   bool // the loader reads the library of subagents, not a flow
+	problems    []Problem
+	libProblems []Problem // of library subagents, in the order they are found
 
 	common        bool            // flow.yaml exists
 	scenarioFiles []string        // identifiers of the scenario files with valid names
@@ -453,7 +443,7 @@ func (l *loader) load() error {
 // directory.
 func (l *loader) loadAgents() {
 	for _, id := range sorted(l.agentFields) {
-		o := object{name: objAgent(id), file: agentsDir + "/" + id + fieldsExt}
+		o := object{name: l.agentName(id), file: agentsDir + "/" + id + fieldsExt}
 		v, ok := l.readYAML(l.src.files[o.file], o)
 		a := &agent{id: id}
 		l.agents[id] = a
@@ -462,7 +452,7 @@ func (l *loader) loadAgents() {
 		}
 	}
 	for _, id := range sorted(l.agentTexts) {
-		if text, ok := l.readText(agentsDir+"/"+id+textExt, objAgent(id)); ok && l.agents[id] != nil {
+		if text, ok := l.readText(agentsDir+"/"+id+textExt, l.agentName(id)); ok && l.agents[id] != nil {
 			l.agents[id].instruction = text
 		}
 	}
@@ -524,9 +514,9 @@ func (l *loader) extra(e entry) {
 		k = msg.ProblemExtraDir
 	}
 	if l.inLibrary {
-		k, rel = msg.ProblemLibraryExtraFile, strings.TrimPrefix(rel, agentsDir+"/")
+		k, rel = msg.ProblemSharedExtraFile, strings.TrimPrefix(rel, agentsDir+"/")
 		if e.dir {
-			k = msg.ProblemLibraryExtraDir
+			k = msg.ProblemSharedExtraDir
 		}
 	}
 	l.report(contract.ProblemExtraFile, e.rel, 0, k, rel)

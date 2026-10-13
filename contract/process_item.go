@@ -7,10 +7,10 @@ import "fmt"
 import "reflect"
 import "unicode/utf8"
 
-// A kind of the process of the operator: the flow of a project or the library of
+// A kind of the process of the operator: the flow of a project or the shared
 // subagents.
 type ProcessItem struct {
-	// flow for the flow of a project, library for the library of subagents.
+	// flow for the flow of a project, shared for the shared subagents.
 	Kind ProcessItemKind `json:"kind"`
 
 	// Identifier of the project; only for a flow.
@@ -20,11 +20,11 @@ type ProcessItem struct {
 type ProcessItemKind string
 
 const ProcessItemKindFlow ProcessItemKind = "flow"
-const ProcessItemKindLibrary ProcessItemKind = "library"
+const ProcessItemKindShared ProcessItemKind = "shared"
 
 var enumValues_ProcessItemKind = []interface{}{
 	"flow",
-	"library",
+	"shared",
 }
 
 // UnmarshalJSON implements json.Unmarshaler.

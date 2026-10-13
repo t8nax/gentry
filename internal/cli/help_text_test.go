@@ -214,6 +214,9 @@ func TestSchemeHelpText(t *testing.T) {
 		parts []string
 	}{
 		{[]string{"process"}, []string{lines(
+			"Синхронизировать процесс оператора между машинами.",
+			"Процесс — флоу проектов и общие субагенты; он хранится в git и передаётся через удалённый репозиторий.",
+		), lines(
 			"Действия:",
 			"  remote   Подключить удалённый репозиторий процесса",
 			"  sync     Синхронизировать процесс",
@@ -224,8 +227,11 @@ func TestSchemeHelpText(t *testing.T) {
 			"  deploy   Разложить субагентов флоу во все рабочие копии пула проекта",
 		)}},
 	} {
-		if got := groupHelp(part(t, tt.words...)); !strings.Contains(got, tt.parts[0]) {
-			t.Errorf("%s --help:\n%s\nwant within:\n%s", strings.Join(tt.words, " "), got, tt.parts[0])
+		got := groupHelp(part(t, tt.words...))
+		for _, p := range tt.parts {
+			if !strings.Contains(got, p) {
+				t.Errorf("%s --help:\n%s\nwant within:\n%s", strings.Join(tt.words, " "), got, p)
+			}
 		}
 	}
 
@@ -239,6 +245,22 @@ func TestSchemeHelpText(t *testing.T) {
 			"  <задача>                Отменённая задача, которую нужно взять заново.\n" +
 				"                          Название и постановка берутся из неё.\n",
 		}},
+		{[]string{"flow", "diff"}, []string{lines(
+			"Показать, чем черновик флоу проекта и общих субагентов отличается от действующего.",
+			"Подробности со схемами сценариев записываются в файл изменений.",
+			"",
+		)}},
+		{[]string{"flow", "apply"}, []string{lines(
+			"Проверить черновик флоу проекта и общих субагентов и сделать его действующим на всех машинах.",
+			"Черновик с ошибками не применяется.",
+			"Изменения общих субагентов касаются всех проектов, которые их называют.",
+			"",
+		)}},
+		{[]string{"flow", "discard"}, []string{lines(
+			"Вернуть папку флоу проекта и папку общих субагентов к действующему виду.",
+			"Изменения черновика теряются.",
+			"",
+		)}},
 		{[]string{"task", "cancel"}, []string{
 			"\nОтменённую задачу можно взять заново: gentry task take <задача> --scenario <сценарий>\n",
 		}},

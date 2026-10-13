@@ -52,7 +52,7 @@ func TestFlowGuideNeutral(t *testing.T) {
 // commandOf returns what in text names the program instead of a tool: a
 // command of gentry, a flag of --input or a help; empty if nothing.
 func commandOf(text string) string {
-	for _, s := range []string{"gentry project", "gentry worktree", "gentry flow", "gentry library", "gentry process", "gentry task", "gentry stage", "gentry step", "gentry note", "gentry artifact", "gentry operator", "gentry setup", "--input", "--help"} {
+	for _, s := range []string{"gentry project", "gentry worktree", "gentry flow", "gentry library", "gentry process", "gentry task", "gentry stage", "gentry step", "gentry note", "gentry artifact", "gentry operator", "gentry agents", "gentry setup", "--input", "--help"} {
 		if strings.Contains(text, s) {
 			return s
 		}

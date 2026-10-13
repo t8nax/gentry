@@ -28,10 +28,11 @@ func newTree(cmd *exec.Cmd, mark string, ready func() error) *tree {
 
 // start starts the command in a new process group and writes the mark.
 // Then, if ready is set and does not allow the command, the command is ended
-// at once: it starts running before ready is asked.
+// at once: it starts running before ready is asked. An error of the start
+// of the program is a *startError.
 func (t *tree) start() error {
 	if err := t.cmd.Start(); err != nil {
-		return err
+		return &startError{err}
 	}
 	err := t.writeMark()
 	if err == nil && t.ready != nil {

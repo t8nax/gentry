@@ -29,6 +29,24 @@ type NotStartedError struct {
 
 func (e *NotStartedError) Error() string { return e.Program + ": " + e.Reason }
 
+// startError is an error of the system starting the program of a command,
+// as tree.start gives it: the errors of the mark and of the job of the
+// command are of Gentry and are not.
+type startError struct{ err error }
+
+func (e *startError) Error() string { return e.err.Error() }
+func (e *startError) Unwrap() error { return e.err }
+
+// reason is what the system says: the error of the program without the
+// operation and the path, as "fork/exec <path>:".
+func (e *startError) reason() string {
+	var pe *os.PathError
+	if errors.As(e.err, &pe) {
+		return pe.Err.Error()
+	}
+	return e.err.Error()
+}
+
 // Command is a command of checks to run.
 type Command struct {
 	Dir  string   // the worktree the command runs in
@@ -90,11 +108,11 @@ func Run(ctx context.Context, c Command) (code int, err error) {
 		if ctx.Err() != nil {
 			return 0, ctx.Err()
 		}
-		var pe *os.PathError
-		if errors.As(err, &pe) {
+		var se *startError
+		if errors.As(err, &se) {
 			out.Close()
 			os.Remove(c.Log)
-			return 0, &NotStartedError{Program: c.Args[0], Reason: pe.Err.Error()}
+			return 0, &NotStartedError{Program: c.Args[0], Reason: se.reason()}
 		}
 		return 0, err
 	}

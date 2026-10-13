@@ -34,7 +34,8 @@ func newTree(cmd *exec.Cmd, mark string, ready func() error) *tree {
 }
 
 // start starts the command in a new job; the command runs only if ready, if
-// set, allows it once the command is in the job.
+// set, allows it once the command is in the job. An error of the start of
+// the program is a *startError.
 func (t *tree) start() error {
 	var name *uint16
 	if t.mark != "" {
@@ -56,7 +57,7 @@ func (t *tree) start() error {
 		return err
 	}
 	if err := t.cmd.Start(); err != nil {
-		return err
+		return &startError{err}
 	}
 	if startedHook != nil {
 		startedHook()

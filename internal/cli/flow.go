@@ -334,8 +334,10 @@ type flowShowExtra struct {
 	hints func(...hint) []hint
 }
 
-// forTask returns hs for the task whose flow is shown, if any.
-func (x flowShowExtra) forTask(hs ...hint) []hint {
+// taskHints returns hs for the task whose flow is shown, if any: outside its
+// worktree they name the task. It differs from hint.forTask, which names a
+// task in one hint.
+func (x flowShowExtra) taskHints(hs ...hint) []hint {
 	if x.hints == nil {
 		return hs
 	}
@@ -388,7 +390,7 @@ func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 		}
 		writeFlowObject(b, out, x)
 		if changed {
-			p.hints(x.forTask(hintOf(msg.HintFlowActive))...)
+			p.hints(x.taskHints(hintOf(msg.HintFlowActive))...)
 		}
 		return
 	}
@@ -437,9 +439,9 @@ func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 	case out.Draft != nil:
 		p.hints(hintOf(msg.HintFlowShowDraft))
 	case changed:
-		p.hints(x.forTask(stage, hintOf(msg.HintFlowActive))...)
+		p.hints(x.taskHints(stage, hintOf(msg.HintFlowActive))...)
 	default:
-		p.hints(x.forTask(stage)...)
+		p.hints(x.taskHints(stage)...)
 	}
 }
 

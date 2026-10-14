@@ -54,8 +54,12 @@ jobs:
             exit 1
           fi
 
+      # The second run covers the files of the build for the acceptance tests,
+      # which only the tag acceptance compiles.
       - name: go vet
-        run: go vet ./...
+        run: |
+          go vet ./...
+          go vet -tags acceptance ./cmd/gentry
 
       # The fast suite: short mode skips tests/e2e whole, before it builds
       # gentry, so the binary tests run in the next step only.

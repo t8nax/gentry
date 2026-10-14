@@ -152,8 +152,9 @@ func TestIntroStalePlugin(t *testing.T) {
 	}
 	t.Setenv(claude.PluginRootEnv, root)
 
-	exe, _ := os.Executable()
-	exe, _ = filepath.EvalSymlinks(exe)
+	// The plugin of this gentry is that of the program the commands run on;
+	// testkit checks that its version is that of the test.
+	exe := testkit.Executable(t)
 
 	writeVersion("0.0.0+00000000")
 	// The warning is built in the introduction from the plugin: this test

@@ -7,6 +7,10 @@ import (
 	"github.com/t8nax/gentry/internal/cli"
 )
 
+// run runs a command line. The build for the acceptance tests sets it to
+// runTest, which adds the entries of the tests: see acceptance.go.
+var run = cli.Run
+
 func main() {
-	os.Exit(cli.Run(os.Args[1:], cli.Env{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr}))
+	os.Exit(run(os.Args[1:], cli.Env{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr}))
 }

@@ -10,14 +10,21 @@
 // antivirus — and each package builds the shop anew, so more packages mean
 // more work. Split into 28 packages, the tests did a third more work and the
 // run took longer (issue #55).
+//
+// The commands run in the process of the test, or on a built gentry when
+// BinaryEnv names one; the tests expect the same of both. CI runs the
+// acceptance tests both ways.
 package testkit
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -45,10 +52,38 @@ const (
 	ClaudeCodeEnv = caller.ClaudeCodeEnv // set by Claude Code for its commands
 )
 
+// BinaryEnv names a gentry the commands run on instead of the process of the
+// test, by an absolute path: go test runs each package in its own directory,
+// so a relative path is taken from the directory of the package. It is built
+// for the tests, with the version of a test binary:
+//
+//	go build -tags acceptance -buildvcs=false -o <path> ./cmd/gentry
+//
+// Build it anew from the same code before each run: every such build prints
+// the same version, so the check of Main does not tell a stale build, and the
+// tests would check the old code.
+const BinaryEnv = "GENTRY_TEST_BINARY"
+
+// The entries of the build with the tag acceptance, as cmd/gentry names
+// them: a command in the channel of the agent and a tool of gentry mcp.
+const (
+	agentEntry = "--agent"
+	toolEntry  = "--tool"
+)
+
+// binary is the absolute path of the gentry of BinaryEnv; "" when the
+// commands run in the process of the test.
+var binary string
+
 // Main points the data root and the user's home at a temporary directory, so
 // no test can touch the operator's data, and runs the tests. Claude Code is a
 // program that does not exist: the commands under test must not call it.
 // Call it from TestMain.
+//
+// With BinaryEnv set, Main checks that its gentry is a build for the tests,
+// as it states. The commands inherit the environment and the current
+// directory of the test at the moment they run, so the tests change them as
+// they do for the commands of the process.
 func Main(m *testing.M) int {
 	dir, err := os.MkdirTemp("", "gentry-test-")
 	if err != nil {
@@ -73,6 +108,13 @@ func Main(m *testing.M) int {
 	}
 	work = filepath.Join(canonical, "work")
 	layers.dir = filepath.Join(canonical, "layers")
+	// The check runs a command of the gentry, so it runs in the environment
+	// of the tests, not of the operator.
+	if p := os.Getenv(BinaryEnv); p != "" {
+		if binary, err = testBinary(p); err != nil {
+			panic(err)
+		}
+	}
 	return m.Run()
 }
 
@@ -91,28 +133,108 @@ func byAgent(args []string) bool {
 	return false
 }
 
-// run runs a command of the operator, or of the agent for a command of
-// agentOnly.
-func run(args []string, env cli.Env) int {
-	if byAgent(args) {
-		return cli.RunAgent(args, env)
+// testBinary returns the absolute path of the gentry p with symbolic links
+// resolved, as the gentry names itself. It checks that p runs the commands
+// of the agent and prints the version of the test binary: a gentry built
+// without the tag acceptance refuses them, and go build stamps the version
+// of the commit unless -buildvcs=false.
+func testBinary(p string) (string, error) {
+	p, err := filepath.Abs(p)
+	if err == nil {
+		p, err = filepath.EvalSymlinks(p)
 	}
-	return cli.Run(args, env)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", BinaryEnv, err)
+	}
+	var want bytes.Buffer
+	cli.Run([]string{"version"}, cli.Env{Stdout: &want, Stderr: &want})
+	got, err := exec.Command(p, agentEntry, "version").CombinedOutput()
+	if err != nil || string(got) != want.String() {
+		return "", fmt.Errorf("%s=%s is no gentry built for the tests (go build -tags acceptance -buildvcs=false): %s version: %v\n%s\nwant the output of the test binary:\n%s",
+			BinaryEnv, p, agentEntry, err, got, want.String())
+	}
+	return p, nil
+}
+
+// run runs a command of the operator, or of the agent for a command of
+// agentOnly, with stdin as its standard input; nil for none.
+func run(args []string, stdin io.Reader) (code int, stdout, stderr string) {
+	var out, errOut bytes.Buffer
+	switch {
+	case binary != "" && byAgent(args):
+		code = runBinary(append([]string{agentEntry}, args...), stdin, &out, &errOut)
+	case binary != "":
+		code = runBinary(args, stdin, &out, &errOut)
+	case byAgent(args):
+		code = cli.RunAgent(args, cli.Env{Stdin: stdin, Stdout: &out, Stderr: &errOut})
+	default:
+		code = cli.Run(args, cli.Env{Stdin: stdin, Stdout: &out, Stderr: &errOut})
+	}
+	return code, out.String(), errOut.String()
+}
+
+// runBinary runs the gentry of BinaryEnv with args in the environment and
+// the current directory of the test, and returns its exit code. Without
+// stdin the standard input is the null device: the commands read nothing
+// from it, as from no input.
+func runBinary(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	cmd := exec.Command(binary, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return exit.ExitCode()
+	}
+	if err != nil {
+		panic(err)
+	}
+	return contract.ExitOK
 }
 
 // Run runs a command and returns its exit code and output. A command only the
 // agent runs runs as its tool does: hints name tools.
 func Run(args ...string) (code int, stdout, stderr string) {
-	var out, errOut bytes.Buffer
-	code = run(args, cli.Env{Stdout: &out, Stderr: &errOut})
-	return code, out.String(), errOut.String()
+	return run(args, nil)
 }
 
 // RunWith runs a command with stdin as its standard input.
 func RunWith(stdin string, args ...string) (code int, stdout, stderr string) {
+	return run(args, strings.NewReader(stdin))
+}
+
+// CallTool runs the tool name with the arguments args, a JSON object, as
+// gentry mcp does, and returns its text and whether it failed. An error of
+// the test, such as a tool that does not exist, panics: in the process of
+// the test cli.CallTool panics, and on the gentry of BinaryEnv the tool
+// writes nothing to the standard error but the trace of its panic.
+func CallTool(name, args string) (string, bool) {
+	if binary == "" {
+		return cli.CallTool(name, []byte(args))
+	}
 	var out, errOut bytes.Buffer
-	code = run(args, cli.Env{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errOut})
-	return code, out.String(), errOut.String()
+	code := runBinary([]string{toolEntry, name}, strings.NewReader(args), &out, &errOut)
+	if errOut.Len() > 0 {
+		panic(fmt.Sprintf("%s %s: exit code %d, stderr:\n%s", toolEntry, name, code, errOut.String()))
+	}
+	return out.String(), code != contract.ExitOK
+}
+
+// Executable returns the path of the program the commands run on, with
+// symbolic links resolved, as the program names itself, such as in the
+// hook setup writes: the gentry of BinaryEnv, or the test binary.
+func Executable(t *testing.T) string {
+	t.Helper()
+	if binary != "" {
+		return binary
+	}
+	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return exe
 }
 
 // MustRun runs a command that must succeed and returns its output.

@@ -15,21 +15,23 @@ import (
 // release, runs the command line alone: the entries of the build for the
 // tests are unknown commands, and so are the commands only the agent runs.
 func TestNoTestEntries(t *testing.T) {
-	for _, args := range [][]string{
-		{"--agent", "task", "step", "add", "Шаг", "--json"},
-		{"--tool", "task_take", "--json"},
-		{"task", "step", "add", "Шаг", "--json"},
+	for _, c := range []struct {
+		args []string
+		want string // the code of the failure
+	}{
+		{[]string{"--agent", "task", "step", "add", "Шаг", "--json"}, contract.CodeUnknownCommand},
+		{[]string{"--tool", "task_take", "--json"}, contract.CodeUnknownCommand},
+		{[]string{"task", "step", "add", "Шаг", "--json"}, contract.CodeInvalidArgument},
 	} {
 		var out bytes.Buffer
-		code := run(args, cli.Env{Stdout: &out, Stderr: &out})
+		code := run(c.args, cli.Env{Stdout: &out, Stderr: &out})
 		var e contract.ErrorOutput
-		json.Unmarshal(out.Bytes(), &e)
-		want := contract.CodeUnknownCommand
-		if args[0] == "task" {
-			want = contract.CodeInvalidArgument
+		if err := json.Unmarshal(out.Bytes(), &e); err != nil {
+			t.Errorf("%v: exit code %d, output %s; not an error in JSON: %v", c.args, code, out.String(), err)
+			continue
 		}
-		if code != contract.ExitUsage || e.Error.Code != want {
-			t.Errorf("%v: exit code %d, output %s; want %d and %s", args, code, out.String(), contract.ExitUsage, want)
+		if code != contract.ExitUsage || e.Error.Code != c.want {
+			t.Errorf("%v: exit code %d, output %s; want %d and %s", c.args, code, out.String(), contract.ExitUsage, c.want)
 		}
 	}
 }

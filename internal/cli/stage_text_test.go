@@ -40,6 +40,10 @@ func TestStageShowText(t *testing.T) {
 	header := []string{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)}
 	checked := branch
 	checked.Stage.Checks, checked.Stage.Timeout = []string{"go vet ./...", `go test -run "Total|Sum" ./...`}, ptr("10m")
+	plan := branch
+	plan.Node, plan.Stage = "plan", contract.TaskStageShowStage{Id: "plan-feature", Title: "План фичи", Executor: "orchestrator",
+		Exit: "план согласован с оператором", Agents: []string{"scout", "reviewer"}, Instruction: "Написать план.", Parts: []contract.TaskStageShowPart{}}
+	plan.Transitions = []contract.TaskStageShowTransition{{To: "implementation", Stage: ptr("implementation"), Title: ptr("Реализация")}}
 	tests := []struct {
 		name       string
 		out        contract.TaskStageShowOutput
@@ -49,6 +53,7 @@ func TestStageShowText(t *testing.T) {
 			msg.Text(msg.FlowStage, round("Ветка", "branch", 1)),
 			"Задача: SHOP-1",
 			msg.Text(msg.FlowExecutor, "orchestrator"),
+			msg.Text(msg.FlowAgents, noValue),
 			msg.Text(msg.FlowExit, "создана ветка задачи"),
 			msg.Text(msg.FlowParts, noValue),
 			"",
@@ -57,11 +62,27 @@ func TestStageShowText(t *testing.T) {
 			msg.Text(msg.FlowInstruction),
 			"  Создать ветку задачи от main.",
 		), ""},
+		// The subagents the stage runs follow the executor, in the order of
+		// the flow.
+		{"agents", plan, lines(
+			msg.Text(msg.FlowStage, round("План фичи", "plan-feature", 1)),
+			"Задача: SHOP-1",
+			msg.Text(msg.FlowExecutor, "orchestrator"),
+			"Субагенты: scout, reviewer",
+			msg.Text(msg.FlowExit, "план согласован с оператором"),
+			msg.Text(msg.FlowParts, noValue),
+			"",
+		) + table(header, []string{"implementation", "Реализация", noValue, noValue}) + lines(
+			"",
+			msg.Text(msg.FlowInstruction),
+			"  Написать план.",
+		), ""},
 		// The commands of checks follow the parts, one a line, as written.
 		{"checks", checked, lines(
 			msg.Text(msg.FlowStage, round("Ветка", "branch", 1)),
 			"Задача: SHOP-1",
 			msg.Text(msg.FlowExecutor, "orchestrator"),
+			msg.Text(msg.FlowAgents, noValue),
 			msg.Text(msg.FlowExit, "создана ветка задачи"),
 			msg.Text(msg.FlowParts, noValue),
 			"Время проверок: 10m",
@@ -78,6 +99,7 @@ func TestStageShowText(t *testing.T) {
 			msg.Text(msg.FlowStage, round("Ревью", "review", 4)),
 			"Задача: SHOP-1",
 			msg.Text(msg.FlowExecutor, "reviewer"),
+			msg.Text(msg.FlowAgents, noValue),
 			msg.Text(msg.FlowExit, "замечания ревью записаны и разобраны"),
 			msg.Text(msg.FlowParts, noValue),
 			"",

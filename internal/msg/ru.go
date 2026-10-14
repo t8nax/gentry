@@ -801,6 +801,8 @@ var ru = catalog{
 		ReportFieldChecks:         "Проверки",
 		ProblemAgents:             "%s: значение поля «agents» должно быть списком идентификаторов субагентов без повторов.",
 		ProblemAgentsNotAllowed:   "%s: поле «agents» допустимо только у этапа с исполнителем orchestrator или operator.",
+		FlowAgents:                "Субагенты: %s",
+		ReportFieldAgents:         "Субагенты",
 	},
 	plurals: map[Key][]string{
 		FlowRounds: {"не более %d возврата", "не более %d возвратов", "не более %d возвратов"},

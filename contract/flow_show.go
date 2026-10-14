@@ -252,10 +252,11 @@ func (j *FlowScenario) UnmarshalJSON(value []byte) error {
 // task, the snapshot it was taken with; then task is present, and applied, dir and
 // draft are absent. With an object flag the arrays narrow to the object and what
 // it refers to: for a scenario its stages, their parts and subagents; for a stage
-// its parts and subagent; for a part or a subagent the object alone.
+// its parts and subagents; for a part or a subagent the object alone.
 type FlowShowOutput struct {
 	// Subagents by identifier: those of the project and the shared subagents the
-	// stages name. A project subagent replaces a shared one of the same identifier.
+	// stages name, as their executor or in their agents. A project subagent replaces
+	// a shared one of the same identifier.
 	Agents []FlowAgent `json:"agents"`
 
 	// The commit that applied the active flow; absent if the project has no flow yet,
@@ -509,6 +510,11 @@ func (j *FlowShowTask) UnmarshalJSON(value []byte) error {
 }
 
 type FlowStage struct {
+	// Identifiers of the subagents the stage runs besides its executor, by its
+	// instruction: subagents of the project or shared subagents, in the order of the
+	// stage file; empty if none. Only a stage of orchestrator or operator has them.
+	Agents []string `json:"agents"`
+
 	// Commands of checks Gentry runs in the worktree of the task when the stage is
 	// closed by an exit, in the order of the stage file; absent if the stage has
 	// none.
@@ -546,6 +552,9 @@ func (j *FlowStage) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
+	}
+	if _, ok := raw["agents"]; raw != nil && !ok {
+		return fmt.Errorf("field agents in FlowStage: required")
 	}
 	if _, ok := raw["executor"]; raw != nil && !ok {
 		return fmt.Errorf("field executor in FlowStage: required")

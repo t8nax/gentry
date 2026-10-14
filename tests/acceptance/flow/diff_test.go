@@ -177,7 +177,7 @@ flowchart TD
 ` + "```" + "\n" +
 		"\n" + msg.Text(msg.ReportHeadingChange, stageObj("Безопасность", "security"), added) + "\n\n" +
 		testkit.Lines(msg.Text(msg.FlowExit, "проверка безопасности пройдена")+"  ", msg.Text(msg.FlowExecutor, "auditor")+"  ",
-			msg.Text(msg.FlowParts, testkit.None)+"  ", msg.Text(msg.FlowScenarios, "feature")) +
+			msg.Text(msg.FlowAgents, testkit.None)+"  ", msg.Text(msg.FlowParts, testkit.None)+"  ", msg.Text(msg.FlowScenarios, "feature")) +
 		"\n" + msg.Text(msg.FlowInstruction) + "\n\n> Проверить изменения на уязвимости.\n" +
 		"\n" + msg.Text(msg.ReportHeadingChange, msg.Text(msg.FlowObjAgent, "auditor"), added) + "\n\n" +
 		testkit.Lines(msg.Text(msg.FlowPurpose, "проверка безопасности изменений")+"  ", msg.Text(msg.FlowCapabilities, "read, search")+"  ",

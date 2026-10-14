@@ -821,4 +821,6 @@ const (
 const (
 	ProblemAgents           Key = "problem.agents"
 	ProblemAgentsNotAllowed Key = "problem.agents_not_allowed"
+	FlowAgents              Key = "flow.agents"
+	ReportFieldAgents       Key = "report.field_agents"
 )

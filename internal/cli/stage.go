@@ -55,7 +55,7 @@ func runStageShow(args []string, env Env) int {
 		Task: v.Key(), Node: sv.Node.ID, Round: v.Round,
 		Stage: contract.TaskStageShowStage{
 			Id: sv.Stage.ID, Title: sv.Stage.Title, Executor: sv.Stage.Executor, Exit: sv.Stage.Exit,
-			Instruction: sv.Stage.Instruction, Parts: []contract.TaskStageShowPart{},
+			Agents: append([]string{}, sv.Stage.Agents...), Instruction: sv.Stage.Instruction, Parts: []contract.TaskStageShowPart{},
 		},
 		Transitions: []contract.TaskStageShowTransition{},
 	}
@@ -93,6 +93,7 @@ func stageShowText(p *page, out contract.TaskStageShowOutput, include []string) 
 	fmt.Fprintln(b, msg.Text(msg.FlowStage, stageRound(st.Title, st.Id, out.Round, false)))
 	fmt.Fprintln(b, msg.Text(msg.StageTask, out.Task))
 	fmt.Fprintln(b, msg.Text(msg.FlowExecutor, st.Executor))
+	fmt.Fprintln(b, msg.Text(msg.FlowAgents, joined(st.Agents)))
 	fmt.Fprintln(b, msg.Text(msg.FlowExit, orNone(oneLine(st.Exit))))
 	fmt.Fprintln(b, msg.Text(msg.FlowParts, joined(include)))
 	writeChecks(b, st.Checks, st.Timeout)

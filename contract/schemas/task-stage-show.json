@@ -43,6 +43,14 @@
           "description": "What the stage must end with.",
           "type": "string"
         },
+        "agents": {
+          "description": "Subagents the stage runs besides its executor, by its instruction, in the order of the flow; empty if none.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "checks": {
           "description": "Commands of checks Gentry runs in the worktree of the task when the stage is closed by an exit, in order; absent if the stage has none.",
           "type": "array",
@@ -90,6 +98,7 @@
         "title",
         "executor",
         "exit",
+        "agents",
         "instruction",
         "parts"
       ]

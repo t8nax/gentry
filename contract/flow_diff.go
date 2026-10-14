@@ -237,9 +237,9 @@ type FlowDiffSharedChange struct {
 	// Identifier of the subagent, the name of its files.
 	Id string `json:"id"`
 
-	// Projects whose flows name the subagent as the executor of a stage and do not
-	// replace it with a subagent of their own, sorted: the project of the command by
-	// its draft, the others by their active flows. May be empty.
+	// Projects whose flows name the subagent, as the executor of a stage or in its
+	// agents, and do not replace it with a subagent of their own, sorted: the project
+	// of the command by its draft, the others by their active flows. May be empty.
 	Projects []string `json:"projects"`
 }
 

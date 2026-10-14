@@ -19,7 +19,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         shell: bash
@@ -67,6 +67,18 @@ jobs:
       # checks of a stage) on one build of gentry; CI runs them nowhere else.
       - name: binary tests
         run: go test -count=1 -v ./tests/e2e
+
+      # Runs the acceptance tests again, each command on a build of gentry for
+      # the tests instead of in the process of the test: the same tests
+      # check that both give the same output, exit code and changes. The tag
+      # acceptance adds the entries of the agent and of the tools; with
+      # -buildvcs=false the version is that of the test binary.
+      - name: acceptance tests on the binary
+        run: |
+          mkdir -p "$RUNNER_TEMP/acceptance"
+          bin="$RUNNER_TEMP/acceptance/gentry$(go env GOEXE)"
+          go build -tags acceptance -buildvcs=false -o "$bin" ./cmd/gentry
+          GENTRY_TEST_BINARY="$bin" go test -count=1 ./tests/acceptance/...
 
       - name: build
         run: go build -o bin/ ./cmd/gentry

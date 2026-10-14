@@ -98,6 +98,7 @@ type Stage struct {
 	Exit        string
 	Executor    string   // Orchestrator, Operator or a subagent
 	Include     []string // parts, in the order of the stage file
+	Agents      []string // subagents the stage runs besides its executor, in the order of the stage file
 	Checks      []string // commands of checks, in the order of the stage file
 	Timeout     string   // the time of the commands of checks as written; empty without the field
 	Instruction string   // markdown
@@ -190,15 +191,23 @@ func (f *Flow) StagesOf(part string) []string {
 	return out
 }
 
-// StagesBy returns the identifiers of the stages subagent agent carries out.
+// StagesBy returns the identifiers of the stages that name subagent agent:
+// those it carries out and those that run it by their field agents, in one
+// list in the order of the stages.
 func (f *Flow) StagesBy(agent string) []string {
 	var out []string
 	for _, st := range f.Stages {
-		if st.Executor == agent {
+		if st.Names(agent) {
 			out = append(out, st.ID)
 		}
 	}
 	return out
+}
+
+// Names reports whether the stage names subagent agent: as its executor or
+// in its field agents.
+func (s Stage) Names(agent string) bool {
+	return s.Executor == agent || slices.Contains(s.Agents, agent)
 }
 
 // OnlyScenario returns the flow of scenario s alone: its stages, their parts
@@ -215,7 +224,7 @@ func (f *Flow) OnlyScenario(s Scenario) *Flow {
 	return out
 }
 
-// OnlyStage returns the flow of stage st alone: it, its parts and subagent.
+// OnlyStage returns the flow of stage st alone: it, its parts and subagents.
 func (f *Flow) OnlyStage(st Stage) *Flow { return f.withStages([]Stage{st}) }
 
 // OnlyPart returns the flow of part p alone.
@@ -238,7 +247,7 @@ func (f *Flow) withStages(stages []Stage) *Flow {
 		}
 	}
 	for _, a := range f.Agents {
-		if slices.ContainsFunc(stages, func(st Stage) bool { return st.Executor == a.ID }) {
+		if slices.ContainsFunc(stages, func(st Stage) bool { return st.Names(a.ID) }) {
 			out.Agents = append(out.Agents, a)
 		}
 	}
@@ -394,6 +403,8 @@ type stage struct {
 	executorLine int
 	include      []string
 	includeLines []int
+	agents       []string
+	agentLines   []int
 	checks       []string
 	timeout      string
 }
@@ -670,7 +681,7 @@ func (l *loader) loadStage(id string) {
 	if !ok {
 		return
 	}
-	m, ok := l.mapping(o, v, 0, []string{"title", "exit", "executor", "include", "checks", "timeout"}, laterStageFields)
+	m, ok := l.mapping(o, v, 0, []string{"title", "exit", "executor", "include", "agents", "checks", "timeout"}, laterStageFields)
 	if !ok {
 		return
 	}
@@ -678,6 +689,7 @@ func (l *loader) loadStage(id string) {
 	st.exit, _ = l.text(o, m, "exit", 0)
 	st.executor, st.executorLine = l.text(o, m, "executor", 0)
 	l.include(o, m, st)
+	l.stageAgents(o, m, st)
 	st.checks = l.checkCommands(o, m)
 	st.timeout = l.checkTimeout(o, m)
 }
@@ -701,6 +713,37 @@ func (l *loader) include(o object, m map[string]field, st *stage) {
 	for _, item := range inc.value.items {
 		st.include = append(st.include, item.scalar.(string))
 		st.includeLines = append(st.includeLines, item.line)
+	}
+}
+
+// stageAgents reads field agents of stage st from its fields m: a list of
+// identifiers of subagents without repeats. An absent or null field and an
+// empty list are no field. A stage whose executor is a subagent may not have
+// the field: a subagent does not run other subagents. Whether the subagents
+// exist is checked with the references.
+func (l *loader) stageAgents(o object, m map[string]field, st *stage) {
+	f, present := m["agents"]
+	if !present || f.value.kind == null || f.value.kind == sequence && len(f.value.items) == 0 {
+		return
+	}
+	valid := f.value.kind == sequence
+	seen := map[string]bool{}
+	for _, item := range f.value.items {
+		s, ok := item.scalar.(string)
+		valid = valid && item.kind == scalar && ok && ValidID(s) && !seen[s]
+		seen[s] = true
+	}
+	switch {
+	case !valid:
+		l.report(contract.ProblemInvalidValue, o.file, f.line, msg.ProblemAgents, o.name)
+		return
+	case st.executor != "" && st.executor != Orchestrator && st.executor != Operator:
+		l.report(contract.ProblemAgentsNotAllowed, o.file, f.line, msg.ProblemAgentsNotAllowed, o.name)
+		return
+	}
+	for _, item := range f.value.items {
+		st.agents = append(st.agents, item.scalar.(string))
+		st.agentLines = append(st.agentLines, item.line)
 	}
 }
 
@@ -927,7 +970,8 @@ func (l *loader) flow() *Flow {
 		st := l.stages[id]
 		f.Stages = append(f.Stages, Stage{
 			ID: id, Title: st.title, Exit: st.exit, Executor: st.executor,
-			Include: append([]string{}, st.include...), Checks: slices.Clone(st.checks), Timeout: st.timeout,
+			Include: append([]string{}, st.include...), Agents: append([]string{}, st.agents...),
+			Checks: slices.Clone(st.checks), Timeout: st.timeout,
 			Instruction: l.contents[stagesDir+"/"+id+textExt],
 		})
 	}

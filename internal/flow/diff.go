@@ -151,9 +151,9 @@ func SharedAgents(files process.Files) map[string]Agent {
 	return out
 }
 
-// Users returns the stages of flow f that shared subagent id
-// carries out: none if a subagent of the project of the same name replaces
-// it.
+// Users returns the stages of flow f that name shared subagent id, as their
+// executor or in their field agents: none if a subagent of the project of
+// the same name replaces it.
 func (f *Flow) Users(id string) []string {
 	if slices.ContainsFunc(f.Agents, func(a Agent) bool { return a.ID == id && !a.Shared }) {
 		return nil

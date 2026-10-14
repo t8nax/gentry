@@ -94,6 +94,8 @@ const (
 	ProblemUnknownStage          = "unknown_stage"           // a node names a stage that does not exist
 	ProblemUnknownPart           = "unknown_part"            // include names a part that does not exist
 	ProblemUnknownExecutor       = "unknown_executor"        // executor names a subagent that does not exist
+	ProblemUnknownAgent          = "unknown_agent"           // agents of a stage names a subagent that does not exist
+	ProblemAgentsNotAllowed      = "agents_not_allowed"      // a stage carried out by a subagent has the field agents
 	ProblemUnknownNode           = "unknown_node"            // the start node or a transition target does not exist
 	ProblemReservedNode          = "reserved_node"           // a node is named finish
 	ProblemUnreachable           = "unreachable"             // a node is not reachable from the start node

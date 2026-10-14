@@ -203,13 +203,19 @@ func RunWith(stdin string, args ...string) (code int, stdout, stderr string) {
 }
 
 // CallTool runs the tool name with the arguments args, a JSON object, as
-// gentry mcp does, and returns its text and whether it failed.
+// gentry mcp does, and returns its text and whether it failed. An error of
+// the test, such as a tool that does not exist, panics: in the process of
+// the test cli.CallTool panics, and on the gentry of BinaryEnv the tool
+// writes nothing to the standard error but the trace of its panic.
 func CallTool(name, args string) (string, bool) {
 	if binary == "" {
 		return cli.CallTool(name, []byte(args))
 	}
-	var out bytes.Buffer
-	code := runBinary([]string{toolEntry, name}, strings.NewReader(args), &out, os.Stderr)
+	var out, errOut bytes.Buffer
+	code := runBinary([]string{toolEntry, name}, strings.NewReader(args), &out, &errOut)
+	if errOut.Len() > 0 {
+		panic(fmt.Sprintf("%s %s: exit code %d, stderr:\n%s", toolEntry, name, code, errOut.String()))
+	}
 	return out.String(), code != contract.ExitOK
 }
 

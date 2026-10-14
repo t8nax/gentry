@@ -22,7 +22,9 @@ const (
 	// toolEntry before the name of a tool runs it as gentry mcp does, as
 	// cli.CallTool does: the standard input holds its arguments, a JSON
 	// object; the standard output gets its text, and the exit code is
-	// ExitError if it failed.
+	// ExitError if it failed. The standard error gets nothing but the trace
+	// of a panic, such as for a tool that does not exist: tests/testkit
+	// fails the test on it.
 	toolEntry = "--tool"
 )
 

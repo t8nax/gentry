@@ -806,7 +806,7 @@ func runFlowApply(args []string, env Env) int {
 		return fail(env, flowFailure(err, places))
 	}
 	// The free worktrees of the project and of the other projects the
-	// shared subagents concern get the flow applied.
+	// shared subagents affect get the flow applied.
 	projects := map[string]bool{places.Project: true}
 	for _, id := range applied.Projects {
 		projects[id] = true
@@ -826,7 +826,7 @@ func runFlowApply(args []string, env Env) int {
 }
 
 // flowApplyText prints the flow applied, the other projects its changes of
-// the shared subagents concern and the layout of the free worktrees.
+// the shared subagents affect and the layout of the free worktrees.
 func flowApplyText(p *page, out contract.FlowApplyOutput) {
 	fmt.Fprintln(p, msg.Text(msg.FlowApplied))
 	fmt.Fprintln(p, msg.Text(msg.FlowProject, out.Project))

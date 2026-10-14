@@ -250,7 +250,7 @@ func TestDiffText(t *testing.T) {
 			"  + auditor",
 			"",
 			"Общие субагенты:",
-			"  ~ reviewer: касается проектов shop",
+			"  ~ reviewer: используется в проектах shop",
 			"",
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
@@ -430,7 +430,7 @@ flowchart TD
 
 ### Общий субагент reviewer — ` + modified + `
 
-Касается проектов: shop
+Используется в проектах: shop
 
 | ` + msg.Text(msg.ColField) + ` | ` + msg.Text(msg.ColWas) + ` | ` + msg.Text(msg.ColNow) + ` |
 | --- | --- | --- |

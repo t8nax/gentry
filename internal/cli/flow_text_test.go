@@ -407,7 +407,7 @@ func TestFlowApplyText(t *testing.T) {
 		msg.Text(msg.FlowProject, "shop"),
 		msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30"),
 		"",
-		"Изменения общих субагентов касаются других проектов:",
+		"Изменения общих субагентов затрагивают другие проекты:",
 		"  blog",
 		"  crm",
 		"",

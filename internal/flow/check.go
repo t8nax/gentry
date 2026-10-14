@@ -48,6 +48,7 @@ func (l *loader) check() error {
 				l.report(contract.ProblemUnknownStage, s.file, n.stageLine, msg.ProblemUnknownStage, objNode(s.id, n.id), n.stage)
 			}
 		}
+		l.markReturns(s)
 		// A malformed file would give false problems of the graph, such as a
 		// dead end at a node whose transitions cannot be read.
 		if !s.malformed {
@@ -72,11 +73,63 @@ func (l *loader) checkAgents() {
 	}
 }
 
+// markReturns marks the returns of scenario s: the transitions with a limit
+// of rounds, and the returns the operator decides. Such a return has a
+// condition and no limit, leaves a node whose stage the operator does and
+// leads to a node passed before it: one every way from the start to the node
+// passes. A transition forward stays one, though it lies on the loop of
+// another return.
+func (l *loader) markReturns(s *scenario) {
+	byID := map[string]*node{}
+	for _, n := range s.nodes {
+		byID[n.id] = n
+	}
+	// reach returns the nodes reachable from the start without passing node
+	// skip.
+	reach := func(skip string) map[string]bool {
+		seen := map[string]bool{}
+		if byID[s.start] == nil || s.start == skip {
+			return seen
+		}
+		seen[s.start] = true
+		queue := []string{s.start}
+		for len(queue) > 0 {
+			n := byID[queue[0]]
+			queue = queue[1:]
+			if n == nil {
+				continue
+			}
+			for _, t := range n.next {
+				if t.to != skip && !seen[t.to] {
+					seen[t.to] = true
+					queue = append(queue, t.to)
+				}
+			}
+		}
+		return seen
+	}
+	all := reach("")
+	for _, n := range s.nodes {
+		operator := false
+		if st := l.stages[n.stage]; st != nil {
+			operator = st.executor == Operator
+		}
+		for _, t := range n.next {
+			t.ret = t.max > 0
+			if t.ret || !operator || t.cond == "" || byID[t.to] == nil || !all[n.id] {
+				continue
+			}
+			t.ret = t.to == n.id || !reach(t.to)[n.id]
+		}
+	}
+}
+
 // checkGraph checks the graph of scenario s by the rules of section 7.1: the
 // start node and every target exist; every node is reachable from the start
-// and reaches the end; every loop has a transition with a limit of rounds,
-// and only a transition that closes a loop has one; at most one transition of
-// a node is without a condition, and no two lead to one node.
+// and reaches the end; every loop has a return — a transition with a limit of
+// rounds or a return the operator decides — and only a transition that
+// closes a loop has a limit; at most one transition of a node is without a
+// condition, and no two lead to one node.
 func (l *loader) checkGraph(s *scenario) {
 	so := objScenario(s.id)
 	byID := map[string]*node{}
@@ -128,7 +181,7 @@ func (l *loader) checkGraph(s *scenario) {
 
 	// reach returns what is reachable from node id by zero or more
 	// transitions, Finish included; unlimited follows only transitions
-	// without a limit of rounds.
+	// that are no returns.
 	reach := func(id string, unlimited bool) map[string]bool {
 		seen := map[string]bool{id: true}
 		queue := []string{id}
@@ -136,7 +189,7 @@ func (l *loader) checkGraph(s *scenario) {
 			cur := queue[0]
 			queue = queue[1:]
 			for _, t := range edges[cur] {
-				if unlimited && t.max > 0 || seen[t.to] {
+				if unlimited && t.ret || seen[t.to] {
 					continue
 				}
 				seen[t.to] = true
@@ -188,9 +241,9 @@ func (l *loader) checkGraph(s *scenario) {
 		}
 	}
 
-	// A loop without a limit is a cycle of transitions without one. Each such
-	// group of nodes is reported once, by the shortest cycle through its
-	// first node in the order of the file.
+	// A loop without a limit is a cycle of transitions that are no returns.
+	// Each such group of nodes is reported once, by the shortest cycle
+	// through its first node in the order of the file.
 	covered := map[string]bool{}
 	for _, n := range s.nodes {
 		if covered[n.id] {
@@ -211,7 +264,7 @@ func (l *loader) checkGraph(s *scenario) {
 }
 
 // shortestCycle returns the shortest cycle from node id back to it by
-// transitions without a limit of rounds, both ends included; nil if none.
+// transitions that are no returns, both ends included; nil if none.
 func shortestCycle(id string, edges map[string][]*transition) []string {
 	parent := map[string]string{}
 	queue := []string{id}
@@ -219,7 +272,7 @@ func shortestCycle(id string, edges map[string][]*transition) []string {
 		cur := queue[0]
 		queue = queue[1:]
 		for _, t := range edges[cur] {
-			if t.max > 0 || t.to == Finish {
+			if t.ret || t.to == Finish {
 				continue
 			}
 			if t.to == id {

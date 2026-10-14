@@ -192,6 +192,30 @@ func diffUnused(t *testing.T) flow.DiffResult {
 	}
 }
 
+// diffOperatorReturns is a draft with returns of the operator from the
+// merge without a limit: in the bug scenario its limit of 1 is removed, in
+// the feature scenario it is added.
+func diffOperatorReturns(t *testing.T) flow.DiffResult {
+	merge := "  merge:           { stage: merge, next: finish }\n"
+	unlimited := "  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n"
+	limited := strings.Replace(unlimited, "так\n", "так\n        max_rounds: 1\n", 1)
+	files := testdataFiles(t, "shop/flow", nil)
+	old := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
+		"scenarios/bug.yaml": strings.Replace(files["scenarios/bug.yaml"], merge, limited, 1),
+	}), nil)
+	cur := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
+		"scenarios/bug.yaml":     strings.Replace(files["scenarios/bug.yaml"], merge, unlimited, 1),
+		"scenarios/feature.yaml": strings.Replace(files["scenarios/feature.yaml"], merge, unlimited, 1),
+	}), nil)
+	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read,
+		Changes: []flow.Change{change(flow.ObjectScenario, "bug", flow.Modified), change(flow.ObjectScenario, "feature", flow.Modified)},
+		Scenarios: []flow.ScenarioDiff{
+			scenarioDiff(old.Read, cur.Read, "bug", nil, false),
+			scenarioDiff(old.Read, cur.Read, "feature", nil, false),
+		},
+	}
+}
+
 func TestDiffText(t *testing.T) {
 	inUTC(t)
 	head := func(applied, shared bool) string {
@@ -266,6 +290,17 @@ func TestDiffText(t *testing.T) {
 			"",
 			msg.Text(msg.DiffParts),
 			"  ~ plan-format",
+			"",
+		) + legend,
+			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
+			[]string{hintLineOf(msg.HintFlowApply, "flow_apply")}},
+		// A return without a limit is named by its condition alone.
+		{"returns of the operator", diffOperatorReturns(t), head(true, false) + lines(
+			msg.Text(msg.DiffScenarios),
+			"  Баг: Ветка → План бага → Реализация → Ревью → Слияние",
+			"    ~ возврат «Слияние → Реализация»: предел 1 снят",
+			"  Фича: Ветка → План фичи → Реализация → Ревью → Слияние",
+			"    + возврат «Слияние → Реализация»: если оператор назвал, что не так",
 			"",
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
@@ -497,6 +532,10 @@ func TestDiffReportParts(t *testing.T) {
 			"\n" + msg.Text(msg.ReportHeadingChange, msg.Text(msg.ReportObjStage, "План бага", "plan-bug"), msg.Text(msg.FlowChangeRemoved)) + "\n\n" + msg.Text(msg.FlowExit, ""),
 			"\n" + msg.Text(msg.ReportHeadingChange, msg.Text(msg.FlowObjPart, "plan-format"), msg.Text(msg.FlowChangeModified)) + "\n\n" + msg.Text(msg.FlowStages, "plan-feature") + "\n\n" + msg.Text(msg.FlowText) +
 				"\n\n```diff\n ## План\n Шаги, проверка и риски.\n+Срок.\n```\n",
+		}},
+		{"returns of the operator", diffOperatorReturns(t), []string{
+			"    n5 -.->|\"оператор назвал, что не так<br/>" + msg.Text(msg.DiffLimitRemoved, 1) + "\"| n3\n",
+			"    n5 -.->|\"оператор назвал, что не так\"| n3\n",
 		}},
 		{"draft with problems", diffProblems(t), []string{
 			msg.Text(msg.ReportCreated, "2026-10-09 12:30") + "\n\nОшибки черновика:\n\n- ",

@@ -14,10 +14,20 @@ const EventDecisionRecorded = "operator_decision.recorded"
 type ReturnNotFoundError struct {
 	Node, To string
 	Stage    flow.Stage // the stage of the node
-	Returns  []string   // the nodes the node has returns to
+	Returns  []string   // the nodes the node has returns with a limit to
 }
 
 func (e *ReturnNotFoundError) Error() string { return e.Node + ": no return to " + e.To }
+
+// ReturnUnlimitedError means the return to the node named has no limit:
+// there is nothing to allow.
+type ReturnUnlimitedError struct {
+	Node, To string
+}
+
+func (e *ReturnUnlimitedError) Error() string {
+	return e.Node + " → " + e.To + ": no limit of returns"
+}
 
 // Decision is a decision of the operator to record.
 type Decision struct {
@@ -71,6 +81,9 @@ func RecordDecision(st *state.Store, req Decision) (Recorded, error) {
 			var ok bool
 			if loop, ok = loopOf(sc.Loops(), node.ID, req.AllowReturn); !ok {
 				return &ReturnNotFoundError{Node: node.ID, To: req.AllowReturn, Stage: stage, Returns: returnsOf(sc, node.ID)}
+			}
+			if loop.Max == 0 {
+				return &ReturnUnlimitedError{Node: node.ID, To: req.AllowReturn}
 			}
 		} else {
 			passes, err := tx.TaskPath(t.ID)
@@ -126,11 +139,12 @@ func allowedReturns(ds []state.Decision) map[[2]string]int {
 	return allowed
 }
 
-// returnsOf returns the nodes that node has returns to in sc.
+// returnsOf returns the nodes that node has returns with a limit to in sc:
+// only those the operator may allow one more return by.
 func returnsOf(sc flow.Scenario, node string) []string {
 	targets := []string{}
 	for _, l := range sc.Loops() {
-		if l.From == node {
+		if l.From == node && l.Max > 0 {
 			targets = append(targets, l.To)
 		}
 	}

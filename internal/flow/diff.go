@@ -60,7 +60,9 @@ func DiffScenario(old, cur *Scenario, stages map[string]string) ScenarioDiff {
 			switch {
 			case !ok:
 				td.Change = Added
-			case ot != t:
+			case ot.If != t.If || ot.MaxRounds != t.MaxRounds:
+				// Only what the file writes: whether a transition is a
+				// return follows from the graph and its stages.
 				td.Change, td.Old = Modified, ot
 			default:
 				continue
@@ -104,12 +106,12 @@ func transitionTo(n Node, to string) (Transition, bool) {
 }
 
 // closesLoop reports whether transition t of node from leads back: the node
-// is reachable from its target by transitions without a limit, as Loops
-// counts it. A limit marks such a transition in a valid flow; a draft with
-// problems may lack it.
+// is reachable from its target by transitions that are no returns, as Loops
+// counts it. A valid flow marks such a transition as a return; a draft with
+// problems may lack the mark.
 func closesLoop(s *Scenario, from string, t Transition) bool {
 	switch {
-	case t.MaxRounds > 0:
+	case t.Return():
 		return true
 	case t.If == "":
 		// A return has a condition: the path by default leads forward.
@@ -118,7 +120,7 @@ func closesLoop(s *Scenario, from string, t Transition) bool {
 	next := map[string][]string{}
 	for _, n := range s.Nodes {
 		for _, nt := range n.Next {
-			if nt.MaxRounds == 0 {
+			if !nt.Return() {
 				next[n.ID] = append(next[n.ID], nt.To)
 			}
 		}

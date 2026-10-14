@@ -134,9 +134,13 @@
                         "minLength": 1
                       },
                       "max_rounds": {
-                        "description": "Limit of rounds of the loop the transition closes; absent when the transition closes no loop.",
+                        "description": "Limit of rounds of the loop the transition closes; absent when the transition closes no loop or is a return without a limit.",
                         "type": "integer",
                         "minimum": 1
+                      },
+                      "return": {
+                        "description": "Always true: the transition is a return, it closes a loop, with a limit or without one; absent when the transition closes no loop.",
+                        "type": "boolean"
                       }
                     },
                     "required": ["to"]

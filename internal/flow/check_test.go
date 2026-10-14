@@ -77,6 +77,20 @@ func TestGraphProblems(t *testing.T) {
 			"  review:\n    stage: review\n    next:\n      - to: review\n        if: ещё круг\n      - to: finish\n"), []Problem{
 			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 4, msg.Text(msg.ProblemUnlimitedLoop, msg.Text(msg.FlowObjScenario, "bug"), "review → review")},
 		}},
+		{"an unlimited return of the operator by default", bug("branch",
+			"  branch: { stage: branch, next: implementation }\n"+
+				"  implementation: { stage: implementation, next: merge }\n"+
+				"  merge:\n    stage: merge\n    next:\n      - to: finish\n        if: работа принята\n      - to: implementation\n"), []Problem{
+			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemUnlimitedLoop, msg.Text(msg.FlowObjScenario, "bug"), "implementation → merge → implementation")},
+		}},
+		{"an unlimited return of the orchestrator", map[string]string{
+			"scenarios/bug.yaml": "title: Баг\nstart: implementation\nnodes:\n" +
+				"  implementation: { stage: implementation, next: merge }\n" +
+				"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: не так\n      - to: finish\n",
+			"stages/merge.yaml": "title: Слияние\nexit: ветка задачи влита в main\nexecutor: orchestrator\n",
+		}, []Problem{
+			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 4, msg.Text(msg.ProblemUnlimitedLoop, msg.Text(msg.FlowObjScenario, "bug"), "implementation → merge → implementation")},
+		}},
 		{"limits", bug("plan",
 			"  plan:\n    stage: plan-bug\n    next:\n      - to: review\n        if: план готов\n        max_rounds: 2\n"+
 				"  review:\n    stage: review\n    next:\n      - to: review\n        max_rounds: 3\n      - to: finish\n        if: замечаний нет\n"), []Problem{
@@ -101,6 +115,37 @@ func TestGraphProblems(t *testing.T) {
 				t.Errorf("problems:\n%s\nwant:\n%s", dump(got), dump(tt.want))
 			}
 		})
+	}
+}
+
+// TestOperatorReturns checks the returns the operator decides: a transition
+// with a condition from a node of a stage of the operator to a node passed
+// before it is a return without a limit, and its loop needs no other; a
+// transition forward with a condition stays one, though it lies on the loop
+// of another return.
+func TestOperatorReturns(t *testing.T) {
+	f := load(t, shop(t, bug("branch",
+		"  branch: { stage: branch, next: implementation }\n"+
+			"  implementation: { stage: implementation, next: review }\n"+
+			"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n        max_rounds: 3\n      - to: merge\n"+
+			"  merge:\n    stage: merge\n    next:\n      - to: release\n        if: нужен выпуск\n      - to: finish\n"+
+			"  release:\n    stage: merge\n    next:\n      - to: implementation\n        if: выпуск не прошёл\n      - to: finish\n")))
+	s, _ := f.Scenario("bug")
+	returns := map[[2]string]bool{} // unlimited, by return
+	for _, n := range s.Nodes {
+		for _, tr := range n.Next {
+			if tr.Return() {
+				returns[[2]string{n.ID, tr.To}] = tr.UnlimitedReturn
+			}
+		}
+	}
+	want := map[[2]string]bool{{"review", "implementation"}: false, {"release", "implementation"}: true}
+	if !reflect.DeepEqual(returns, want) {
+		t.Errorf("returns %v, want %v", returns, want)
+	}
+	loops := s.Loops()
+	if len(loops) != 2 || loops[1].From != "release" || loops[1].Max != 0 || len(loops[1].Nodes) != 4 || !loops[0].Within(loops[1]) {
+		t.Errorf("loops %+v", loops)
 	}
 }
 

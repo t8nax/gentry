@@ -228,7 +228,8 @@ func prepare(tx *state.Tx, req Close) (closing, error) {
 			return closing{}, err
 		}
 		allowed := allowedReturns(ds)[loopKey(l)]
-		if counts[loopKey(l)] >= l.Max+allowed {
+		// A return without a limit is not refused, however many were made.
+		if l.Max > 0 && counts[loopKey(l)] >= l.Max+allowed {
 			return closing{}, &ReturnLimitError{Node: node.ID, To: tr.To, Limit: l.Max + allowed, Allowed: allowed}
 		}
 		returns = counts[loopKey(l)] + 1
@@ -504,9 +505,8 @@ type StageView struct {
 type TransitionView struct {
 	flow.Transition
 	Stage   flow.Stage // the stage of the target; zero for the end of the scenario
-	Return  bool       // the transition is a return, with a limit
 	Returns int        // returns made by it, counted anew after a return by an outer loop
-	Limit   int        // the limit of the flow with the returns the operator allowed
+	Limit   int        // the limit of the flow with the returns the operator allowed; 0 for a return without a limit
 	Allowed int        // returns of the limit the operator allowed
 }
 
@@ -539,8 +539,11 @@ func StageOf(v View, decisions []state.Decision) (StageView, error) {
 			tv.Stage, _ = v.Flow.Stage(stageOfNode(sc, t.To))
 		}
 		if l, ok := loopOf(loops, node.ID, t.To); ok {
-			tv.Return, tv.Returns, tv.Allowed = true, counts[loopKey(l)], allowed[loopKey(l)]
-			tv.Limit = l.Max + tv.Allowed
+			tv.Returns = counts[loopKey(l)]
+			if l.Max > 0 {
+				tv.Allowed = allowed[loopKey(l)]
+				tv.Limit = l.Max + tv.Allowed
+			}
 		}
 		sv.Transitions = append(sv.Transitions, tv)
 	}

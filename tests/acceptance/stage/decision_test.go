@@ -285,6 +285,75 @@ func TestOperatorAllowReturn(t *testing.T) {
 	}
 }
 
+// TestOperatorReturnWithoutLimit takes a task back from the merge, a stage of
+// the operator, by a return without a limit: it is not refused however many
+// returns were made, shows only their number, starts the returns of review
+// anew, and an allowance of one more return to it is refused.
+func TestOperatorReturnWithoutLimit(t *testing.T) {
+	feature := strings.Replace(readTestdata(t, "scenarios/feature.yaml"), "  merge:           { stage: merge, next: finish }\n",
+		"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n", 1)
+	_, fix := testkit.TaskShop(t)
+	testkit.WriteDraft(t, testkit.ShopPlaces(), map[string]string{"scenarios/feature.yaml": feature})
+	testkit.MustRun(t, "flow", "apply")
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	closeStage(t, "Создать ветку")
+	closeStage(t, "Согласовать план")
+	closeStage(t, "Сделать")
+	closeStage(t, "Провести ревью", "--to", "implementation", "--reason", "Есть замечания")
+	closeStage(t, "Исправить")
+	closeStage(t, "Провести ревью", "--to", "merge", "--reason", "Замечаний нет")
+
+	row := func(returns string) string {
+		return "оператор назвал, что не так  " + returns + "\n"
+	}
+	if _, stdout, _ := testkit.Run("task", "stage", "show"); !strings.Contains(stdout, row("0")) {
+		t.Errorf("task stage show before a return:\n%s", stdout)
+	}
+	// Nothing is to be allowed, and nothing is recorded.
+	testkit.WantRun(t, contract.ExitError, "", msg.Text(msg.ErrReturnUnlimited, "implementation")+"\n",
+		"task", "decision", "add", "--answer", "Да", "--allow-return", "implementation")
+	_, out, _ := testkit.Run("task", "decision", "add", "--answer", "Да", "--allow-return", "implementation", "--json")
+	testkit.Validate(t, "schemas/error.json", out)
+	if !strings.Contains(out, `"code":"return_unlimited"`) || !strings.Contains(out, `"details":{"node":"merge","to":"implementation"}`) {
+		t.Errorf("return_unlimited --json: %s", out)
+	}
+	// Only returns with a limit can be allowed one more.
+	_, out, _ = testkit.Run("task", "decision", "add", "--answer", "Да", "--allow-return", "finish", "--json")
+	if !strings.Contains(out, `"code":"return_not_found"`) || !strings.Contains(out, `"returns":[]`) {
+		t.Errorf("return_not_found --json: %s", out)
+	}
+	if _, stdout, _ := testkit.Run("task", "show", "--statement"); strings.Contains(stdout, msg.Text(msg.DecisionsHeading)) {
+		t.Errorf("a refused decision is recorded:\n%s", stdout)
+	}
+
+	back := []string{"task", "stage", "exit", "--kind", "result", "--text", "Не так", "--to", "implementation", "--reason", "оператор назвал, что не так"}
+	for i := range 3 {
+		if i > 0 {
+			closeStage(t, "Исправить")
+			closeStage(t, "Провести ревью", "--to", "merge", "--reason", "Замечаний нет")
+		}
+		testkit.MustRun(t, back...)
+	}
+	_, stdout, _ := testkit.Run("task", "show")
+	if !strings.Contains(stdout, msg.Text(msg.TaskStage, testkit.Round("Реализация", "implementation", 5))+"\n") {
+		t.Errorf("task show after three returns:\n%s", stdout)
+	}
+	// The return of the operator started the returns of review anew.
+	closeStage(t, "Исправить")
+	if _, stdout, _ := testkit.Run("task", "stage", "show"); !strings.Contains(stdout, "ревью выявило существенные замечания  "+msg.Text(msg.StageReturns, 0, 3)+"\n") {
+		t.Errorf("task stage show of review after the returns of the operator:\n%s", stdout)
+	}
+	closeStage(t, "Провести ревью", "--to", "merge", "--reason", "Замечаний нет")
+	if _, stdout, _ := testkit.Run("task", "stage", "show"); !strings.Contains(stdout, row("3")) {
+		t.Errorf("task stage show after three returns:\n%s", stdout)
+	}
+	out = testkit.WantJSON(t, contract.ExitOK, "schemas/task-stage-show.json", "task", "stage", "show")
+	if !strings.Contains(out, `"if":"оператор назвал, что не так","returns":3,"stage":"implementation"`) || strings.Contains(out, "max_returns") {
+		t.Errorf("task stage show --json: %s", out)
+	}
+}
+
 // readTestdata reads a file of the flow of the flow testdata.
 func readTestdata(t *testing.T, rel string) string {
 	t.Helper()

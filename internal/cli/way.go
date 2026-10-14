@@ -230,6 +230,7 @@ func wayFailure(cmd string, err error) failure {
 		transition *task.TransitionError
 		limit      *task.ReturnLimitError
 		noReturn   *task.ReturnNotFoundError
+		unlimited  *task.ReturnUnlimitedError
 		empty      *task.StepsEmptyError
 		open       *task.StepsOpenError
 		noStep     *task.StepNotFoundError
@@ -282,6 +283,14 @@ func wayFailure(cmd string, err error) failure {
 			message: msg.Text(msg.ErrReturnNotFound, stageName(noReturn.Stage), noReturn.To),
 			hints:   []hint{hintOf(msg.HintStageTransitions)},
 			details: map[string]any{"node": noReturn.Node, "to": noReturn.To, "returns": noReturn.Returns},
+		}
+	case errors.As(err, &unlimited):
+		// The refusal says nothing is to be done: there is no hint.
+		return failure{
+			exit:    contract.ExitError,
+			code:    contract.CodeReturnUnlimited,
+			message: msg.Text(msg.ErrReturnUnlimited, unlimited.To),
+			details: map[string]any{"node": unlimited.Node, "to": unlimited.To},
 		}
 	case errors.As(err, &empty):
 		return failure{

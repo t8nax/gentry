@@ -1,4 +1,4 @@
-package main
+package e2e
 
 import (
 	"fmt"
@@ -28,7 +28,8 @@ func buildGentry(t *testing.T) string {
 		if runtime.GOOS == "windows" {
 			build.bin += ".exe"
 		}
-		cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", build.bin, ".")
+		cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", build.bin, "./cmd/gentry")
+		cmd.Dir = filepath.Join("..", "..") // the root of the module
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		build.out, build.err = cmd.CombinedOutput()
 	})
@@ -101,9 +102,6 @@ func writeSummary(t *testing.T, markdown string) {
 // TestStartupTime reports how long `gentry version` takes to run. It has no
 // threshold: it gives numbers to compare across platforms and over time.
 func TestStartupTime(t *testing.T) {
-	if testing.Short() {
-		t.Skip("startup measurement is skipped in short mode")
-	}
 	const warmup, runs = 3, 30
 	d := measure(t, buildGentry(t), "", warmup, runs, "version")
 	platform := runtime.GOOS + "/" + runtime.GOARCH

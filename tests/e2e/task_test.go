@@ -1,4 +1,4 @@
-package main
+package e2e
 
 import (
 	"encoding/json"
@@ -103,9 +103,6 @@ func takeAtOnce(t *testing.T, bin string, worktrees []string) []result {
 // TestTakeOneWorktreeAtOnce checks that of several processes taking a task in
 // one worktree at once exactly one does; the others are refused.
 func TestTakeOneWorktreeAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop := shopWithFlow(t, bin, 1)[0]
 	same := make([]string, writers)
@@ -136,9 +133,6 @@ func TestTakeOneWorktreeAtOnce(t *testing.T) {
 // TestTakeManyWorktreesAtOnce checks that processes taking tasks in different
 // worktrees at once all do, with the numbers 1 to n without repeats.
 func TestTakeManyWorktreesAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	worktrees := shopWithFlow(t, bin, writers)
 	var ids []string
@@ -168,9 +162,6 @@ func TestTakeManyWorktreesAtOnce(t *testing.T) {
 // flow changed neither waits for another process holding the process
 // repository nor refuses: it shows the task without the change.
 func TestTaskShowWhileProcessBusy(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
 	dir := filepath.Join(os.Getenv(home.EnvVar), "process")

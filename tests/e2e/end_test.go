@@ -1,4 +1,4 @@
-package main
+package e2e
 
 import (
 	"encoding/json"
@@ -30,9 +30,6 @@ func passedShop(t *testing.T, bin string) string {
 // TestEndTaskAtOnce checks that of several sessions closing and processes
 // cancelling one task at once exactly one does: the others find it ended.
 func TestEndTaskAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop := passedShop(t, bin)
 	commands := make([][]string, writers/2)
@@ -75,9 +72,6 @@ func TestEndTaskAtOnce(t *testing.T) {
 // task anew in different worktrees at once exactly one does: the others find
 // it in work, and the task has two attempts.
 func TestTakeAgainAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	worktrees := shopWithFlow(t, bin, writers+1)
 	gentry(t, bin, worktrees[0], "task", "take", "--scenario", "feature", "--title", "Возврат", "--statement", "Постановка.")

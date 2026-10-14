@@ -1,4 +1,4 @@
-package main
+package e2e
 
 import (
 	"bufio"
@@ -159,9 +159,6 @@ func TestMCPServer(t *testing.T) {
 // TestMCPServersAtOnce checks that several servers, long-lived as sessions
 // are, and the command line write to the state store at once.
 func TestMCPServersAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	worktrees := shopWithFlow(t, bin, 2)
 	for i, w := range worktrees {

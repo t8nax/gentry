@@ -1,4 +1,4 @@
-package main
+package e2e
 
 import (
 	"encoding/json"
@@ -52,9 +52,6 @@ func takenShop(t *testing.T, bin string) string {
 // TestCloseStageAtOnce checks that of several processes closing one stage
 // at once exactly one does: the others find the next stage, without steps.
 func TestCloseStageAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
 	tool(t, bin, shop, "task_step_add", map[string]any{"steps": []string{"Создать ветку"}})
@@ -89,9 +86,6 @@ func TestCloseStageAtOnce(t *testing.T) {
 // TestAddStepsAtOnce checks that processes adding steps at once all do,
 // with the numbers 1 to n without repeats.
 func TestAddStepsAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
 	args := make([]any, writers)
@@ -135,9 +129,6 @@ func TestAddStepsAtOnce(t *testing.T) {
 // TestRecordDecisionsAtOnce checks that processes recording decisions of the
 // operator at once all do, with the numbers 1 to n without repeats.
 func TestRecordDecisionsAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
 	commands := make([][]string, writers)

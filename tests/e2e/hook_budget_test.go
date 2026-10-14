@@ -1,4 +1,4 @@
-package main
+package e2e
 
 import (
 	"fmt"
@@ -49,9 +49,6 @@ func stalePlugin(t *testing.T) {
 // TestHookBudget checks the session start hook against its time and output
 // limits outside any project and in a worktree with a task.
 func TestHookBudget(t *testing.T) {
-	if testing.Short() {
-		t.Skip("hook budget check is skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
 	tool(t, bin, shop, "task_step_add", map[string]any{"steps": []string{"Создать ветку", "Проверить имя ветки"}})

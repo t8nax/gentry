@@ -1,4 +1,4 @@
-package main
+package e2e
 
 import (
 	"encoding/json"
@@ -196,9 +196,6 @@ func pathNodes(t *testing.T, bin, shop string) string {
 // other waits for it and then finds the next stage, without steps: the
 // commands of a task run one at a time.
 func TestStageExitChecksAtOnce(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop, files := checksShop(t, bin, "span")
 	exit := map[string]any{"kind": "result", "text": "Ветка"}
@@ -223,9 +220,6 @@ func TestStageExitChecksAtOnce(t *testing.T) {
 // while its commands of checks run is not closed by the exit again: the exit
 // starts anew at the next stage, which has no steps.
 func TestStageSkipDuringChecks(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop, files := checksShop(t, bin, "span")
 	s := startServer(t, bin, shop)
@@ -245,9 +239,6 @@ func TestStageSkipDuringChecks(t *testing.T) {
 // command of checks that runs, with the process it started, which leaves no
 // marker, and that the exit is refused as the task is cancelled.
 func TestTaskCancelDuringChecks(t *testing.T) {
-	if testing.Short() {
-		t.Skip("concurrent processes are skipped in short mode")
-	}
 	bin := buildGentry(t)
 	shop, files := checksShop(t, bin, "tree")
 	s := startServer(t, bin, shop)

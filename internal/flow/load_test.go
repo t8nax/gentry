@@ -412,12 +412,13 @@ func TestFileProblems(t *testing.T) {
 			{contract.ProblemUnknownExecutor, "stages/review.yaml", 3, msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewr")},
 		}},
 		// The field agents is a list of identifiers without repeats, at a
-		// stage the main session or the operator carries out.
+		// stage the main session or the operator carries out; the subagents
+		// of a field that is not allowed are not looked up.
 		{"agents", map[string]string{
 			"stages/branch.yaml":       stage("agents: [Reviewer]\n"),
 			"stages/plan-bug.yaml":     stage("agents: reviewer\n"),
 			"stages/plan-feature.yaml": stage("agents: [reviewer, reviewer]\n"),
-			"stages/review.yaml":       "title: Ревью\nexit: x\nexecutor: reviewer\nagents: [reviewer]\n",
+			"stages/review.yaml":       "title: Ревью\nexit: x\nexecutor: reviewer\nagents: [auditor]\n",
 		}, []Problem{
 			{contract.ProblemInvalidValue, "stages/branch.yaml", 4, msg.Text(msg.ProblemAgents, msg.Text(msg.FlowObjStage, "branch"))},
 			{contract.ProblemInvalidValue, "stages/plan-bug.yaml", 4, msg.Text(msg.ProblemAgents, msg.Text(msg.FlowObjStage, "plan-bug"))},

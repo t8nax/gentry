@@ -1,6 +1,7 @@
-// Package layers holds only tests: they check the direction of the
-// dependencies between the packages of the module.
-package layers
+// Package architecture holds only tests: they check the direction of the
+// dependencies between the packages of the module and the packages of
+// internal/ the acceptance tests import.
+package architecture
 
 import (
 	"fmt"
@@ -19,8 +20,9 @@ import (
 	"testing"
 )
 
-// tableFile is the file to edit when the layers of the module change.
-const tableFile = "internal/layers/layers_test.go"
+// tableFile is the file to edit when the layers of the module or the imports
+// allowed to the acceptance tests change.
+const tableFile = "tests/architecture/layers_test.go"
 
 // A layer is a row of the table of layers: its packages as paths from the
 // root of the module.
@@ -54,6 +56,30 @@ var helpers = []string{"tests/testkit", "internal/gittest"}
 // exceptions are the imports of a higher layer the code keeps.
 var exceptions = []exception{
 	{"internal/state", "internal/flow", "the move to schema 6 reads the stage of each task under way from the snapshot of its flow (fillPath, stageOf)"},
+}
+
+// acceptanceDir holds the acceptance tests: they check gentry through its
+// command line.
+const acceptanceDir = "tests/acceptance"
+
+// An allowance lets the acceptance tests import a package of internal/ for a
+// reason.
+type allowance struct {
+	pkg, reason string
+}
+
+// allowed are the packages of internal/ the acceptance tests may import;
+// contract and the test helpers of tests/testkit they import freely. The
+// names of the environment variables of Gentry come through testkit.
+var allowed = []allowance{
+	{"internal/msg", "the expected texts are built from the catalog of messages, so a wording is a literal in one test only"},
+	{"internal/cli", "the hints in the form of the channel (HintText, HintFor, CallTool) are built by the functions the output uses"},
+	{"internal/gittest", "the test helper makes the repositories and worktrees of the shop"},
+	{"internal/state", "a test makes a state the commands cannot make, such as a newer schema, and finds whether a command created the state store"},
+	{"internal/flow", "testkit gives the places of the flow of the shop as flow.Places, and the tests of the events name the types the flow writes"},
+	{"internal/adapter/claude", "the test of a stale plugin builds the plugin by the adapter, and the tests of the hook name its tool and folder"},
+	{"internal/integration", "the test of a stale plugin builds the plugin of the integration of Gentry"},
+	{"internal/buildinfo", "the test of a stale plugin builds the plugin of the version of Gentry"},
 }
 
 // TestImportDirection checks the non-test files of the packages of the
@@ -160,20 +186,109 @@ func TestImportDirectionCatches(t *testing.T) {
 	}
 	got := check(pkgs, layers, helpers, exceptions)
 	want := []string{
-		"internal/cart has no layer: add it to the layer table in internal/layers/layers_test.go",
+		"internal/cart has no layer: add it to the layer table in tests/architecture/layers_test.go",
 		"internal/db/db.go imports test helper internal/dbtest: only tests may import it",
 		"internal/db/seed.go imports test helper internal/dbtest: only tests may import it",
-		`internal/db/mail.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in internal/layers/layers_test.go`,
-		`internal/db/stock.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in internal/layers/layers_test.go`,
+		`internal/db/mail.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in tests/architecture/layers_test.go`,
+		`internal/db/stock.go imports internal/web without the reason of its exception: write "the reason" in the comment on the import or fix the reason in tests/architecture/layers_test.go`,
 		"internal/order/order.go imports internal/web: layer 2 (scenarios) must not import layer 1 (entry)",
 		"internal/order/ship.go imports internal/web: layer 2 (scenarios) must not import layer 1 (entry)",
-		"internal/stock is in the layer table but is not a package: remove it from internal/layers/layers_test.go",
-		"internal/dbtest is in the layer table and is a test helper: remove it from one of them in internal/layers/layers_test.go",
-		"internal/order is in the layer table twice: keep it in one layer in internal/layers/layers_test.go",
-		"test helper internal/mailtest is not a package: remove it from internal/layers/layers_test.go",
-		"exception internal/text imports internal/order has no reason: write it in internal/layers/layers_test.go",
-		"exception internal/text imports internal/web lets no import through: remove it from internal/layers/layers_test.go",
-		"exception internal/order imports internal/db lets no import through: remove it from internal/layers/layers_test.go",
+		"internal/stock is in the layer table but is not a package: remove it from tests/architecture/layers_test.go",
+		"internal/dbtest is in the layer table and is a test helper: remove it from one of them in tests/architecture/layers_test.go",
+		"internal/order is in the layer table twice: keep it in one layer in tests/architecture/layers_test.go",
+		"test helper internal/mailtest is not a package: remove it from tests/architecture/layers_test.go",
+		"exception internal/text imports internal/order has no reason: write it in tests/architecture/layers_test.go",
+		"exception internal/text imports internal/web lets no import through: remove it from tests/architecture/layers_test.go",
+		"exception internal/order imports internal/db lets no import through: remove it from tests/architecture/layers_test.go",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("check reports:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// TestAcceptanceImports checks the files of the acceptance tests, test files
+// or not, against the imports allowed to them: they import of internal/ only
+// the packages allowed; each allowance has a reason and lets through an
+// import of the tests.
+func TestAcceptanceImports(t *testing.T) {
+	root, module := moduleRoot(t)
+	pkgs, err := testImports(root, module, acceptanceDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkgs) == 0 {
+		t.Fatalf("no acceptance test found in %s", filepath.Join(root, filepath.FromSlash(acceptanceDir)))
+	}
+	for _, p := range checkAcceptance(pkgs, allowed) {
+		t.Error(p)
+	}
+}
+
+// TestAcceptanceImportsCatches runs the reading of imports of the tests and
+// the check of the acceptance tests on a module made up for the test with
+// allowances of its own. It checks that the check reports, in each file that
+// has it, an import of internal/ no allowance lets through, in test files and
+// in other files; an allowance with no reason and an allowance that lets no
+// import through; and nothing else: not an allowed import, an import an
+// allowance with no reason lets through, an import of the module out of
+// internal/ and an import of the standard library. It checks that the
+// reading reads only the folder of the acceptance tests, files of all
+// systems, and skips files with //go:build ignore, files and folders named
+// with . or _, testdata, vendor and nested modules.
+func TestAcceptanceImportsCatches(t *testing.T) {
+	const module = "example.com/shop"
+	root := t.TempDir()
+	write := func(name, src string) {
+		p := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	imports := func(pkg string, imps ...string) string {
+		var b strings.Builder
+		fmt.Fprintf(&b, "package %s\n", pkg)
+		for _, imp := range imps {
+			fmt.Fprintf(&b, "import _ %q\n", module+"/"+imp)
+		}
+		return b.String()
+	}
+	write("go.mod", "module "+module+"\n")
+	write("tests/acceptance/cart/cart_test.go", imports("cart_test", "internal/text", "internal/db", "tests/kit", "contract")+"import _ \"strings\"\n")
+	write("tests/acceptance/cart/total_test.go", imports("cart_test", "internal/db", "internal/web"))
+	write("tests/acceptance/cart/shop.go", imports("cart", "internal/web"))
+	write("tests/acceptance/order/order_unix_test.go", "//go:build unix\n\n"+imports("order_test", "internal/order", "internal/text"))
+	write("tests/acceptance/order/gen_test.go", "//go:build ignore\n\n"+imports("main", "internal/db"))
+	write("tests/acceptance/order/_x_test.go", imports("order_test", "internal/db"))
+	write("tests/acceptance/order/.x_test.go", imports("order_test", "internal/db"))
+	write("tests/acceptance/order/testdata/x_test.go", imports("x", "internal/db"))
+	write("tests/acceptance/order/vendor/x/x_test.go", imports("x", "internal/db"))
+	write("tests/acceptance/order/.cache/x_test.go", imports("x", "internal/db"))
+	write("tests/acceptance/order/_old/x_test.go", imports("x", "internal/db"))
+	write("tests/acceptance/order/tool/go.mod", "module example.com/tool\n")
+	write("tests/acceptance/order/tool/x_test.go", imports("x", "internal/db"))
+	write("tests/e2e/e2e_test.go", imports("e2e", "internal/db"))
+	write("internal/db/db_test.go", imports("db", "internal/web"))
+
+	pkgs, err := testImports(root, module, "tests/acceptance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := []allowance{
+		{"internal/text", "the reason"},
+		{"internal/order", ""},
+		{"internal/mail", "the reason"},
+	}
+	got := checkAcceptance(pkgs, allowed)
+	want := []string{
+		"tests/acceptance/cart/cart_test.go imports internal/db: an acceptance test imports of internal/ only the packages allowed in tests/architecture/layers_test.go",
+		"tests/acceptance/cart/total_test.go imports internal/db: an acceptance test imports of internal/ only the packages allowed in tests/architecture/layers_test.go",
+		"tests/acceptance/cart/shop.go imports internal/web: an acceptance test imports of internal/ only the packages allowed in tests/architecture/layers_test.go",
+		"tests/acceptance/cart/total_test.go imports internal/web: an acceptance test imports of internal/ only the packages allowed in tests/architecture/layers_test.go",
+		"allowed import internal/order has no reason: write it in tests/architecture/layers_test.go",
+		"allowed import internal/mail lets no import through: remove it from tests/architecture/layers_test.go",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("check reports:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -226,15 +341,29 @@ type use struct {
 // Folders testdata and vendor, folders named with . or _ and folders with a
 // go.mod of their own are skipped with all they hold.
 func moduleImports(root, module string) (map[string]map[string][]use, error) {
+	return readImports(root, root, module, false)
+}
+
+// testImports returns, as moduleImports does, the packages under dir, a path
+// from root, with their imports, reading the test files as well: a package is
+// a folder with a Go file, test file or not.
+func testImports(root, module, dir string) (map[string]map[string][]use, error) {
+	return readImports(root, filepath.Join(root, filepath.FromSlash(dir)), module, true)
+}
+
+// readImports returns the packages under the folder top of the module under
+// root with their imports and their uses, both as paths from root, as
+// moduleImports describes; with tests, test files count as well.
+func readImports(root, top, module string, tests bool) (map[string]map[string][]use, error) {
 	fset := token.NewFileSet()
 	pkgs := map[string]map[string][]use{}
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(top, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		name := d.Name()
 		if d.IsDir() {
-			if p == root {
+			if p == top {
 				return nil
 			}
 			if name == "testdata" || name == "vendor" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
@@ -245,7 +374,7 @@ func moduleImports(root, module string) (map[string]map[string][]use, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+		if !strings.HasSuffix(name, ".go") || !tests && strings.HasSuffix(name, "_test.go") || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, p, nil, parser.ImportsOnly|parser.ParseComments)
@@ -409,6 +538,40 @@ func check(pkgs map[string]map[string][]use, layers []layer, helpers []string, e
 	for i, e := range exceptions {
 		if !used[i] {
 			out = append(out, fmt.Sprintf("exception %s imports %s lets no import through: remove it from %s", e.from, e.to, tableFile))
+		}
+	}
+	return out
+}
+
+// checkAcceptance returns what breaks the allowances in the packages of the
+// acceptance tests of pkgs with their imports: a use of an import of
+// internal/ no allowance lets through, with the file of the use; an
+// allowance with no reason; an allowance that lets no import through.
+func checkAcceptance(pkgs map[string]map[string][]use, allowed []allowance) []string {
+	used := make([]bool, len(allowed))
+	var out []string
+	for _, p := range slices.Sorted(maps.Keys(pkgs)) {
+		for _, imp := range slices.Sorted(maps.Keys(pkgs[p])) {
+			if !strings.HasPrefix(imp, "internal/") {
+				continue
+			}
+			if i := slices.IndexFunc(allowed, func(a allowance) bool { return a.pkg == imp }); i >= 0 {
+				used[i] = true
+				continue
+			}
+			for _, u := range pkgs[p][imp] {
+				out = append(out, fmt.Sprintf("%s imports %s: an acceptance test imports of internal/ only the packages allowed in %s", u.file, imp, tableFile))
+			}
+		}
+	}
+	for _, a := range allowed {
+		if collapse(a.reason) == "" {
+			out = append(out, fmt.Sprintf("allowed import %s has no reason: write it in %s", a.pkg, tableFile))
+		}
+	}
+	for i, a := range allowed {
+		if !used[i] {
+			out = append(out, fmt.Sprintf("allowed import %s lets no import through: remove it from %s", a.pkg, tableFile))
 		}
 	}
 	return out

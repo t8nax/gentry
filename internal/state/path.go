@@ -6,8 +6,9 @@ import (
 	"time"
 
 	// Exception to the direction of dependencies, listed in
-	// internal/layers/layers_test.go: the move to schema 6 reads the stage of
-	// each task under way from the snapshot of its flow (fillPath, stageOf).
+	// tests/architecture/layers_test.go: the move to schema 6 reads the stage
+	// of each task under way from the snapshot of its flow (fillPath,
+	// stageOf).
 	"github.com/t8nax/gentry/internal/flow"
 )
 

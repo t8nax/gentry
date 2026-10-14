@@ -9,8 +9,8 @@ import (
 
 // TestIntroStepsText checks the line of the steps of the current stage in the
 // introduction of the session: dropped steps do not count. The other lines
-// of the introduction are built from the state store; the tests of the hook
-// in clitest state the words of the line of no task, in its channel, the
+// of the introduction are built from the state store; the acceptance tests
+// of the hook state the words of the line of no task, in its channel, the
 // agent's.
 func TestIntroStepsText(t *testing.T) {
 	pass := func(steps ...state.Step) []state.Pass {

@@ -49,7 +49,7 @@ var table = []layer{
 
 // helpers are the test helpers with their subpackages: only tests import
 // them, so they have no layer and their imports are not checked.
-var helpers = []string{"internal/cli/clitest", "internal/gittest"}
+var helpers = []string{"tests/testkit", "internal/gittest"}
 
 // exceptions are the imports of a higher layer the code keeps.
 var exceptions = []exception{

@@ -184,7 +184,7 @@ func TestTaskJSON(t *testing.T) {
 func TestTaskTakeByAgent(t *testing.T) {
 	shop, fix := testkit.TaskShop(t)
 	input := `{"scenario":"feature","title":"Частичный возврат по карте","statement":"` + testkit.Statement + `","worktree":` + testkit.JSONString(fix) + `}`
-	text, failed := cli.CallTool("task_take", []byte(input))
+	text, failed := testkit.CallTool("task_take", input)
 	if failed || !strings.Contains(text, msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceAgent))+"\n") {
 		t.Fatalf("by the tool of the agent: failed %v, output:\n%s", failed, text)
 	}

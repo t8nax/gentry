@@ -652,7 +652,7 @@ func TestStageByTools(t *testing.T) {
 			cli.HintText(msg.HintStageShow),
 		), false},
 	} {
-		text, failed := cli.CallTool(c.tool, []byte(c.args))
+		text, failed := testkit.CallTool(c.tool, c.args)
 		if text != c.want || failed != c.failed {
 			t.Errorf("%s %s: failed %v:\n%s\nwant failed %v:\n%s", c.tool, c.args, failed, text, c.failed, c.want)
 		}

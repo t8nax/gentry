@@ -75,7 +75,7 @@ type allowance struct {
 // the direction of the layers: testkit is a test helper, which has no layer.
 var allowed = []allowance{
 	{"internal/msg", "the expected texts are built from the catalog of messages, so a wording is a literal in one test only"},
-	{"internal/cli", "the hints in the form of the channel (HintText, HintFor, CallTool) are built by the functions the output uses"},
+	{"internal/cli", "the hints in the form of the channel (HintText, HintFor) are built by the functions the output uses"},
 	{"internal/gittest", "the test helper makes the repositories and worktrees of the shop"},
 	{"internal/state", "a test makes a state the commands cannot make, such as a newer schema, and finds whether a command created the state store"},
 	{"internal/flow", "testkit gives the places of the flow of the shop as flow.Places, and the tests of flow apply and flow discard check the types of the events the flow writes"},

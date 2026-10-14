@@ -70,7 +70,9 @@ type allowance struct {
 
 // allowed are the packages of internal/ the acceptance tests may import;
 // contract and the test helpers of tests/testkit they import freely. The
-// names of the environment variables of Gentry come through testkit.
+// names of the environment variables of Gentry come through testkit. The
+// imports of tests/testkit itself are not checked against this list, nor by
+// the direction of the layers: testkit is a test helper, which has no layer.
 var allowed = []allowance{
 	{"internal/msg", "the expected texts are built from the catalog of messages, so a wording is a literal in one test only"},
 	{"internal/cli", "the hints in the form of the channel (HintText, HintFor, CallTool) are built by the functions the output uses"},

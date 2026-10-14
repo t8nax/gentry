@@ -16,11 +16,11 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
-// reviewerRuns is the change of the library of the example of the plan: the
-// reviewer runs the tests.
+// reviewerRuns is the change of the shared subagents of the example of the
+// plan: the reviewer runs the tests.
 func reviewerRuns(t *testing.T, p flow.Places) {
 	t.Helper()
-	clitest.WriteFiles(t, p.Library, map[string]string{
+	clitest.WriteFiles(t, p.Shared, map[string]string{
 		"reviewer.yaml": "purpose: ревью изменений задачи — поведение и текст\ncapabilities: [read, search, run]\n",
 		"reviewer.md":   "Проверить изменения задачи: поведение, тесты и тексты для оператора.\nЗапустить тесты проекта и приложить результат к замечаниям.\n",
 	})
@@ -41,11 +41,12 @@ func reportOf(t *testing.T, p flow.Places) string {
 // package cli state them.
 
 // diffHead is the head of the summary of flow diff of the shop: when the flow
-// and, with library, the library were applied, and the file of changes.
-func diffHead(applied string, library bool, report string) string {
+// and, with shared, the shared subagents were applied, and the file of
+// changes.
+func diffHead(applied string, shared bool, report string) string {
 	h := clitest.Lines(msg.Text(msg.FlowProject, "shop"), msg.Text(msg.FlowAppliedAt, applied))
-	if library {
-		h += msg.Text(msg.LibraryAppliedAt, "<время>") + "\n"
+	if shared {
+		h += msg.Text(msg.SharedAppliedAt, "<время>") + "\n"
 	}
 	return h + msg.Text(msg.DiffReportFile, report) + "\n\n"
 }
@@ -85,10 +86,10 @@ func TestFlowDiffReport(t *testing.T) {
 		msg.Text(msg.DiffAgents),
 		change("+", "auditor"),
 		"",
-		msg.Text(msg.DiffLibraryAgents),
+		msg.Text(msg.DiffSharedAgents),
 		change("~", msg.Text(msg.DiffItem, "reviewer", msg.Text(msg.DiffUsedBy, "shop"))),
 		"",
-	) + legend + clitest.Lines(cli.HintText(msg.HintDiffLibraryApply), cli.HintText(msg.HintFlowApply))
+	) + legend + clitest.Lines(cli.HintText(msg.HintFlowApply))
 	if clitest.Masked(stdout) != want {
 		t.Errorf("diff:\n%s\nwant:\n%s", stdout, want)
 	}
@@ -103,9 +104,9 @@ func TestFlowDiffReport(t *testing.T) {
 	condition := "ревью выявило существенные замечания<br/>"
 	want = msg.Text(msg.ReportTitle, "shop") + "\n\n" +
 		msg.Text(msg.FlowProject, "shop") + "  \n" + msg.Text(msg.FlowAppliedAt, "<время>") + "  \n" +
-		msg.Text(msg.LibraryAppliedAt, "<время>") + "  \n" + msg.Text(msg.ReportProblemsNone) + "  \n" +
+		msg.Text(msg.SharedAppliedAt, "<время>") + "  \n" + msg.Text(msg.ReportProblemsNone) + "  \n" +
 		msg.Text(msg.ReportCreated, "<время>") + "\n\n" +
-		cli.HintText(msg.HintDiffLibraryApply) + "  \n" + cli.HintText(msg.HintFlowApply) + "\n" +
+		cli.HintText(msg.HintFlowApply) + "\n" +
 		"\n" + msg.Text(msg.ReportSummary) + "\n\n" +
 		"| " + msg.Text(msg.ColObject) + " | " + msg.Text(msg.ColChange) + " |\n" +
 		"| --- | --- |\n" +
@@ -114,7 +115,7 @@ func TestFlowDiffReport(t *testing.T) {
 		"| " + stageObj("Ревью", "review") + " | " + modified + " |\n" +
 		"| " + stageObj("Безопасность", "security") + " | " + added + " |\n" +
 		"| " + msg.Text(msg.FlowObjAgent, "auditor") + " | " + added + " |\n" +
-		"| " + msg.Text(msg.FlowObjLibraryAgent, "reviewer") + " | " + modified + "; " + msg.Text(msg.DiffUsedBy, "shop") + " |\n" +
+		"| " + msg.Text(msg.FlowObjSharedAgent, "reviewer") + " | " + modified + "; " + msg.Text(msg.DiffUsedBy, "shop") + " |\n" +
 		"\n" + msg.Text(msg.ReportLegend) + "\n" +
 		"\n" + msg.Text(msg.ReportHeading, scenario("Баг", "bug")) + "\n\n" + "```mermaid" + `
 flowchart TD
@@ -182,8 +183,8 @@ flowchart TD
 		clitest.Lines(msg.Text(msg.FlowPurpose, "проверка безопасности изменений")+"  ", msg.Text(msg.FlowCapabilities, "read, search")+"  ",
 			msg.Text(msg.FlowModel, clitest.None)+"  ", msg.Text(msg.FlowStages, "security")) +
 		"\n" + msg.Text(msg.FlowInstruction) + "\n\n> Найти уязвимости в изменениях задачи.\n" +
-		"\n" + msg.Text(msg.ReportLibrary) + "\n" +
-		"\n" + msg.Text(msg.ReportLibraryAgent, "reviewer", modified) + "\n\n" +
+		"\n" + msg.Text(msg.ReportShared) + "\n" +
+		"\n" + msg.Text(msg.ReportSharedAgent, "reviewer", modified) + "\n\n" +
 		msg.Text(msg.ReportProjects, "shop") + "\n\n" +
 		"| " + msg.Text(msg.ColField) + " | " + msg.Text(msg.ColWas) + " | " + msg.Text(msg.ColNow) + " |\n" +
 		"| --- | --- | --- |\n" +
@@ -197,13 +198,14 @@ flowchart TD
 	}
 
 	// The file is not a part of the process.
-	if status := gittest.Run(t, filepath.Dir(p.Library), "status", "--porcelain", "--untracked-files=all"); strings.Contains(status, "changes.md") {
+	if status := gittest.Run(t, filepath.Dir(p.Shared), "status", "--porcelain", "--untracked-files=all"); strings.Contains(status, "changes.md") {
 		t.Errorf("git sees the file of changes:\n%s", status)
 	}
-	// The library goes first; its apply removes the file.
-	clitest.MustRun(t, "library", "apply")
+	// The flow and the shared subagents are applied at once; the apply
+	// removes the file.
+	clitest.MustRun(t, "flow", "apply")
 	if clitest.FileExists(report) {
-		t.Error("the file of changes after library apply")
+		t.Error("the file of changes after flow apply")
 	}
 }
 
@@ -300,7 +302,10 @@ func TestFlowDiffProblems(t *testing.T) {
 	}
 }
 
-func TestFlowDiffLibrary(t *testing.T) {
+// TestFlowDiffShared checks flow diff of a draft of the shared subagents
+// alone: the flow of the project is not changed, the shared subagent names
+// the projects it concerns.
+func TestFlowDiffShared(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	reviewerRuns(t, p)
 	report := filepath.Join(filepath.Dir(p.Dir), "changes.md")
@@ -308,16 +313,16 @@ func TestFlowDiffLibrary(t *testing.T) {
 	want := diffHead("<время>", true, report) + clitest.Lines(
 		msg.Text(msg.DiffFlowUnchanged),
 		"",
-		msg.Text(msg.DiffLibraryAgents),
+		msg.Text(msg.DiffSharedAgents),
 		change("~", msg.Text(msg.DiffItem, "reviewer", msg.Text(msg.DiffUsedBy, "shop"))),
 		"",
-	) + legend + clitest.Lines(cli.HintText(msg.HintDiffLibraryApply))
+	) + legend + clitest.Lines(cli.HintText(msg.HintFlowApply))
 	if clitest.Masked(stdout) != want {
 		t.Errorf("diff:\n%s\nwant:\n%s", stdout, want)
 	}
 
-	// A subagent of the project of the same name replaces the one of the
-	// library: the change of the library does not concern the project.
+	// A subagent of the project of the same name replaces the shared one:
+	// the change of the shared subagent does not concern the project.
 	clitest.WriteDraft(t, p, map[string]string{
 		"agents/reviewer.yaml": "purpose: ревью магазина\ncapabilities: [read]\n",
 		"agents/reviewer.md":   "Проверить изменения магазина.\n",
@@ -327,17 +332,21 @@ func TestFlowDiffLibrary(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.Report != report || out.Library == nil || out.Library.Applied == nil || len(out.Library.Changes) != 1 ||
-		out.Library.Changes[0].Id != "reviewer" || !reflect.DeepEqual(out.Library.Changes[0].Projects, []string{}) ||
+	if out.Report != report || out.Shared == nil || out.Shared.Applied == nil || len(out.Shared.Changes) != 1 ||
+		out.Shared.Changes[0].Id != "reviewer" || !reflect.DeepEqual(out.Shared.Changes[0].Projects, []string{}) ||
 		len(out.Changes) != 1 {
 		t.Errorf("diff: %s", stdout)
 	}
 	if _, stdout, _ := clitest.Run("flow", "diff"); !strings.Contains(stdout, "\n"+change("~", msg.Text(msg.DiffItem, "reviewer", msg.Text(msg.DiffUnused)))+"\n") {
 		t.Errorf("diff:\n%s", stdout)
 	}
-	// Discarding the library removes the file.
-	clitest.MustRun(t, "library", "discard")
+	// Discarding the draft removes the file, and the draft is no more.
+	clitest.MustRun(t, "flow", "discard")
 	if clitest.FileExists(report) {
-		t.Error("the file of changes after library discard")
+		t.Error("the file of changes after flow discard")
+	}
+	code, _, stderr := clitest.Run("flow", "diff")
+	if want := clitest.Lines(msg.Text(msg.ErrNoDrafts, "shop"), msg.Text(msg.FlowDir, p.Dir)); code != contract.ExitError || stderr != want {
+		t.Errorf("no draft: exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)
 	}
 }

@@ -78,7 +78,7 @@ func RecordDecision(st *state.Store, req Decision) (Recorded, error) {
 				return err
 			}
 			if len(passes) == 0 {
-				return errUnreadable
+				return ErrUnreadable
 			}
 			pass = passes[len(passes)-1]
 		}

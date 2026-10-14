@@ -2,6 +2,10 @@
 
 package contract
 
-// Data of the library.draft_discarded event: the library directory is back to the
-// active library. The event has no project; the data is an empty object.
+// Data of the library.draft_discarded event of earlier versions of Gentry: the
+// directory of the shared subagents, then called the library of subagents, is back
+// to its active content. The event has no project; the data is an empty object.
+// Gentry no longer writes it: the draft of the shared subagents is discarded with
+// the flow of a project, by flow.draft_discarded; the journal keeps the events
+// written before.
 type LibraryDraftDiscardedData map[string]interface{}

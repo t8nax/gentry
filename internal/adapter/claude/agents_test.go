@@ -19,8 +19,8 @@ func TestAgentFile(t *testing.T) {
 		t.Errorf("File =\n%s\nwant\n%s", got, want)
 	}
 	a.Capabilities = []string{"read", "task", "progress"}
-	if got := string(Agents{}.File(a)); !strings.Contains(got, "\ntools: Read, mcp__plugin_gentry_core__stage_show, mcp__plugin_gentry_core__task_show, mcp__plugin_gentry_core__note_list, "+
-		"mcp__plugin_gentry_core__step_add, mcp__plugin_gentry_core__step_done, mcp__plugin_gentry_core__step_drop, mcp__plugin_gentry_core__note_add, mcp__plugin_gentry_core__artifact_save\n") {
+	if got := string(Agents{}.File(a)); !strings.Contains(got, "\ntools: Read, mcp__plugin_gentry_core__task_stage_show, mcp__plugin_gentry_core__task_show, mcp__plugin_gentry_core__task_note_list, "+
+		"mcp__plugin_gentry_core__task_step_add, mcp__plugin_gentry_core__task_step_done, mcp__plugin_gentry_core__task_step_drop, mcp__plugin_gentry_core__task_note_add, mcp__plugin_gentry_core__task_artifact_save\n") {
 		t.Errorf("task and progress: %q", got)
 	}
 	a.Capabilities = []string{}

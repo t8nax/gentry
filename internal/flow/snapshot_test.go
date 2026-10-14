@@ -34,7 +34,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		t.Errorf("a snapshot differs from itself: %+v", Diff(res.Snapshot, snap))
 	}
 	// A snapshot without fields is empty, not nil.
-	if s, err := DecodeSnapshot([]byte(`{}`)); err != nil || s.Files == nil || s.Library == nil {
+	if s, err := DecodeSnapshot([]byte(`{}`)); err != nil || s.Files == nil || s.Shared == nil {
 		t.Errorf("empty snapshot: %+v, %v", s, err)
 	}
 }
@@ -48,7 +48,7 @@ func TestDiff(t *testing.T) {
 		// Line ends of Windows are no change.
 		"stages/branch.md": "Создать ветку задачи от main.\r\n",
 	}))
-	if err := os.WriteFile(filepath.Join(p.Library, "reviewer.md"), []byte("Новая инструкция.\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(p.Shared, "reviewer.md"), []byte("Новая инструкция.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(p.Dir, "stages", "plan-bug.yaml"), []byte("title: План бага\nexit: x\nexecutor: orchestrator\n"), 0o644); err != nil {
@@ -63,7 +63,7 @@ func TestDiff(t *testing.T) {
 		{Object: ObjectStage, ID: "security", Change: Added},
 		{Object: ObjectPart, ID: "plan-format", Change: Removed},
 		{Object: ObjectAgent, ID: "auditor", Change: Added},
-		{Object: ObjectAgent, ID: "reviewer", Library: true, Change: Modified},
+		{Object: ObjectAgent, ID: "reviewer", Shared: true, Change: Modified},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("diff:\n%+v\nwant\n%+v", got, want)

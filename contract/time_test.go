@@ -37,7 +37,7 @@ func marshalsInTimeFormat(t *testing.T, at time.Time, want string) {
 		paths []string
 	}{
 		{"Applied", Applied{Commit: "abc", Time: at}, []string{"time"}},
-		{"ProcessStatusOutput", ProcessStatusOutput{Synced: &at}, []string{"synced"}},
+		{"ProcessShowOutput", ProcessShowOutput{Synced: &at}, []string{"synced"}},
 		{"Task", Task{Taken: at, Flow: Applied{Time: at}, ActiveFlow: &Applied{Time: at}, Ended: ended}, []string{"taken", "flow.time", "active_flow.time", "ended.time"}},
 		{"TaskListItem", TaskListItem{Taken: at}, []string{"taken"}},
 		{"TaskPass", TaskPass{Entered: at, Closed: &at}, []string{"entered", "closed"}},

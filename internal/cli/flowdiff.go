@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,9 +10,10 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
-// runFlowDiff shows how the drafts of the flow of a project and of the
-// library differ from the active ones: a summary in the terminal, and the
-// file of changes with the schemas of the scenarios and the texts in full.
+// runFlowDiff shows how the draft of the flow of a project, its flow
+// directory and the shared subagents, differs from the active flow: a
+// summary in the terminal, and the file of changes with the schemas of the
+// scenarios and the texts in full.
 func runFlowDiff(args []string, env Env) int {
 	f := newFlags("flow diff")
 	proj := f.String("project")
@@ -33,17 +33,7 @@ func runFlowDiff(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	res, err := flow.DiffDraft(r, places)
-	var none *flow.NoDraftsError
-	switch {
-	case errors.As(err, &none):
-		return fail(env, failure{
-			exit:    contract.ExitError,
-			code:    contract.CodeFlowDraftNotFound,
-			message: msg.Text(msg.ErrNoDrafts, places.Project),
-			more:    msg.Text(msg.FlowDir, none.Dir) + "\n",
-			details: map[string]any{"project": places.Project, "dir": none.Dir},
-		})
-	case err != nil:
+	if err != nil {
 		return fail(env, flowFailure(err, places))
 	}
 	d := diffView{project: places.Project, res: res}
@@ -77,11 +67,11 @@ func flowDiffOutput(project string, res flow.DiffResult, report string, sync *co
 		}
 		out.Changes = append(out.Changes, cc)
 	}
-	if lib := res.Library; lib != nil {
-		out.Library = &contract.FlowDiffOutputLibrary{Applied: appliedJSON(lib.Applied), Changes: []contract.FlowDiffLibraryChange{}}
+	if lib := res.Shared; lib != nil {
+		out.Shared = &contract.FlowDiffOutputShared{Applied: appliedJSON(lib.Applied), Changes: []contract.FlowDiffSharedChange{}}
 		for _, c := range lib.Changes {
-			out.Library.Changes = append(out.Library.Changes, contract.FlowDiffLibraryChange{
-				Id: c.ID, Change: contract.FlowDiffOutputLibraryChangesElemChange(c.Change), Projects: c.Projects,
+			out.Shared.Changes = append(out.Shared.Changes, contract.FlowDiffSharedChange{
+				Id: c.ID, Change: contract.FlowDiffOutputSharedChangesElemChange(c.Change), Projects: c.Projects,
 			})
 		}
 	}
@@ -95,19 +85,19 @@ type diffView struct {
 }
 
 // diffExtra is what the summary of flow diff has apart from the contract:
-// whether the flow has a draft, the names of the stages changed, the lines of
-// the scenarios changed and the problems of the drafts.
+// whether the flow directory has changes, the names of the stages changed,
+// the lines of the scenarios changed and the problems of the draft.
 type diffExtra struct {
 	draft     bool
 	stages    map[string]string // the names of the stages changed, by identifier
 	scenarios []string
-	problems  []flow.Problem // of the flow draft and of the library draft
+	problems  []flow.Problem // of the flow with the shared subagents and of the shared subagents
 	hints     []hint
 }
 
 // extra returns what the summary of d has apart from the contract.
 func (d diffView) extra() diffExtra {
-	x := diffExtra{draft: d.res.Draft, stages: map[string]string{}, problems: d.problems(), hints: d.hints()}
+	x := diffExtra{draft: d.res.Draft, stages: map[string]string{}, problems: d.res.Problems, hints: d.hints()}
 	for _, c := range d.res.Changes {
 		if c.Object == flow.ObjectStage {
 			x.stages[c.ID] = d.stageName(c)
@@ -131,8 +121,8 @@ func diffText(p *page, out contract.FlowDiffOutput, x diffExtra) {
 	var b strings.Builder
 	fmt.Fprintln(&b, msg.Text(msg.FlowProject, out.Project))
 	writeFlowApplied(&b, out.Applied)
-	if out.Library != nil {
-		fmt.Fprintln(&b, msg.Text(msg.LibraryAppliedAt, appliedText(out.Library.Applied)))
+	if out.Shared != nil {
+		fmt.Fprintln(&b, msg.Text(msg.SharedAppliedAt, appliedText(out.Shared.Applied)))
 	}
 	fmt.Fprintln(&b, msg.Text(msg.DiffReportFile, out.Report))
 	blocks = append(blocks, b.String())
@@ -158,10 +148,10 @@ func diffText(p *page, out contract.FlowDiffOutput, x diffExtra) {
 			agents = append(agents, mark(c.Change)+" "+id)
 		}
 	}
-	var library []string
-	if out.Library != nil {
-		for _, c := range out.Library.Changes {
-			library = append(library, mark(c.Change)+" "+msg.Text(msg.DiffItem, c.Id, usedBy(c.Projects)))
+	var shared []string
+	if out.Shared != nil {
+		for _, c := range out.Shared.Changes {
+			shared = append(shared, mark(c.Change)+" "+msg.Text(msg.DiffItem, c.Id, usedBy(c.Projects)))
 		}
 	}
 	for _, sec := range []struct {
@@ -169,7 +159,7 @@ func diffText(p *page, out contract.FlowDiffOutput, x diffExtra) {
 		lines   []string
 	}{
 		{msg.DiffScenarios, x.scenarios}, {msg.DiffStages, stages}, {msg.DiffParts, parts},
-		{msg.DiffAgents, agents}, {msg.DiffLibraryAgents, library},
+		{msg.DiffAgents, agents}, {msg.DiffSharedAgents, shared},
 	} {
 		if len(sec.lines) == 0 {
 			continue
@@ -188,33 +178,16 @@ func diffText(p *page, out contract.FlowDiffOutput, x diffExtra) {
 	p.hints(x.hints...)
 }
 
-// hints say what to do next: apply the drafts without problems, look at the
-// flow draft with them.
+// hints say what to do next: apply a draft without problems, look at the
+// draft with them.
 func (d diffView) hints() []hint {
-	var out []hint
-	if lib := d.res.Library; lib != nil && len(lib.Problems) == 0 {
-		out = append(out, hintOf(msg.HintDiffLibraryApply))
+	if len(d.res.Problems) > 0 {
+		return []hint{hintOf(msg.HintFlowShowDraft)}
 	}
-	switch {
-	case !d.res.Draft:
-	case len(d.res.Problems) > 0:
-		out = append(out, hintOf(msg.HintFlowShowDraft))
-	default:
-		out = append(out, hintOf(msg.HintFlowApply))
-	}
-	return out
+	return []hint{hintOf(msg.HintFlowApply)}
 }
 
-// problems are the problems of the flow draft and of the library draft.
-func (d diffView) problems() []flow.Problem {
-	out := append([]flow.Problem{}, d.res.Problems...)
-	if d.res.Library != nil {
-		out = append(out, d.res.Library.Problems...)
-	}
-	return out
-}
-
-// usedBy names the projects a subagent of the library concerns.
+// usedBy names the projects a shared subagent concerns.
 func usedBy(projects []string) string {
 	if len(projects) == 0 {
 		return msg.Text(msg.DiffUnused)

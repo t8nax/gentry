@@ -16,7 +16,7 @@ func TestMCPSignalEndsChecks(t *testing.T) {
 	bin := buildGentry(t)
 	shop, files := checksShop(t, bin, "tree")
 	s := startServer(t, bin, shop)
-	s.send(t, "stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
+	s.send(t, "task_stage_exit", map[string]any{"kind": "result", "text": "Ветка"}, nil)
 	waitFile(t, filepath.Join(files, "spans"))
 	start := time.Now()
 	if err := s.cmd.Process.Signal(syscall.SIGTERM); err != nil {

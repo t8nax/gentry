@@ -10,11 +10,11 @@ import (
 	"github.com/t8nax/gentry/internal/task"
 )
 
-// noteFields are the fields of note add; the text is the argument.
+// noteFields are the fields of task note add; the text is the argument.
 var noteFields = textFields("text")
 
 func runNoteAdd(args []string, env Env) int {
-	const cmd = "note add"
+	const cmd = "task note add"
 	f := newFlags(cmd)
 	key := f.String("task")
 	input := f.String("input")
@@ -41,11 +41,11 @@ func runNoteAdd(args []string, env Env) int {
 	if err != nil {
 		return w.fail(env, wayFailure(cmd, err))
 	}
-	return emit(env, contract.NoteAddOutput{Task: t.Key(), Note: noteJSON(n)}, noteAddText)
+	return emit(env, contract.TaskNoteAddOutput{Task: t.Key(), Note: noteJSON(n)}, noteAddText)
 }
 
 // noteAddText prints the number of the note added.
-func noteAddText(p *page, out contract.NoteAddOutput) {
+func noteAddText(p *page, out contract.TaskNoteAddOutput) {
 	fmt.Fprintln(p, msg.Text(msg.NoteAdded, out.Note.Number))
 }
 
@@ -56,7 +56,7 @@ func noteJSON(n state.Note) contract.TaskNote {
 }
 
 func runNoteList(args []string, env Env) int {
-	f := newFlags("note list")
+	f := newFlags("task note list")
 	key := f.String("task")
 	if code, done := f.parse(args, env); done {
 		return code
@@ -70,7 +70,7 @@ func runNoteList(args []string, env Env) int {
 	if err != nil {
 		return w.fail(env, stateFailure(err))
 	}
-	out := contract.NoteListOutput{Task: w.task.Key(), Notes: []contract.TaskNote{}}
+	out := contract.TaskNoteListOutput{Task: w.task.Key(), Notes: []contract.TaskNote{}}
 	for _, n := range notes {
 		out.Notes = append(out.Notes, noteJSON(n))
 	}
@@ -83,12 +83,12 @@ func runNoteList(args []string, env Env) int {
 		}
 		n = namesOf(v)
 	}
-	return emit(env, out, func(p *page, out contract.NoteListOutput) { noteListText(p, out, n) })
+	return emit(env, out, func(p *page, out contract.TaskNoteListOutput) { noteListText(p, out, n) })
 }
 
 // noteListText prints the notes of the task, their stages named by n, the
 // names of its snapshot.
-func noteListText(p *page, out contract.NoteListOutput, n names) {
+func noteListText(p *page, out contract.TaskNoteListOutput, n names) {
 	if len(out.Notes) == 0 {
 		fmt.Fprintln(p, msg.Text(msg.NotesNone))
 		return

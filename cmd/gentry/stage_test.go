@@ -57,14 +57,14 @@ func TestCloseStageAtOnce(t *testing.T) {
 	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
-	tool(t, bin, shop, "step_add", map[string]any{"steps": []string{"Создать ветку"}})
-	tool(t, bin, shop, "step_done", map[string]any{"step": 1})
+	tool(t, bin, shop, "task_step_add", map[string]any{"steps": []string{"Создать ветку"}})
+	tool(t, bin, shop, "task_step_done", map[string]any{"step": 1})
 	args := make([]any, writers)
 	for i := range args {
 		args[i] = map[string]any{"kind": "result", "text": fmt.Sprintf("Ветка %d", i)}
 	}
 	closed := 0
-	for _, r := range toolsAtOnce(t, bin, shop, "stage_exit", args) {
+	for _, r := range toolsAtOnce(t, bin, shop, "task_stage_exit", args) {
 		switch {
 		case !r.failed:
 			closed++
@@ -98,9 +98,9 @@ func TestAddStepsAtOnce(t *testing.T) {
 	for i := range args {
 		args[i] = map[string]any{"steps": []string{fmt.Sprintf("Шаг %d", i)}}
 	}
-	for _, r := range toolsAtOnce(t, bin, shop, "step_add", args) {
+	for _, r := range toolsAtOnce(t, bin, shop, "task_step_add", args) {
 		if r.failed {
-			t.Errorf("step_add: %s", r.text)
+			t.Errorf("task_step_add: %s", r.text)
 		}
 	}
 	var shown struct {
@@ -142,7 +142,7 @@ func TestRecordDecisionsAtOnce(t *testing.T) {
 	shop := takenShop(t, bin)
 	commands := make([][]string, writers)
 	for i := range commands {
-		commands[i] = []string{"operator", "record", "--answer", fmt.Sprintf("Решение %d", i), "--json"}
+		commands[i] = []string{"task", "decision", "add", "--answer", fmt.Sprintf("Решение %d", i), "--json"}
 	}
 	for _, r := range atOnce(t, bin, shop, commands) {
 		if r.code != 0 {

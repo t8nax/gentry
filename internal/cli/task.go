@@ -20,8 +20,9 @@ import (
 )
 
 // takeFields are the fields of task take: each is a flag and a field of
-// --input of the same name, in the order of the command spec.
-var takeFields = []string{"task", "scenario", "title", "statement", "worktree"}
+// --input of the same name, in the order of the command spec. The cancelled
+// task to take anew is the argument.
+var takeFields = []string{"scenario", "title", "statement", "worktree"}
 
 // taskStates are the states of a task as --state names them, with their
 // words for the operator.
@@ -86,7 +87,10 @@ func runTaskTake(args []string, env Env) int {
 			fields[name] = v.Value
 		}
 	}
-	if bad := checkTakeFields(fields); bad != nil {
+	if len(f.args) > 0 {
+		fields["task"] = f.args[0]
+	}
+	if bad := checkTakeFields(fields, len(f.args) > 0); bad != nil {
 		return fail(env, *bad)
 	}
 
@@ -116,8 +120,8 @@ func runTaskTake(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	var again *state.Task
-	if key := fields["task"]; key != "" {
-		t, bad := cancelledTask(st, key, w)
+	if len(f.args) > 0 {
+		t, bad := cancelledTask(st, fields["task"], w)
 		if bad != nil {
 			return fail(env, *bad)
 		}
@@ -150,7 +154,7 @@ func runTaskTake(args []string, env Env) int {
 	if !ok {
 		return fail(env, objectNotFound(w.Project, 0, fields["scenario"], false))
 	}
-	library, _, err := r.Applied(process.Library)
+	shared, _, err := r.Applied(process.Shared)
 	if err != nil {
 		return fail(env, processFailure(err))
 	}
@@ -171,7 +175,7 @@ func runTaskTake(args []string, env Env) int {
 	t, err := task.Take(st, task.TakeRequest{
 		Project: w.Project, Worktree: w.Path, Scenario: sc,
 		Title: fields["title"], Statement: fields["statement"], Source: source, Again: again,
-		Snapshot: res.Snapshot, Flow: applied, Library: library,
+		Snapshot: res.Snapshot, Flow: applied, Shared: shared,
 	})
 	if err != nil {
 		return fail(env, taskFailure(err))
@@ -181,7 +185,7 @@ func runTaskTake(args []string, env Env) int {
 		return fail(env, stateFailure(err))
 	}
 	v := views[0]
-	// The task is taken: a layout that fails is told, and agents sync
+	// The task is taken: a layout that fails is told, and agents deploy
 	// repeats it.
 	worktrees, err := st.Worktrees()
 	if err != nil {
@@ -222,13 +226,15 @@ func taskTakeText(p *page, out contract.TaskTakeOutput, here bool) {
 }
 
 // checkTakeFields refuses a task without a scenario, a title or a statement,
-// and a title that is not one line of up to 80 characters. A task taken anew
-// keeps its own title and statement: they are refused with it.
-func checkTakeFields(fields map[string]string) *failure {
-	if fields["task"] != "" {
+// and a title that is not one line of up to 80 characters. A task taken anew,
+// named by the argument (again), keeps its own title and statement: they are
+// refused with it.
+func checkTakeFields(fields map[string]string, again bool) *failure {
+	if again {
 		for _, name := range []string{"title", "statement"} {
 			if fields[name] != "" {
-				f := conflictingFlags("task take", []string{"--task", "--" + name})
+				f := conflictingFlags("task take", []string{msg.Text(msg.ArgTask), "--" + name})
+				f.message = msg.Text(msg.ErrTaskKeyWithFlag, "--"+name)
 				return &f
 			}
 		}
@@ -307,7 +313,7 @@ func cancelledTask(st *state.Store, key string, w state.Worktree) (state.Task, *
 	var invalid *task.InvalidKeyError
 	switch {
 	case errors.As(err, &invalid):
-		return fail(flagValueInvalid("--task", invalid.Value, msg.Text(msg.ErrTaskKeyInvalid, invalid.Value), hintOf(msg.HintTaskKey)))
+		return fail(invalidArgument("task take", "task", invalid.Value, msg.Text(msg.ErrTaskKeyInvalid, invalid.Value), hintOf(msg.HintTaskKey)))
 	case err != nil:
 		return fail(lookupFailure(err))
 	}

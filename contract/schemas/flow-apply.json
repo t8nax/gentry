@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-apply.json",
   "title": "FlowApplyOutput",
-  "description": "Output of `gentry flow apply --json`: the draft became the active flow with a commit of the process repository.",
+  "description": "Output of `gentry flow apply --json`: the draft of the flow of the project, its flow directory and the shared subagents, became active with one commit of the process repository.",
   "type": "object",
   "properties": {
     "project": {
@@ -14,6 +14,11 @@
       "description": "The commit that applied the flow.",
       "$ref": "./applied.json"
     },
+    "projects": {
+      "description": "The other projects whose active flows name the shared subagents the commit changed, sorted; empty if it changed none or no other project names them.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
     "sent": {
       "description": "Whether the commit is sent to the remote repository; false without one or when it did not answer, and then it is sent by a later command.",
       "type": "boolean"
@@ -23,9 +28,9 @@
       "$ref": "./sync.json"
     },
     "agents": {
-      "description": "What the layout of subagents in the free worktrees of the project did; present only when there is something to tell.",
+      "description": "What the layout of subagents in the free worktrees of the project and of the other projects in projects did; present only when there is something to tell.",
       "$ref": "./agents-layout.json"
     }
   },
-  "required": ["project", "applied", "sent"]
+  "required": ["project", "applied", "projects", "sent"]
 }

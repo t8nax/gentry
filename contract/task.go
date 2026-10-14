@@ -41,10 +41,11 @@ func (j *EndedSource) UnmarshalJSON(value []byte) error {
 // A task of a project.
 type Task struct {
 	// The last change of the active flow: the later of the commits that applied the
-	// flow of the project and the library. Present only in `gentry task show` for a
-	// task in work or waiting for the operator, if the active flow changed after the
-	// task was taken: the flow a task taken now would get differs from the flow of
-	// the task; line ends alone and library subagents no stage names do not count.
+	// flow of the project and the shared subagents. Present only in `gentry task
+	// show` for a task in work or waiting for the operator, if the active flow
+	// changed after the task was taken: the flow a task taken now would get differs
+	// from the flow of the task; line ends alone and shared subagents no stage names
+	// do not count.
 	ActiveFlow *Applied `json:"active_flow,omitempty,omitzero"`
 
 	// Attempt of the task, from 1: a cancelled task taken anew is the next attempt
@@ -78,7 +79,7 @@ type Task struct {
 
 	// Current stage of the task; absent once the scenario is passed. A cancelled task
 	// stays at the stage it was cancelled at. Its exit, instruction and transitions
-	// are given by `gentry stage show`.
+	// are given by `gentry task stage show`.
 	Stage *TaskStage `json:"stage,omitempty,omitzero"`
 
 	// State of the task: active — in work, waiting — waits for the operator, closed —
@@ -219,7 +220,7 @@ func (j *TaskScenario) UnmarshalJSON(value []byte) error {
 }
 
 // Current stage of the task. Its exit, instruction and transitions are given by
-// `gentry stage show`.
+// `gentry task stage show`.
 type TaskStage struct {
 	// Identifier of the stage of the node.
 	Id string `json:"id"`

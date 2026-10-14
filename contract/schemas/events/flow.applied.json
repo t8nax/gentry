@@ -2,13 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/events/flow.applied.json",
   "title": "FlowAppliedData",
-  "description": "Data of the flow.applied event: the draft of the flow of the project in the event envelope became active on this machine.",
+  "description": "Data of the flow.applied event: the draft of the flow of the project in the event envelope, its flow directory and the shared subagents, became active on this machine. One application is one commit and one event, whichever projects it concerns.",
   "type": "object",
   "properties": {
     "commit": {
       "description": "Hash of the commit of the process repository that applied the flow.",
       "type": "string",
       "minLength": 1
+    },
+    "projects": {
+      "description": "The other projects whose active flows name the shared subagents the commit changed, sorted; empty if none. Gentry writes it in every event; flow.applied events of earlier versions, which applied the shared subagents apart, have none, and a reader takes it as empty.",
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "minLength": 1 }
     }
   },
   "required": ["commit"]

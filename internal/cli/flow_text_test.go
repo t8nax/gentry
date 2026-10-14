@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"maps"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,7 @@ func testdataFiles(t *testing.T, rel string, changes map[string]string) process.
 // readShopFlow reads the flow of the shop with changes of its files.
 func readShopFlow(t *testing.T, changes map[string]string) *flow.Result {
 	t.Helper()
-	res, err := flow.Read(testdataFiles(t, "shop/flow", changes), testdataFiles(t, "agents", nil), nil)
+	res, err := flow.Read(testdataFiles(t, "shop/flow", changes), testdataFiles(t, "agents", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,9 +97,9 @@ func TestFlowShowText(t *testing.T) {
 		[]string{"review", "Ревью", "reviewer", "замечания ревью записаны и разобраны"},
 	) + "\n"
 	agentsHeader := []string{msg.Text(msg.ColAgent), msg.Text(msg.ColSource), msg.Text(msg.ColStages)}
-	libraryWord, projectWord := msg.Text(msg.FlowSourceLibrary), msg.Text(msg.FlowSourceProject)
-	library := table(agentsHeader, []string{"reviewer", libraryWord, "review"})
-	withAuditor := table(agentsHeader, []string{"auditor", projectWord, "security"}, []string{"reviewer", libraryWord, "review"})
+	sharedWord, projectWord := msg.Text(msg.FlowSourceShared), msg.Text(msg.FlowSourceProject)
+	shared := table(agentsHeader, []string{"reviewer", sharedWord, "review"})
+	withAuditor := table(agentsHeader, []string{"auditor", projectWord, "security"}, []string{"reviewer", sharedWord, "review"})
 	head := lines(
 		"Проект: shop",
 		"Флоу применён: 2026-10-09 12:30",
@@ -147,15 +148,15 @@ func TestFlowShowText(t *testing.T) {
 		x          flowShowExtra
 		cli, agent string
 	}{
-		{"flow", shown(nil, true, nil), flowShowExtra{}, head + "\n" + tables + library + "\n" +
+		{"flow", shown(nil, true, nil), flowShowExtra{}, head + "\n" + tables + shared + "\n" +
 			lines(hintLineOf(msg.HintFlowStage, "gentry flow show --stage "+msg.Text(msg.ArgStage))),
-			head + "\n" + tables + library + "\n" + lines(hintLineOf(msg.HintFlowStage, "flow_show (stage)"))},
-		{"flow with a draft", shown(nil, true, &contract.FlowDraftInfo{}), flowShowExtra{}, head + "Черновик существует.\n\n" + tables + library + "\n" +
+			head + "\n" + tables + shared + "\n" + lines(hintLineOf(msg.HintFlowStage, "flow_show (stage)"))},
+		{"flow with a draft", shown(nil, true, &contract.FlowDraftInfo{}), flowShowExtra{}, head + "Черновик существует.\n\n" + tables + shared + "\n" +
 			lines(hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft")),
-			head + "Черновик существует.\n\n" + tables + library + "\n" + lines(hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)"))},
-		{"draft never applied", shown(nil, false, &contract.FlowDraftInfo{}), flowShowExtra{draft: true}, draftHead + "\n" + tables + library + "\n" +
+			head + "Черновик существует.\n\n" + tables + shared + "\n" + lines(hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)"))},
+		{"draft never applied", shown(nil, false, &contract.FlowDraftInfo{}), flowShowExtra{draft: true}, draftHead + "\n" + tables + shared + "\n" +
 			lines(hintLineOf(msg.HintFlowApply, "gentry flow apply")),
-			draftHead + "\n" + tables + library + "\n" + lines(hintLineOf(msg.HintFlowApply, "flow_apply"))},
+			draftHead + "\n" + tables + shared + "\n" + lines(hintLineOf(msg.HintFlowApply, "flow_apply"))},
 		{"draft with a subagent of the project", shown(security(t), true, &contract.FlowDraftInfo{}), flowShowExtra{draft: true},
 			securityText + lines(hintLineOf(msg.HintFlowApply, "gentry flow apply")),
 			securityText + lines(hintLineOf(msg.HintFlowApply, "flow_apply"))},
@@ -232,7 +233,7 @@ func TestFlowShowText(t *testing.T) {
 		), ""},
 		{"subagent", reviewer, reviewerX, lines(
 			"Субагент: reviewer",
-			"Источник: "+msg.Text(msg.FlowSourceLibrary),
+			"Источник: "+msg.Text(msg.FlowSourceShared),
 			"Назначение: ревью изменений задачи — поведение и текст",
 			"Возможности: read, search",
 			msg.Text(msg.FlowModel, noValue),
@@ -269,25 +270,32 @@ func TestFlowShowText(t *testing.T) {
 }
 
 // TestFlowShowTaskText states the block of the task that heads the flow of
-// a task in its worktree, and the hint to the active flow once it changed.
-// When the flow of the task was applied, task show states.
+// a task in task flow show, the hints to its objects and the hint to the
+// active flow once it changed; outside the worktree of the task the hints to
+// its objects name it. When the flow of the task was applied, task show
+// states.
 func TestFlowShowTaskText(t *testing.T) {
 	inUTC(t)
 	fl := readShopFlow(t, nil).Flow
-	shown := func(changed bool, object string) (contract.FlowShowOutput, flowShowExtra) {
+	shown := func(changed bool, object string, here bool) (contract.FlowShowOutput, flowShowExtra) {
 		out := contract.FlowShowOutput{Project: "shop", Task: &contract.FlowShowTask{Id: "SHOP-1", Flow: contract.Applied{Commit: "c0ffee", Time: shopTime}}}
 		if changed {
 			out.Task.ActiveFlow = &contract.Applied{Commit: "decade", Time: shopTime.Add(10 * time.Minute)}
 		}
+		x := flowShowExtra{show: "task flow show", hints: func(hs ...hint) []hint { return taskHints("SHOP-1", here, hs...) }}
+		if !here {
+			x.project = "shop"
+		}
 		if object == "" {
-			return flowJSON(out, fl), flowShowExtra{}
+			return flowJSON(out, fl), x
 		}
 		narrowed, uses, _ := flowObject(fl, "stage", object)
-		return flowJSON(out, narrowed), flowShowExtra{object: "stage", uses: uses}
+		x.object, x.uses = "stage", uses
+		return flowJSON(out, narrowed), x
 	}
 	applied := msg.Text(msg.TaskFlowApplied, "2026-10-09 12:30")
 	tables := render(cliChannel, func(p *page) {
-		out, x := shown(false, "")
+		out, x := shown(false, "", true)
 		flowShowText(p, out, x)
 	})
 	tables = tables[strings.Index(tables, "\n\n")+2 : strings.LastIndex(tables, "\n\n")+1]
@@ -302,30 +310,42 @@ func TestFlowShowTaskText(t *testing.T) {
 		msg.Text(msg.FlowInstruction),
 		"  Влить ветку задачи в main.",
 	)
-	stageHint := hintLineOf(msg.HintFlowStage, "gentry flow show --stage "+msg.Text(msg.ArgStage))
-	stageTool := hintLineOf(msg.HintFlowStage, "flow_show (stage)")
-	activeHint := hintLineOf(msg.HintFlowActive, "gentry flow show --active")
-	activeTool := hintLineOf(msg.HintFlowActive, "flow_show (active)")
+	stageHint := hintLineOf(msg.HintFlowStage, "gentry task flow show --stage "+msg.Text(msg.ArgStage))
+	stageTool := hintLineOf(msg.HintFlowStage, "task_flow_show (stage)")
+	activeHint := hintLineOf(msg.HintFlowActive, "gentry flow show")
+	activeTool := hintLineOf(msg.HintFlowActive, "flow_show")
 	tests := []struct {
 		name       string
 		changed    bool
 		object     string
+		here       bool
 		cli, agent string
 	}{
-		{"flow", false, "", lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageHint),
+		{"flow", false, "", true, lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageHint),
 			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "") + tables + "\n" + lines(stageTool)},
-		{"flow changed", true, "", lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
+		{"flow changed", true, "", true, lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
 			tables + "\n" + lines(stageHint, activeHint),
 			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
 				tables + "\n" + lines(stageTool, activeTool)},
-		{"stage", false, "merge", lines("Задача: SHOP-1", applied, "") + merge, ""},
-		{"stage changed", true, "merge", lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
+		{"flow changed, outside the worktree", true, "", false,
+			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
+				tables + "\n" + lines(hintLineOf(msg.HintFlowStage, "gentry task flow show --stage "+msg.Text(msg.ArgStage)+" --task SHOP-1"),
+				"Посмотреть действующий флоу: gentry flow show --project shop"),
+			lines(msg.Text(msg.FlowProject, "shop"), "Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") +
+				tables + "\n" + lines(hintLineOf(msg.HintFlowStage, "task_flow_show (stage, task: SHOP-1)"), hintLineOf(msg.HintFlowActive, "flow_show (project: shop)"))},
+		{"stage changed, outside the worktree", true, "merge", false,
+			lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
+				lines(hintLineOf(msg.HintFlowActive, "gentry flow show --project shop")),
+			lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
+				lines(hintLineOf(msg.HintFlowActive, "flow_show (project: shop)"))},
+		{"stage", false, "merge", true, lines("Задача: SHOP-1", applied, "") + merge, ""},
+		{"stage changed", true, "merge", true, lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
 			lines(activeHint),
 			lines("Задача: SHOP-1", applied, "Действующий флоу изменён: 2026-10-09 12:40", "") + merge + "\n" +
 				lines(activeTool)},
 	}
 	for _, tt := range tests {
-		out, x := shown(tt.changed, tt.object)
+		out, x := shown(tt.changed, tt.object, tt.here)
 		wantText(t, tt.name, func(p *page) { flowShowText(p, out, x) }, tt.cli, tt.agent)
 	}
 }
@@ -340,6 +360,21 @@ func TestFlowApplyText(t *testing.T) {
 		msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30"),
 		"",
 		msg.Text(msg.AgentsFreeSynced, "shop"),
+		msg.Text(msg.AgentsNextSession),
+	), "")
+	// Changes of the shared subagents name the other projects they concern;
+	// the layout is of the free worktrees of them all.
+	out.Projects = []string{"blog", "crm"}
+	wantText(t, "applied for other projects", func(p *page) { flowApplyText(p, out) }, lines(
+		msg.Text(msg.FlowApplied),
+		msg.Text(msg.FlowProject, "shop"),
+		msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30"),
+		"",
+		"Изменения общих субагентов касаются других проектов:",
+		"  blog",
+		"  crm",
+		"",
+		msg.Text(msg.AgentsFreeSyncedAll),
 		msg.Text(msg.AgentsNextSession),
 	), "")
 	wantText(t, "discarded", func(p *page) {
@@ -366,8 +401,22 @@ func TestFlowFailureText(t *testing.T) {
 			msg.Text(msg.FlowDir, shopFlowDir),
 		)},
 		{"no draft", flowFailure(&flow.NoDraftError{Project: "shop", Dir: shopFlowDir}, places), lines(
-			"У проекта shop нет черновика флоу.",
+			"Ни у флоу проекта shop, ни у общих субагентов нет черновика.",
 			msg.Text(msg.FlowDir, shopFlowDir),
+		)},
+		{"shared subagents break another flow", flowFailure(&flow.DraftInvalidError{Dir: shopFlowDir, Flows: []flow.FlowProblems{
+			{Project: "crm", Problems: []flow.Problem{{Code: contract.ProblemUnknownExecutor, File: "stages/review.yaml",
+				Message: msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer")}}},
+		}}, places), lines(
+			"Изменения общих субагентов вносят ошибки во флоу других проектов.",
+			msg.Text(msg.FlowDir, shopFlowDir),
+			"",
+			"Ошибки флоу проекта crm:",
+			"  "+msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer"),
+		)},
+		{"shared subagents unreadable", flowFailure(&flow.DraftIOError{Op: flow.OpRead, Path: "/work/process/agents/reviewer.md", Shared: true,
+			Err: errors.New("open /work/process/agents/reviewer.md: access denied")}, places), lines(
+			"Не удалось прочитать папку общих субагентов: open /work/process/agents/reviewer.md: access denied",
 		)},
 		{"draft with problems", flowFailure(&flow.DraftInvalidError{Dir: shopFlowDir, Problems: problems}, places), lines(
 			"В черновике флоу проекта shop есть ошибки.",
@@ -397,6 +446,20 @@ func TestFlowFailureText(t *testing.T) {
 		"",
 		hintLineOf(msg.HintFlowObjects, "flow_show"),
 	))
+	wantFail(t, "no object of the flow of a task", taskObjectNotFound("shop", "SHOP-1", 1, "revew"), lines(
+		"Во флоу задачи SHOP-1 нет этапа «revew».",
+		"",
+		hintLineOf(msg.HintFlowObjects, "gentry task flow show"),
+	), lines(
+		"Во флоу задачи SHOP-1 нет этапа «revew».",
+		"",
+		hintLineOf(msg.HintFlowObjects, "task_flow_show"),
+	))
+	if f := taskObjectNotFound("shop", "SHOP-1", 2, "auditor"); f.code != contract.CodeFlowObjectNotFound ||
+		f.message != msg.Text(msg.ErrTaskFlowObjectNotFound, "SHOP-1", msg.Text(msg.FlowKindAgent), "auditor") ||
+		f.details["project"] != "shop" || f.details["kind"] != "agent" || f.details["id"] != "auditor" || f.details["draft"] != false {
+		t.Errorf("no subagent of the flow of a task: %+v", f)
+	}
 	wantFail(t, "no object of the draft", objectNotFound("shop", 2, "auditor", true), lines(
 		"В черновике флоу проекта shop нет субагента «auditor».",
 		"",

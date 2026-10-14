@@ -6,10 +6,13 @@ import "encoding/json"
 import "fmt"
 import "unicode/utf8"
 
-// Data of the library.applied event: the draft of the library of subagents became
-// active on this machine. The event has no project.
+// Data of the library.applied event of earlier versions of Gentry, which applied
+// the shared subagents, then called the library of subagents, by a command of
+// their own: their draft became active on this machine. The event has no project.
+// Gentry no longer writes it: the shared subagents are applied with the flow of a
+// project, by flow.applied; the journal keeps the events written before.
 type LibraryAppliedData struct {
-	// Hash of the commit of the process repository that applied the library.
+	// Hash of the commit of the process repository that applied the shared subagents.
 	Commit string `json:"commit"`
 }
 

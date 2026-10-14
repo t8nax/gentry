@@ -7,10 +7,12 @@ import "fmt"
 import "reflect"
 import "unicode/utf8"
 
-// A kind of the process of the operator: the flow of a project or the library of
+// A kind of the process of the operator: the flow of a project or the shared
 // subagents.
 type ProcessItem struct {
-	// flow for the flow of a project, library for the library of subagents.
+	// flow for the flow of a project, shared for the shared subagents. library is the
+	// shared subagents in the process.synced events of earlier versions of Gentry,
+	// which called them the library of subagents; Gentry no longer writes it.
 	Kind ProcessItemKind `json:"kind"`
 
 	// Identifier of the project; only for a flow.
@@ -21,9 +23,11 @@ type ProcessItemKind string
 
 const ProcessItemKindFlow ProcessItemKind = "flow"
 const ProcessItemKindLibrary ProcessItemKind = "library"
+const ProcessItemKindShared ProcessItemKind = "shared"
 
 var enumValues_ProcessItemKind = []interface{}{
 	"flow",
+	"shared",
 	"library",
 }
 

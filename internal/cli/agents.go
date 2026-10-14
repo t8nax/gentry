@@ -252,9 +252,9 @@ func layoutAdded(st *state.Store, r *process.Repo, project string, paths []strin
 }
 
 // syncProjects returns the projects whose free worktrees a synchronization
-// changed the active flow or library of: those of the flows received, in
-// conflict or restored, and those whose flow uses the library if the library
-// is.
+// changed the active flow or shared subagents of: those of the flows
+// received, in conflict or restored, and those whose flow names shared
+// subagents if the shared subagents are.
 func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	if s == nil {
 		return nil
@@ -264,8 +264,8 @@ func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	kinds = append(kinds, restoredKinds(s.Restored)...)
 	out := map[string]bool{}
 	for _, k := range kinds {
-		if k.IsLibrary() {
-			maps.Copy(out, libraryProjects(r))
+		if k.IsShared() {
+			maps.Copy(out, sharedProjects(r))
 			continue
 		}
 		out[k.Project] = true
@@ -273,16 +273,16 @@ func syncProjects(r *process.Repo, s *process.Sync) map[string]bool {
 	return out
 }
 
-// libraryProjects returns the projects whose active flow has subagents of the
-// library.
-func libraryProjects(r *process.Repo) map[string]bool {
+// sharedProjects returns the projects whose active flow has shared
+// subagents.
+func sharedProjects(r *process.Repo) map[string]bool {
 	out := map[string]bool{}
 	kinds, err := r.Kinds()
 	if err != nil {
 		return out
 	}
 	for _, k := range kinds {
-		if k.IsLibrary() {
+		if k.IsShared() {
 			continue
 		}
 		list, ok, err := activeAgents(r, k.Project)
@@ -290,7 +290,7 @@ func libraryProjects(r *process.Repo) map[string]bool {
 			continue
 		}
 		for _, a := range list {
-			if a.Library {
+			if a.Shared {
 				out[k.Project] = true
 			}
 		}
@@ -330,7 +330,7 @@ func writeLayoutTrouble(p *page, l *contract.AgentsLayout) {
 	}
 	if l.Error != nil {
 		fmt.Fprintf(p, "\n%s\n%s\n", msg.Text(msg.AgentsSyncFailed), msg.Text(msg.AgentsSyncFailedReason, *l.Error))
-		p.hints(hintOf(msg.HintAgentsSyncFailed))
+		p.hints(hintOf(msg.HintAgentsDeployFailed))
 	}
 }
 
@@ -446,12 +446,12 @@ func nonNil(s []string) []string {
 	return s
 }
 
-// runAgentsSync lays out the subagents in every worktree of the pool of a
+// runAgentsDeploy lays out the subagents in every worktree of the pool of a
 // project: a worktree with a task by the snapshot of its flow, a free one by
 // the active flow. A conflict in any worktree refuses the command, and
 // nothing is written.
-func runAgentsSync(args []string, env Env) int {
-	f := newFlags("agents sync")
+func runAgentsDeploy(args []string, env Env) int {
+	f := newFlags("agents deploy")
 	proj := f.String("project")
 	if code, done := f.parse(args, env); done {
 		return code
@@ -515,7 +515,7 @@ func runAgentsSync(args []string, env Env) int {
 	for _, c := range res.Worktrees {
 		changes[c.Worktree] = c
 	}
-	out := contract.AgentsSyncOutput{Project: id, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}}
+	out := contract.AgentsDeployOutput{Project: id, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}}
 	for _, w := range worktrees {
 		c, ok := changes[w.Path]
 		if !ok {
@@ -523,16 +523,16 @@ func runAgentsSync(args []string, env Env) int {
 		}
 		out.Worktrees = append(out.Worktrees, changeJSON(c, p))
 	}
-	return emit(env, out, func(p *page, out contract.AgentsSyncOutput) { agentsSyncText(p, out, laid) })
+	return emit(env, out, func(p *page, out contract.AgentsDeployOutput) { agentsDeployText(p, out, laid) })
 }
 
-// agentsSyncText prints the layout of the pool of a project as a table of
+// agentsDeployText prints the layout of the pool of a project as a table of
 // its worktrees. laid holds the worktrees whose subagents are known: the
 // subagents of the others are not laid out, for a flow with problems or a
 // snapshot that cannot be read.
-func agentsSyncText(p *page, out contract.AgentsSyncOutput, laid map[string]bool) {
+func agentsDeployText(p *page, out contract.AgentsDeployOutput, laid map[string]bool) {
 	if out.Changed {
-		fmt.Fprintln(p, msg.Text(msg.AgentsSynced, out.Project))
+		fmt.Fprintln(p, msg.Text(msg.AgentsDeployed, out.Project))
 		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
 	} else {
 		fmt.Fprintln(p, msg.Text(msg.AgentsInPlace, out.Project))

@@ -186,6 +186,19 @@ func TestErrorsJSON(t *testing.T) {
 		{[]string{"version", "--foo", "--json"}, contract.CodeUnknownFlag, map[string]any{"command": "version", "flag": "--foo"}},
 		{[]string{"version", "extra", "--json"}, contract.CodeUnexpectedArgs, map[string]any{"command": "version"}},
 		{[]string{"version", "--json", "--json=1"}, contract.CodeFlagValue, map[string]any{"flag": "--json"}},
+		// The scheme gentry <object> [<part>] <verb>: the groups of the parts
+		// of a task are no more, a part without an action and a command only
+		// of the agent are refused at the level they are at.
+		{[]string{"stage", "show", "--json"}, contract.CodeUnknownCommand, map[string]any{"command": "stage"}},
+		{[]string{"operator", "record", "--json"}, contract.CodeUnknownCommand, map[string]any{"command": "operator"}},
+		{[]string{"task", "note", "--json"}, contract.CodeMissingArgument, map[string]any{"command": "task note", "argument": "action"}},
+		{[]string{"task", "step", "add", "Шаг", "--json"}, contract.CodeInvalidArgument, map[string]any{"command": "task", "argument": "action", "value": "step"}},
+		{[]string{"task", "stage", "exit", "--json"}, contract.CodeInvalidArgument, map[string]any{"command": "task stage", "argument": "action", "value": "exit"}},
+		{[]string{"agents", "sync", "--json"}, contract.CodeInvalidArgument, map[string]any{"command": "agents", "argument": "action", "value": "sync"}},
+		{[]string{"process", "status", "--json"}, contract.CodeInvalidArgument, map[string]any{"command": "process", "argument": "action", "value": "status"}},
+		{[]string{"flow", "show", "--active", "--json"}, contract.CodeUnknownFlag, map[string]any{"command": "flow show", "flag": "--active"}},
+		{[]string{"task", "take", "--task", "SHOP-1", "--json"}, contract.CodeUnknownFlag, map[string]any{"command": "task take", "flag": "--task"}},
+		{[]string{"task", "attempt", "show", "--json"}, contract.CodeMissingArgument, map[string]any{"command": "task attempt show", "argument": "attempt"}},
 	}
 	for _, tt := range tests {
 		exit, stdout, stderr := run(tt.args...)

@@ -161,8 +161,8 @@ func TestDescribeProjectAdd(t *testing.T) {
 	}
 }
 
-func TestDescribeOperatorRecordOptions(t *testing.T) {
-	c, _ := lookup("operator record")
+func TestDescribeDecisionAddOptions(t *testing.T) {
+	c, _ := lookup("task decision add")
 	got := describe(c)
 	fields := msg.Text(msg.FlagInputFields, "question, options, answer, allow_return")
 	first, rest, _ := strings.Cut(fields, "\n")
@@ -259,6 +259,25 @@ func TestHelpErrors(t *testing.T) {
 
 }
 
+// TestCommandWords checks that a command has three words at most, its group,
+// its part and its action, and that the name of an action begins with the
+// name of its group.
+func TestCommandWords(t *testing.T) {
+	var check func(prefix string, cs []command)
+	check = func(prefix string, cs []command) {
+		for _, c := range cs {
+			if prefix != "" && !strings.HasPrefix(c.name, prefix+" ") {
+				t.Errorf("%q is not an action of %q", c.name, prefix)
+			}
+			if n := len(strings.Fields(c.name)); n > 3 {
+				t.Errorf("%q has %d words", c.name, n)
+			}
+			check(c.name, c.actions)
+		}
+	}
+	check("", commands())
+}
+
 // TestAgentOnly checks that the commands only the agent runs are neither in
 // the help nor on the command line, and run for the agent.
 func TestAgentOnly(t *testing.T) {
@@ -268,7 +287,7 @@ func TestAgentOnly(t *testing.T) {
 			names = append(names, c.name)
 		}
 	}
-	want := []string{"task close", "stage exit", "stage skip", "step add", "step done", "step drop", "artifact save"}
+	want := []string{"task close", "task stage exit", "task stage skip", "task step add", "task step done", "task step drop", "task artifact save"}
 	if !slices.Equal(names, want) {
 		t.Errorf("commands only of the agent %v, want %v", names, want)
 	}
@@ -278,17 +297,20 @@ func TestAgentOnly(t *testing.T) {
 	// at it.
 	unknownCommand, _, _ := strings.Cut(msg.Text(msg.ErrUnknownCommand, "\x00"), "\x00")
 	unknownAction, _, _ := strings.Cut(msg.Text(msg.ErrActionUnknown, "\x00", "\x00"), "\x00")
-	for _, args := range [][]string{{"step", "add", "Шаг"}, {"step", "--help"}, {"help", "step"}, {"artifact", "save", "plan"}, {"stage", "exit"}, {"task", "close"}, {"help", "stage", "skip"}} {
+	for _, args := range [][]string{{"task", "step", "add", "Шаг"}, {"task", "step", "--help"}, {"help", "task", "step"}, {"task", "artifact", "save", "plan"}, {"task", "stage", "exit"}, {"task", "close"}, {"help", "task", "stage", "skip"}} {
 		code, _, stderr := run(args...)
 		if code != contract.ExitUsage || !(strings.HasPrefix(stderr, unknownCommand) || strings.HasPrefix(stderr, unknownAction)) {
 			t.Errorf("%v from the command line: exit code %d, stderr %q", args, code, stderr)
 		}
 	}
-	if _, stdout, _ := run("stage", "--help"); strings.Contains(stdout, "exit") || strings.Contains(stdout, "skip") {
-		t.Errorf("stage --help names commands of the agent:\n%s", stdout)
+	if code, stdout, _ := run("task", "stage", "--help"); code != contract.ExitOK || strings.Contains(stdout, "exit") || strings.Contains(stdout, "skip") {
+		t.Errorf("task stage --help names commands of the agent:\n%s", stdout)
+	}
+	if _, stdout, _ := run("task", "--help"); strings.Contains(stdout, "step") || strings.Contains(stdout, "artifact") || strings.Contains(stdout, "close") {
+		t.Errorf("task --help names commands of the agent:\n%s", stdout)
 	}
 	var out bytes.Buffer
-	if code := RunAgent([]string{"step", "add", "--help"}, Env{Stdout: &out, Stderr: &out}); code != contract.ExitOK {
-		t.Errorf("step add --help for the agent: exit code %d, %s", code, out.String())
+	if code := RunAgent([]string{"task", "step", "add", "--help"}, Env{Stdout: &out, Stderr: &out}); code != contract.ExitOK {
+		t.Errorf("task step add --help for the agent: exit code %d, %s", code, out.String())
 	}
 }

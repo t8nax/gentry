@@ -8,7 +8,7 @@ import "time"
 import "unicode/utf8"
 
 // The commit of the process repository that made the active variant of a kind of
-// the process: the flow of a project or the library of subagents.
+// the process: the flow of a project or the shared subagents.
 type Applied struct {
 	// Hash of the commit.
 	Commit string `json:"commit"`

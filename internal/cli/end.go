@@ -125,33 +125,36 @@ func notFinished(v task.View) failure {
 	}
 }
 
-func runTaskAttempts(args []string, env Env) int {
-	const cmd = "task attempts"
-	f := newFlags(cmd)
+func runAttemptList(args []string, env Env) int {
+	f := newFlags("task attempt list")
+	key := f.String("task")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
-	// One argument of digits alone is an attempt of the task of the current
-	// worktree: an identifier of a task has the prefix.
-	keyArgs, number := f.args, ""
-	switch {
-	case len(f.args) == 2:
-		keyArgs, number = f.args[:1], f.args[1]
-	case len(f.args) == 1 && isDigits(f.args[0]):
-		keyArgs, number = nil, f.args[0]
-	}
-	w, bad := openArgTask(cmd, keyArgs, true)
+	w, attempts, bad := openAttempts(key)
 	if bad != nil {
 		return fail(env, *bad)
 	}
 	defer w.close()
-	attempts, err := w.st.TaskAttempts(w.task.Prefix, w.task.Number)
-	if err != nil {
-		return fail(env, stateFailure(err))
+	return listAttempts(env, w, attempts)
+}
+
+func runAttemptShow(args []string, env Env) int {
+	const cmd = "task attempt show"
+	f := newFlags(cmd)
+	key := f.String("task")
+	if code, done := f.parse(args, env); done {
+		return code
 	}
-	if number == "" {
-		return listAttempts(env, w, attempts)
+	if len(f.args) == 0 {
+		return fail(env, missingArgument(cmd, "attempt", msg.Text(msg.ErrAttemptMissing), helpHint(msg.HintCommandHelp, cmd)))
 	}
+	number := f.args[0]
+	w, attempts, bad := openAttempts(key)
+	if bad != nil {
+		return fail(env, *bad)
+	}
+	defer w.close()
 	n, err := strconv.Atoi(number)
 	if err != nil || n < 1 || n > len(attempts) {
 		f := failure{
@@ -173,17 +176,21 @@ func runTaskAttempts(args []string, env Env) int {
 	return showAttempt(env, w.st, attempts[n-1])
 }
 
-// isDigits reports whether s is a number of decimal digits.
-func isDigits(s string) bool {
-	if s == "" {
-		return false
+// openAttempts finds the task named by key, or the task of the current
+// worktree, and reads its attempts, from the first. The caller closes the
+// task.
+func openAttempts(key *stringFlag) (wayTask, []state.Task, *failure) {
+	w, bad := openWayTask(key, true)
+	if bad != nil {
+		return wayTask{}, nil, bad
 	}
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
-		}
+	attempts, err := w.st.TaskAttempts(w.task.Prefix, w.task.Number)
+	if err != nil {
+		w.close()
+		f := stateFailure(err)
+		return wayTask{}, nil, &f
 	}
-	return true
+	return w, attempts, nil
 }
 
 // listAttempts prints the attempts of the task of w as a table.
@@ -192,20 +199,20 @@ func listAttempts(env Env, w wayTask, attempts []state.Task) int {
 	if err != nil {
 		return fail(env, stateFailure(err))
 	}
-	out := contract.TaskAttemptsOutput{Task: w.task.Key(), Attempts: []contract.TaskAttempt{}}
+	out := contract.TaskAttemptListOutput{Task: w.task.Key(), Attempts: []contract.TaskAttempt{}}
 	for _, v := range views {
 		out.Attempts = append(out.Attempts, contract.TaskAttempt{
-			Attempt: v.Attempt, State: contract.TaskAttemptsOutputAttemptsElemState(v.State),
+			Attempt: v.Attempt, State: contract.TaskAttemptListOutputAttemptsElemState(v.State),
 			Scenario: contract.TaskScenario{Id: v.Scenario, Title: v.ScenarioTitle}, Taken: v.Taken, Ended: endedJSON(v.Task),
 		})
 	}
 	hints := w.hints(hintOf(msg.HintAttempt))
-	return emit(env, out, func(p *page, out contract.TaskAttemptsOutput) { attemptsText(p, out, hints) })
+	return emit(env, out, func(p *page, out contract.TaskAttemptListOutput) { attemptsText(p, out, hints) })
 }
 
 // attemptsText prints the attempts of a task as a table with the hint to one
 // attempt; hints are the hints for the task.
-func attemptsText(p *page, out contract.TaskAttemptsOutput, hints []hint) {
+func attemptsText(p *page, out contract.TaskAttemptListOutput, hints []hint) {
 	rows := [][]string{{msg.Text(msg.ColAttempt), msg.Text(msg.ColState), msg.Text(msg.ColScenario),
 		msg.Text(msg.ColTaken), msg.Text(msg.ColEnded), msg.Text(msg.ColCancelReason)}}
 	for _, a := range out.Attempts {

@@ -131,7 +131,7 @@ func TestMCPServer(t *testing.T) {
 	for _, tool := range tools {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	for _, want := range []string{"task_take", "stage_show", "step_add", "stage_exit", "note_add", "operator_record", "flow_apply", "setup"} {
+	for _, want := range []string{"task_take", "task_stage_show", "task_step_add", "task_stage_exit", "task_note_add", "task_decision_add", "flow_apply", "setup"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("no tool %s: %v", want, names)
 		}
@@ -140,17 +140,17 @@ func TestMCPServer(t *testing.T) {
 		!strings.Contains(text, msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceAgent))) {
 		t.Fatalf("task_take: failed %v:\n%s", failed, text)
 	}
-	if text, failed := s.call(t, "stage_exit", map[string]any{"kind": "result", "text": "Готово"}); !failed || !strings.Contains(text, "step_add (steps)") {
-		t.Errorf("stage_exit without steps: failed %v:\n%s", failed, text)
+	if text, failed := s.call(t, "task_stage_exit", map[string]any{"kind": "result", "text": "Готово"}); !failed || !strings.Contains(text, "task_step_add (steps)") {
+		t.Errorf("task_stage_exit without steps: failed %v:\n%s", failed, text)
 	}
 	note := "Промокод \"SALE-10\" — с кавычками,\nпереносом и $0 `корзиной`"
-	if _, failed := s.call(t, "note_add", map[string]any{"text": note}); failed {
-		t.Fatal("note_add failed")
+	if _, failed := s.call(t, "task_note_add", map[string]any{"text": note}); failed {
+		t.Fatal("task_note_add failed")
 	}
 	var notes struct {
 		Notes []struct{ Text, Source string } `json:"notes"`
 	}
-	json.Unmarshal([]byte(gentry(t, bin, shop, "note", "list", "--json")), &notes)
+	json.Unmarshal([]byte(gentry(t, bin, shop, "task", "note", "list", "--json")), &notes)
 	if len(notes.Notes) != 1 || notes.Notes[0].Text != note || notes.Notes[0].Source != "agent" {
 		t.Errorf("notes: %+v", notes.Notes)
 	}
@@ -179,7 +179,7 @@ func TestMCPServersAtOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := range calls {
-				if text, failed := s.call(t, "note_add", map[string]any{"text": fmt.Sprintf("s%d-%d", i, j)}); failed {
+				if text, failed := s.call(t, "task_note_add", map[string]any{"text": fmt.Sprintf("s%d-%d", i, j)}); failed {
 					failures <- text
 				}
 			}
@@ -189,7 +189,7 @@ func TestMCPServersAtOnce(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for j := range calls {
-			cmd := exec.Command(bin, "note", "add", fmt.Sprintf("cli-%d", j))
+			cmd := exec.Command(bin, "task", "note", "add", fmt.Sprintf("cli-%d", j))
 			cmd.Dir = worktrees[0]
 			if out, err := cmd.CombinedOutput(); err != nil {
 				failures <- string(out)
@@ -208,7 +208,7 @@ func TestMCPServersAtOnce(t *testing.T) {
 				Source string `json:"source"`
 			} `json:"notes"`
 		}
-		json.Unmarshal([]byte(gentry(t, bin, worktrees[i], "note", "list", "--json")), &notes)
+		json.Unmarshal([]byte(gentry(t, bin, worktrees[i], "task", "note", "list", "--json")), &notes)
 		numbers := map[int]bool{}
 		agent := 0
 		for _, n := range notes.Notes {

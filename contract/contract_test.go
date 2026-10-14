@@ -85,3 +85,38 @@ func TestEventRoundTrip(t *testing.T) {
 // schemaURL is the $id of the embedded schema name: schemas refer to each
 // other by it.
 func schemaURL(name string) string { return "https://github.com/t8nax/gentry/contract/" + name }
+
+// TestEarlierEvents checks that the events earlier versions of Gentry wrote
+// to the journal are read: flow.applied without projects, process.synced
+// with the kind library, library.applied and library.draft_discarded.
+func TestEarlierEvents(t *testing.T) {
+	var applied FlowAppliedData
+	if err := json.Unmarshal([]byte(`{"commit":"c0ffee"}`), &applied); err != nil || applied.Commit != "c0ffee" ||
+		applied.Projects == nil || len(applied.Projects) != 0 {
+		t.Errorf("flow.applied without projects: %+v, %v", applied, err)
+	}
+	var synced ProcessSyncedData
+	if err := json.Unmarshal([]byte(`{"received":[{"kind":"library"}],"sent":[],"conflicts":[],"restored":[]}`), &synced); err != nil ||
+		len(synced.Received) != 1 || synced.Received[0].Kind != ProcessItemKindLibrary {
+		t.Errorf("process.synced with the kind library: %+v, %v", synced, err)
+	}
+	var library LibraryAppliedData
+	if err := json.Unmarshal([]byte(`{"commit":"c0ffee"}`), &library); err != nil || library.Commit != "c0ffee" {
+		t.Errorf("library.applied: %+v, %v", library, err)
+	}
+	var discarded LibraryDraftDiscardedData
+	if err := json.Unmarshal([]byte(`{}`), &discarded); err != nil {
+		t.Errorf("library.draft_discarded: %v", err)
+	}
+	// This version writes the projects of every flow.applied event.
+	for _, d := range []FlowAppliedData{{Commit: "c0ffee"}, {Commit: "c0ffee", Projects: []string{"crm"}}} {
+		b, err := json.Marshal(d)
+		want := `{"commit":"c0ffee","projects":[]}`
+		if len(d.Projects) > 0 {
+			want = `{"commit":"c0ffee","projects":["crm"]}`
+		}
+		if err != nil || string(b) != want {
+			t.Errorf("flow.applied written: %s, %v; want %s", b, err, want)
+		}
+	}
+}

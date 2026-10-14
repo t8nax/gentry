@@ -60,7 +60,7 @@ func TestGuideExamples(t *testing.T) {
 		}
 		files["stages/"+st+".md"] = "Пройти этап.\n"
 	}
-	res, err := Read(files, nil, nil)
+	res, err := Read(files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

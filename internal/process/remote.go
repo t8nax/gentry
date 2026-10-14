@@ -198,7 +198,7 @@ func (r *Repo) join(check Checker, remote string, s *Sync) (string, error) {
 		}
 	}
 	if len(added) > 0 {
-		if head, err = r.commit(remote, added, message("Add the process of another machine", "process remote"), nil); err != nil {
+		if head, err = r.commit(remote, added, message("Add the process of another machine", "process remote set"), nil); err != nil {
 			return "", err
 		}
 	}

@@ -95,12 +95,12 @@ func TestClosesLoop(t *testing.T) {
 func TestUsers(t *testing.T) {
 	f := &Flow{
 		Stages: []Stage{{ID: "review", Executor: "reviewer"}, {ID: "audit", Executor: "auditor"}},
-		Agents: []Agent{{ID: "reviewer", Library: true}, {ID: "auditor"}},
+		Agents: []Agent{{ID: "reviewer", Shared: true}, {ID: "auditor"}},
 	}
 	if got := f.Users("reviewer"); !reflect.DeepEqual(got, []string{"review"}) {
 		t.Errorf("reviewer: %v", got)
 	}
-	// A subagent of the project replaces the one of the library.
+	// A subagent of the project replaces the one of the shared subagents.
 	if got := f.Users("auditor"); got != nil {
 		t.Errorf("auditor: %v", got)
 	}

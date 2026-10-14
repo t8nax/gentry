@@ -54,7 +54,7 @@ func TestHookBudget(t *testing.T) {
 	}
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
-	tool(t, bin, shop, "step_add", map[string]any{"steps": []string{"Создать ветку", "Проверить имя ветки"}})
+	tool(t, bin, shop, "task_step_add", map[string]any{"steps": []string{"Создать ветку", "Проверить имя ветки"}})
 	stalePlugin(t)
 
 	platform := runtime.GOOS + "/" + runtime.GOARCH
@@ -99,7 +99,7 @@ func TestReadBudget(t *testing.T) {
 	shop := shopWithFlow(t, bin, 1)[0]
 	gentry(t, bin, shop, "task", "take", "--scenario", "feature",
 		"--title", string([]rune(strings.Repeat("Частичный возврат по карте. ", 3))[:80]), "--statement", "Постановка.")
-	tool(t, bin, shop, "step_add", map[string]any{"steps": []string{"Создать ветку"}})
+	tool(t, bin, shop, "task_step_add", map[string]any{"steps": []string{"Создать ветку"}})
 	stalePlugin(t)
 
 	cmd := exec.Command(bin, "hook", hook.SessionStart, "--tool", claude.Tool)

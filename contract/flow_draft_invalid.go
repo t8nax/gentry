@@ -6,15 +6,59 @@ import "encoding/json"
 import "fmt"
 import "unicode/utf8"
 
-// Details of the error flow_draft_invalid: the flow draft of a project has
-// problems, so it is neither shown nor applied.
+type FlowBrokenFlow struct {
+	// Problems of the flow with the shared subagents of the draft, in the order of
+	// files and lines.
+	Problems []FlowProblem `json:"problems"`
+
+	// Identifier of the project.
+	Project string `json:"project"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowBrokenFlow) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["problems"]; raw != nil && !ok {
+		return fmt.Errorf("field problems in FlowBrokenFlow: required")
+	}
+	if _, ok := raw["project"]; raw != nil && !ok {
+		return fmt.Errorf("field project in FlowBrokenFlow: required")
+	}
+	type Plain FlowBrokenFlow
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.Problems != nil && len(plain.Problems) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "problems", 1)
+	}
+	if utf8.RuneCountInString(string(plain.Project)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "project", 1)
+	}
+	*j = FlowBrokenFlow(plain)
+	return nil
+}
+
+// Details of the error flow_draft_invalid: the draft of the flow of a project has
+// problems, so it is neither shown nor applied; or its changes of the shared
+// subagents bring problems into the active flows of other projects, so it is not
+// applied.
 type FlowDraftInvalidDetails struct {
 	// Absolute path of the flow directory.
 	Dir string `json:"dir"`
 
+	// Active flows of other projects that are valid with the active shared subagents
+	// and not with those of the draft, by project; absent if there are none. A valid
+	// draft is refused for them.
+	Flows []FlowBrokenFlow `json:"flows,omitempty,omitzero"`
+
 	// All problems of the draft in the order of files and lines: problems of the
 	// whole flow first, then the common rules, scenarios, stages, parts, project
-	// subagents, library subagents, and files that do not belong to the flow last.
+	// subagents, shared subagents, and files that do not belong to the flow last.
+	// Empty if the draft itself is valid and only breaks the flows of other projects.
 	Problems []FlowProblem `json:"problems"`
 
 	// Identifier of the project.
@@ -43,9 +87,6 @@ func (j *FlowDraftInvalidDetails) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
-	}
-	if plain.Problems != nil && len(plain.Problems) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "problems", 1)
 	}
 	if utf8.RuneCountInString(string(plain.Project)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "project", 1)

@@ -188,27 +188,27 @@ func TestWorktreeAddText(t *testing.T) {
 			"",
 			"Часть субагентов не разложена: файлы с их именами уже есть.",
 			"",
-		) + conflicts + lines("", hintLineOf(msg.HintAgentsConflictWarning, "gentry agents sync")),
+		) + conflicts + lines("", hintLineOf(msg.HintAgentsConflictWarning, "gentry agents deploy")),
 			lines(
 				msg.Text(msg.WorktreeAdded, "shop", shopFix),
 				"",
 				"Часть субагентов не разложена: файлы с их именами уже есть.",
 				"",
-			) + conflicts + lines("", hintLineOf(msg.HintAgentsConflictWarning, "agents_sync"))},
+			) + conflicts + lines("", hintLineOf(msg.HintAgentsConflictWarning, "agents_deploy"))},
 		{"layout failed", failed, lines(
 			msg.Text(msg.WorktreeAdded, "shop", shopFix),
 			"",
 			"Субагентов не удалось разложить.",
 			"Причина: not a directory",
 			"",
-			hintLineOf(msg.HintAgentsSyncFailed, "gentry agents sync"),
+			hintLineOf(msg.HintAgentsDeployFailed, "gentry agents deploy"),
 		), lines(
 			msg.Text(msg.WorktreeAdded, "shop", shopFix),
 			"",
 			"Субагентов не удалось разложить.",
 			"Причина: not a directory",
 			"",
-			hintLineOf(msg.HintAgentsSyncFailed, "agents_sync"),
+			hintLineOf(msg.HintAgentsDeployFailed, "agents_deploy"),
 		)},
 	}
 	for _, tt := range tests {
@@ -265,7 +265,7 @@ func TestWorktreeFailureText(t *testing.T) {
 	}
 }
 
-func TestAgentsSyncText(t *testing.T) {
+func TestAgentsDeployText(t *testing.T) {
 	missing := true
 	worktrees := func(added ...string) []contract.AgentsWorktree {
 		return []contract.AgentsWorktree{
@@ -277,14 +277,14 @@ func TestAgentsSyncText(t *testing.T) {
 	laid := map[string]bool{shopMain: true, shopFix: true, "/work/shop-gone": true}
 	header := []string{msg.Text(msg.ColWorktree), msg.Text(msg.ColTask), msg.Text(msg.ColAgents), msg.Text(msg.ColChanges)}
 	wantText(t, "in place", func(p *page) {
-		agentsSyncText(p, contract.AgentsSyncOutput{Project: "shop", Worktrees: worktrees()}, laid)
+		agentsDeployText(p, contract.AgentsDeployOutput{Project: "shop", Worktrees: worktrees()}, laid)
 	}, lines("Субагенты в рабочих копиях проекта shop соответствуют флоу.", "")+table(header,
 		[]string{shopMain, noValue, "reviewer", noValue},
 		[]string{shopFix, "SHOP-1", "reviewer", noValue},
 		[]string{"/work/shop-gone", noValue, noValue, "папки нет, копия пропущена"},
 	), "")
 	wantText(t, "laid out", func(p *page) {
-		agentsSyncText(p, contract.AgentsSyncOutput{Project: "shop", Changed: true, Worktrees: worktrees("reviewer")}, laid)
+		agentsDeployText(p, contract.AgentsDeployOutput{Project: "shop", Changed: true, Worktrees: worktrees("reviewer")}, laid)
 	}, lines("Субагенты разложены в рабочие копии проекта shop.", msg.Text(msg.AgentsNextSession), "")+table(header,
 		[]string{shopMain, noValue, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
 		[]string{shopFix, "SHOP-1", "reviewer", noValue},

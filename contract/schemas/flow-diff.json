@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-diff.json",
   "title": "FlowDiffOutput",
-  "description": "Output of `gentry flow diff --json`: the objects of the drafts of the flow of a project and of the library of subagents that differ from the active ones, and the file of changes with them in full.",
+  "description": "Output of `gentry flow diff --json`: the objects of the draft of the flow of a project that differ from the active flow: of its flow directory and of the shared subagents, which the draft of every project holds; and the file of changes with them in full.",
   "type": "object",
   "properties": {
     "project": {
@@ -15,7 +15,7 @@
       "$ref": "./applied.json"
     },
     "changes": {
-      "description": "Changed objects of the flow: the common rules first, then scenarios, stages, parts and subagents of the project, each kind by identifier. Empty if only the library has a draft.",
+      "description": "Changed objects of the flow: the common rules first, then scenarios, stages, parts and subagents of the project, each kind by identifier. Empty if only the shared subagents have changes.",
       "type": "array",
       "items": {
         "title": "FlowChange",
@@ -40,19 +40,19 @@
         "required": ["object", "change"]
       }
     },
-    "library": {
-      "description": "The draft of the library of subagents; absent if the library has none.",
+    "shared": {
+      "description": "The changes of the shared subagents; absent if they have none.",
       "type": "object",
       "properties": {
         "applied": {
-          "description": "The commit that applied the active library; absent if the library has never been applied.",
+          "description": "The commit that last applied the shared subagents; absent if they have never been applied.",
           "$ref": "./applied.json"
         },
         "changes": {
-          "description": "Changed subagents of the library by identifier.",
+          "description": "Changed shared subagents by identifier.",
           "type": "array",
           "items": {
-            "title": "FlowDiffLibraryChange",
+            "title": "FlowDiffSharedChange",
             "type": "object",
             "properties": {
               "id": {

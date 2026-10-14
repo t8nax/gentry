@@ -7,10 +7,18 @@ import "fmt"
 import "unicode/utf8"
 
 // Data of the flow.applied event: the draft of the flow of the project in the
-// event envelope became active on this machine.
+// event envelope, its flow directory and the shared subagents, became active on
+// this machine. One application is one commit and one event, whichever projects it
+// concerns.
 type FlowAppliedData struct {
 	// Hash of the commit of the process repository that applied the flow.
 	Commit string `json:"commit"`
+
+	// The other projects whose active flows name the shared subagents the commit
+	// changed, sorted; empty if none. Gentry writes it in every event; flow.applied
+	// events of earlier versions, which applied the shared subagents apart, have
+	// none, and a reader takes it as empty.
+	Projects []string `json:"projects,omitempty,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -29,6 +37,9 @@ func (j *FlowAppliedData) UnmarshalJSON(value []byte) error {
 	}
 	if utf8.RuneCountInString(string(plain.Commit)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "commit", 1)
+	}
+	if v, ok := raw["projects"]; !ok || v == nil {
+		plain.Projects = []string{}
 	}
 	*j = FlowAppliedData(plain)
 	return nil

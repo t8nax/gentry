@@ -100,7 +100,7 @@ func TestFlowShow(t *testing.T) {
 		)},
 		{[]string{"--agent", "reviewer"}, clitest.Lines(
 			msg.Text(msg.FlowAgent, "reviewer"),
-			msg.Text(msg.FlowSource, msg.Text(msg.FlowSourceLibrary)),
+			msg.Text(msg.FlowSource, msg.Text(msg.FlowSourceShared)),
 			msg.Text(msg.FlowPurpose, "ревью изменений задачи — поведение и текст"),
 			msg.Text(msg.FlowCapabilities, "read, search"),
 			msg.Text(msg.FlowModel, clitest.None),
@@ -189,7 +189,7 @@ func TestFlowDraft(t *testing.T) {
 		msg.Text(msg.FlowAppliedAt, "<время>"), "", msg.Text(msg.AgentsFreeSynced, "shop"), msg.Text(msg.AgentsNextSession)) {
 		t.Errorf("apply:\n%s", stdout)
 	}
-	process := filepath.Dir(p.Library)
+	process := filepath.Dir(p.Shared)
 	if log := gittest.Run(t, process, "log", "-1", "--format=%s|%b"); log != "Apply the flow of shop|Gentry: flow apply shop\n\n" {
 		t.Errorf("commit: %q", log)
 	}
@@ -234,7 +234,7 @@ func TestFlowDraft(t *testing.T) {
 	_, stdout, _ = clitest.Run("flow", "show")
 	if !strings.Contains(stdout, "\n"+clitest.Table([]string{msg.Text(msg.ColAgent), msg.Text(msg.ColSource), msg.Text(msg.ColStages)},
 		[]string{"auditor", msg.Text(msg.FlowSourceProject), "security"},
-		[]string{"reviewer", msg.Text(msg.FlowSourceLibrary), "review"})) {
+		[]string{"reviewer", msg.Text(msg.FlowSourceShared), "review"})) {
 		t.Errorf("show after apply:\n%s", stdout)
 	}
 
@@ -282,7 +282,7 @@ func TestFlowJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &diff); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(stdout, want) || !strings.Contains(stdout, tail) || diff.Library != nil ||
+	if !strings.HasPrefix(stdout, want) || !strings.Contains(stdout, tail) || diff.Shared != nil ||
 		diff.Report != filepath.Join(filepath.Dir(p.Dir), "changes.md") {
 		t.Errorf("diff: %s", stdout)
 	}
@@ -304,7 +304,7 @@ func TestFlowJSON(t *testing.T) {
 		`{"id":"review","next":[{"if":"ревью выявило существенные замечания","max_rounds":3,"to":"implementation"},{"to":"merge"}],"stage":"review"},`,
 		`{"executor":"operator","exit":"ветка задачи влита в main","id":"merge","include":[],"instruction":"Влить ветку задачи в main.\n","title":"Слияние"}`,
 		`"parts":[{"id":"plan-format","text":`,
-		`"agents":[{"capabilities":["read","search"],"id":"reviewer","instruction":"Проверить изменения задачи: поведение, тесты и тексты для оператора.\n","purpose":"ревью изменений задачи — поведение и текст","source":"library"}]`,
+		`"agents":[{"capabilities":["read","search"],"id":"reviewer","instruction":"Проверить изменения задачи: поведение, тесты и тексты для оператора.\n","purpose":"ревью изменений задачи — поведение и текст","source":"shared"}]`,
 		`"draft":{}`,
 	} {
 		if !strings.Contains(stdout, part) {
@@ -387,7 +387,8 @@ func TestFlowJSON(t *testing.T) {
 		t.Errorf("discard: %s, want %s", stdout, want)
 	}
 
-	// Every event of the flow and the library matches its schema.
+	// Every event of the flow matches its schema: the shared subagents of
+	// the shop were applied by flow apply too.
 	_, stdout, _ = clitest.Run("events")
 	var types []string
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
@@ -395,14 +396,14 @@ func TestFlowJSON(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(e.Type, "flow.") && !strings.HasPrefix(e.Type, "library.") {
+		if !strings.HasPrefix(e.Type, "flow.") {
 			continue
 		}
 		data, _ := json.Marshal(e.Data)
 		clitest.Validate(t, "schemas/events/"+e.Type+".json", string(data))
 		types = append(types, e.Type)
 	}
-	if got := strings.Join(types, " "); got != "library.applied flow.applied flow.draft_discarded" {
+	if got := strings.Join(types, " "); got != "flow.applied flow.applied flow.draft_discarded" {
 		t.Errorf("events: %s", got)
 	}
 }
@@ -454,8 +455,8 @@ func TestFlowDraftInvalid(t *testing.T) {
 func TestFlowInvalid(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	clitest.WriteDraft(t, p, map[string]string{"flow.yaml": "on_take: x\n"})
-	gittest.Run(t, filepath.Dir(p.Library), "add", "--all")
-	gittest.Run(t, filepath.Dir(p.Library), "commit", "--quiet", "-am", "Apply the flow of shop\n\nGentry: flow apply shop")
+	gittest.Run(t, filepath.Dir(p.Shared), "add", "--all")
+	gittest.Run(t, filepath.Dir(p.Shared), "commit", "--quiet", "-am", "Apply the flow of shop\n\nGentry: flow apply shop")
 	code, stdout, stderr := clitest.Run("flow", "show")
 	want := clitest.Lines(msg.Text(msg.ErrFlowInvalid, "shop"), msg.Text(msg.FlowDir, p.Dir), "", msg.Text(msg.FlowProblems),
 		"  "+msg.Text(msg.ProblemUnsupportedField, msg.Text(msg.FlowObjCommon), "on_take"))
@@ -480,7 +481,7 @@ func TestFlowInvalid(t *testing.T) {
 // TestFlowBypass checks a change of the flow committed around Gentry.
 func TestFlowBypass(t *testing.T) {
 	p := clitest.ShopFlow(t)
-	process := filepath.Dir(p.Library)
+	process := filepath.Dir(p.Shared)
 	// Without problems it is taken as it is.
 	clitest.WriteDraft(t, p, map[string]string{"stages/merge.md": "Влить ветку задачи в main вручную.\n"})
 	gittest.Run(t, process, "commit", "--quiet", "-am", "by hand")
@@ -505,21 +506,27 @@ func TestFlowBypass(t *testing.T) {
 	}
 }
 
-// TestFlowExecutorInDraftLibrary checks a stage carried out by a subagent of
-// the library that is not applied yet.
-func TestFlowExecutorInDraftLibrary(t *testing.T) {
+// TestFlowExecutorInDraftShared checks a stage of the draft carried out by
+// a shared subagent there is only in the draft: the draft shows it and is
+// applied with it at once.
+func TestFlowExecutorInDraftShared(t *testing.T) {
 	p := clitest.ShopFlow(t)
-	clitest.WriteFiles(t, p.Library, map[string]string{
+	clitest.WriteFiles(t, p.Shared, map[string]string{
 		"tester.yaml": "purpose: тесты\ncapabilities: [read, run]\n",
 		"tester.md":   "Прогнать тесты.\n",
 	})
 	clitest.WriteDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания записаны\nexecutor: tester\n"})
-	code, _, stderr := clitest.Run("flow", "apply")
-	if want := "  " + msg.Text(msg.ProblemExecutorInDraftLibrary, msg.Text(msg.FlowObjStage, "review"), "tester") + "\n"; code != contract.ExitError || !strings.HasSuffix(stderr, want) {
-		t.Errorf("exit code %d, stderr:\n%s", code, stderr)
+	want := clitest.Lines(msg.Text(msg.FlowAgent, "tester"), msg.Text(msg.FlowSource, msg.Text(msg.FlowSourceShared)))
+	if code, stdout, stderr := clitest.Run("flow", "show", "--draft", "--agent", "tester"); code != contract.ExitOK || !strings.HasPrefix(stdout, want) {
+		t.Errorf("show --draft --agent tester: exit code %d, stderr %q, output:\n%s", code, stderr, stdout)
 	}
-	clitest.MustRun(t, "library", "apply")
 	clitest.MustRun(t, "flow", "apply")
+	if code, stdout, stderr := clitest.Run("flow", "show", "--agent", "tester"); code != contract.ExitOK || !strings.HasPrefix(stdout, want) {
+		t.Errorf("show --agent tester: exit code %d, stderr %q, output:\n%s", code, stderr, stdout)
+	}
+	if _, stdout, _ := clitest.Run("process", "show"); strings.Contains(stdout, msg.Text(msg.ProcessDrafts)) {
+		t.Errorf("drafts after apply:\n%s", stdout)
+	}
 }
 
 // TestFlowShowByFlowDir checks that the project is found by its flow
@@ -542,13 +549,12 @@ func TestFlowRefusals(t *testing.T) {
 		stderr string
 	}{
 		{"no flow", []string{"flow", "show"}, contract.ExitError, msg.Text(msg.ErrFlowNotFound, "shop") + dir},
-		{"no draft to show", []string{"flow", "show", "--draft"}, contract.ExitError, msg.Text(msg.ErrDraftNotFound, "shop") + dir},
-		// flow diff builds the refusal of no drafts from the process
-		// repository: no test of package cli reaches it, this test states its
-		// words.
-		{"no draft to compare", []string{"flow", "diff"}, contract.ExitError, "Ни у флоу проекта shop, ни у библиотеки субагентов нет черновика." + dir},
-		{"no draft to apply", []string{"flow", "apply"}, contract.ExitError, msg.Text(msg.ErrDraftNotFound, "shop") + dir},
-		{"no draft to discard", []string{"flow", "discard"}, contract.ExitError, msg.Text(msg.ErrDraftNotFound, "shop") + dir},
+		// Without a draft of the flow or of the shared subagents every command
+		// of the draft refuses alike.
+		{"no draft to show", []string{"flow", "show", "--draft"}, contract.ExitError, msg.Text(msg.ErrNoDrafts, "shop") + dir},
+		{"no draft to compare", []string{"flow", "diff"}, contract.ExitError, msg.Text(msg.ErrNoDrafts, "shop") + dir},
+		{"no draft to apply", []string{"flow", "apply"}, contract.ExitError, msg.Text(msg.ErrNoDrafts, "shop") + dir},
+		{"no draft to discard", []string{"flow", "discard"}, contract.ExitError, msg.Text(msg.ErrNoDrafts, "shop") + dir},
 		{"edit", []string{"flow", "edit"}, contract.ExitUsage,
 			msg.Text(msg.ErrActionUnknown, "edit", "flow") + "\n\n" + cli.HintText(msg.HintActions, "flow")},
 		{"two objects", []string{"flow", "show", "--stage", "review", "--agent", "reviewer"}, contract.ExitUsage,
@@ -630,7 +636,7 @@ func TestFlowHelp(t *testing.T) {
 	}
 	_, stdout, _ = clitest.Run("flow", "show", "--help")
 	if usage := "  gentry flow show [--scenario " + msg.Text(msg.ArgScenario) + " | --stage " + msg.Text(msg.ArgStage) + " | --agent " + msg.Text(msg.ArgAgent) +
-		" | --part " + msg.Text(msg.ArgPart) + "] [--active | --draft] [--project " + msg.Text(msg.ArgProjectID) + "] [--json]\n"; !strings.Contains(stdout, usage) {
+		" | --part " + msg.Text(msg.ArgPart) + "] [--draft] [--project " + msg.Text(msg.ArgProjectID) + "] [--json]\n"; !strings.Contains(stdout, usage) {
 		t.Errorf("flow show --help:\n%s\nwant within:\n%s", stdout, usage)
 	}
 }

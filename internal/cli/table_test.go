@@ -128,7 +128,7 @@ func TestValueText(t *testing.T) {
 		{msg.TaskSourceOperator, nil, "оператором"},
 		{msg.TaskSourceAgent, nil, "агентом со слов оператора"},
 		{msg.FlowSourceProject, nil, "проект"},
-		{msg.FlowSourceLibrary, nil, "библиотека"},
+		{msg.FlowSourceShared, nil, "общий"},
 		{msg.WorktreeMain, nil, "основная"},
 		{msg.WorktreeFree, nil, "свободна"},
 		{msg.WorktreeMissing, nil, "папка не найдена"},

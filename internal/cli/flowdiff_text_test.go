@@ -16,11 +16,14 @@ const shopReport = "/work/process/shop/changes.md"
 // from the files of the flow testdata, the changes of their objects are
 // listed, the scenarios are compared by flow.DiffScenario.
 
-// readFlow reads the files of a flow of the shop with the library of the flow
-// testdata and, if not nil, its draft draftLibrary.
-func readFlow(t *testing.T, files, draftLibrary process.Files) *flow.Result {
+// readFlow reads the files of a flow of the shop with the shared subagents
+// shared, or with those of the flow testdata if it is nil.
+func readFlow(t *testing.T, files, shared process.Files) *flow.Result {
 	t.Helper()
-	res, err := flow.Read(files, testdataFiles(t, "agents", nil), draftLibrary)
+	if shared == nil {
+		shared = testdataFiles(t, "agents", nil)
+	}
+	res, err := flow.Read(files, shared)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,35 +46,36 @@ func scenarioDiff(old, cur *flow.Flow, id string, stages map[string]string, unre
 	return d
 }
 
-// libraryChange is the change of subagent id of the library from the files
-// old to cur; projects are those whose flows name it.
-func libraryChange(id, change string, old, cur process.Files, projects ...string) flow.LibraryChange {
-	c := flow.LibraryChange{ID: id, Change: change, Projects: append([]string{}, projects...)}
-	if a, ok := flow.LibraryAgents(old)[id]; ok {
+// sharedChange is the change of shared subagent id from the files old to
+// cur; projects are those whose flows name it.
+func sharedChange(id, change string, old, cur process.Files, projects ...string) flow.SharedChange {
+	c := flow.SharedChange{ID: id, Change: change, Projects: append([]string{}, projects...)}
+	if a, ok := flow.SharedAgents(old)[id]; ok {
 		c.Old = &a
 	}
-	if a, ok := flow.LibraryAgents(cur)[id]; ok {
+	if a, ok := flow.SharedAgents(cur)[id]; ok {
 		c.New = &a
 	}
 	return c
 }
 
-// applied is the time a flow or the library was applied in the tests.
+// applied is the time a flow or the shared subagents were applied in the
+// tests.
 var applied = &process.Applied{Commit: "c0ffee", Time: shopTime}
 
-// reviewerRuns is the change of the library of the example of the plan: the
-// reviewer runs the tests on the strong model.
+// reviewerRuns is the change of the shared subagents of the example of the
+// plan: the reviewer runs the tests on the strong model.
 var reviewerRuns = map[string]string{
 	"reviewer.yaml": "purpose: ревью изменений задачи — поведение и текст\ncapabilities: [read, search, run]\nmodel: strong\n",
 	"reviewer.md":   "Проверить изменения задачи: поведение, тесты и тексты для оператора.\nЗапустить тесты проекта и приложить результат к замечаниям.\n",
 }
 
-// reviewerChanged is the library with reviewerRuns, the subagent named by
-// the projects given.
-func reviewerChanged(t *testing.T, projects ...string) *flow.LibraryDiffResult {
+// reviewerChanged is the shared subagents with reviewerRuns, the subagent
+// named by the projects given.
+func reviewerChanged(t *testing.T, projects ...string) *flow.SharedDiffResult {
 	lib := testdataFiles(t, "agents", nil)
-	return &flow.LibraryDiffResult{Applied: applied, Changes: []flow.LibraryChange{
-		libraryChange("reviewer", flow.Modified, lib, testdataFiles(t, "agents", reviewerRuns), projects...),
+	return &flow.SharedDiffResult{Applied: applied, Changes: []flow.SharedChange{
+		sharedChange("reviewer", flow.Modified, lib, testdataFiles(t, "agents", reviewerRuns), projects...),
 	}}
 }
 
@@ -99,8 +103,7 @@ func diffFromNothing(t *testing.T) flow.DiffResult {
 }
 
 // diffExample is the example of the plan: security, a return of the bug
-// scenario allowed three times and the reviewer of the library who runs the
-// tests.
+// scenario allowed three times and the shared reviewer who runs the tests.
 func diffExample(t *testing.T) flow.DiffResult {
 	changes := security(t)
 	bug := testdataFiles(t, "shop/flow", nil)["scenarios/bug.yaml"]
@@ -118,7 +121,7 @@ func diffExample(t *testing.T) flow.DiffResult {
 			scenarioDiff(old.Read, cur.Read, "bug", stages, false),
 			scenarioDiff(old.Read, cur.Read, "feature", stages, false),
 		},
-		Library: reviewerChanged(t, "shop"),
+		Shared: reviewerChanged(t, "shop"),
 	}
 }
 
@@ -168,15 +171,15 @@ func diffProblems(t *testing.T) flow.DiffResult {
 	}
 }
 
-// diffLibrary is the draft of the library alone.
-func diffLibrary(t *testing.T) flow.DiffResult {
+// diffShared is the draft of the shared subagents alone.
+func diffShared(t *testing.T) flow.DiffResult {
 	old := readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
-	return flow.DiffResult{Applied: applied, Old: old.Read, New: old.Read, Library: reviewerChanged(t, "shop")}
+	return flow.DiffResult{Applied: applied, Old: old.Read, New: old.Read, Shared: reviewerChanged(t, "shop")}
 }
 
-// diffUnused is the draft of the library with a subagent of the project of
-// the same name in the draft of the flow: the change of the library concerns
-// no project.
+// diffUnused is the draft of the shared subagents with a subagent of the
+// project of the same name in the draft of the flow: the change of the
+// shared subagent concerns no project.
 func diffUnused(t *testing.T) flow.DiffResult {
 	old := readFlow(t, testdataFiles(t, "shop/flow", nil), nil)
 	cur := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
@@ -185,21 +188,21 @@ func diffUnused(t *testing.T) flow.DiffResult {
 	}), testdataFiles(t, "agents", reviewerRuns))
 	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read,
 		Changes: []flow.Change{change(flow.ObjectAgent, "reviewer", flow.Added)},
-		Library: reviewerChanged(t),
+		Shared:  reviewerChanged(t),
 	}
 }
 
 func TestDiffText(t *testing.T) {
 	inUTC(t)
-	head := func(applied, library bool) string {
+	head := func(applied, shared bool) string {
 		h := msg.Text(msg.FlowProject, "shop") + "\n"
 		if applied {
 			h += msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30") + "\n"
 		} else {
 			h += msg.Text(msg.FlowAppliedAt, noValue) + "\n"
 		}
-		if library {
-			h += msg.Text(msg.LibraryAppliedAt, "2026-10-09 12:30") + "\n"
+		if shared {
+			h += "Общие субагенты применены: 2026-10-09 12:30\n"
 		}
 		return h + "Файл изменений: /work/process/shop/changes.md\n\n"
 	}
@@ -245,12 +248,12 @@ func TestDiffText(t *testing.T) {
 			"Субагенты проекта:",
 			"  + auditor",
 			"",
-			"Субагенты библиотеки:",
+			"Общие субагенты:",
 			"  ~ reviewer: касается проектов shop",
 			"",
 		) + legend,
-			[]string{hintLineOf(msg.HintDiffLibraryApply, "gentry library apply"), hintLineOf(msg.HintFlowApply, "gentry flow apply")},
-			[]string{hintLineOf(msg.HintDiffLibraryApply, "library_apply"), hintLineOf(msg.HintFlowApply, "flow_apply")}},
+			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
+			[]string{hintLineOf(msg.HintFlowApply, "flow_apply")}},
 		{"scenarios added and removed", diffIncident(t), head(true, false) + lines(
 			msg.Text(msg.DiffScenarios),
 			"  − Баг",
@@ -281,25 +284,25 @@ func TestDiffText(t *testing.T) {
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowShowDraft, "gentry flow show --draft")},
 			[]string{hintLineOf(msg.HintFlowShowDraft, "flow_show (draft)")}},
-		{"library alone", diffLibrary(t), head(true, true) + lines(
+		{"shared subagents alone", diffShared(t), head(true, true) + lines(
 			"Флоу проекта не изменён.",
 			"",
-			msg.Text(msg.DiffLibraryAgents),
+			msg.Text(msg.DiffSharedAgents),
 			"  ~ reviewer: "+msg.Text(msg.DiffUsedBy, "shop"),
 			"",
 		) + legend,
-			[]string{hintLineOf(msg.HintDiffLibraryApply, "gentry library apply")},
-			[]string{hintLineOf(msg.HintDiffLibraryApply, "library_apply")}},
-		{"library unused", diffUnused(t), head(true, true) + lines(
+			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
+			[]string{hintLineOf(msg.HintFlowApply, "flow_apply")}},
+		{"shared subagent unused", diffUnused(t), head(true, true) + lines(
 			msg.Text(msg.DiffAgents),
 			"  + reviewer",
 			"",
-			msg.Text(msg.DiffLibraryAgents),
+			msg.Text(msg.DiffSharedAgents),
 			"  ~ reviewer: не используется ни одним проектом",
 			"",
 		) + legend,
-			[]string{hintLineOf(msg.HintDiffLibraryApply, "gentry library apply"), hintLineOf(msg.HintFlowApply, "gentry flow apply")},
-			[]string{hintLineOf(msg.HintDiffLibraryApply, "library_apply"), hintLineOf(msg.HintFlowApply, "flow_apply")}},
+			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
+			[]string{hintLineOf(msg.HintFlowApply, "flow_apply")}},
 	}
 	for _, tt := range tests {
 		d := diffView{project: "shop", res: tt.res}
@@ -315,8 +318,8 @@ func TestDiffReportText(t *testing.T) {
 	added, modified := msg.Text(msg.FlowChangeAdded), msg.Text(msg.FlowChangeModified)
 	want := "# Изменения флоу проекта shop\n\n" +
 		msg.Text(msg.FlowProject, "shop") + "  \n" + msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30") + "  \n" +
-		msg.Text(msg.LibraryAppliedAt, "2026-10-09 12:30") + "  \nОшибки черновика: нет  \nФайл сформирован: 2026-10-09 12:30\n\n" +
-		hintLineOf(msg.HintDiffLibraryApply, "gentry library apply") + "  \n" + hintLineOf(msg.HintFlowApply, "gentry flow apply") + "\n" + `
+		msg.Text(msg.SharedAppliedAt, "2026-10-09 12:30") + "  \nОшибки черновика: нет  \nФайл сформирован: 2026-10-09 12:30\n\n" +
+		hintLineOf(msg.HintFlowApply, "gentry flow apply") + "\n" + `
 ## Сводка
 
 | ` + msg.Text(msg.ColObject) + ` | ` + msg.Text(msg.ColChange) + ` |
@@ -326,7 +329,7 @@ func TestDiffReportText(t *testing.T) {
 | Этап «Ревью» (review) | ` + modified + ` |
 | Этап «Безопасность» (security) | ` + added + ` |
 | ` + msg.Text(msg.FlowObjAgent, "auditor") + ` | ` + added + ` |
-| ` + msg.Text(msg.FlowObjLibraryAgent, "reviewer") + ` | ` + modified + `; ` + msg.Text(msg.DiffUsedBy, "shop") + ` |
+| ` + msg.Text(msg.FlowObjSharedAgent, "reviewer") + ` | ` + modified + `; ` + msg.Text(msg.DiffUsedBy, "shop") + ` |
 
 Обозначения на схемах: зелёный — добавлено, жёлтый — изменено, красный пунктир — удалено. Сплошная стрелка — путь по умолчанию, пунктирная — переход с условием.
 
@@ -422,9 +425,9 @@ flowchart TD
 
 > Найти уязвимости в изменениях задачи.
 
-## Библиотека субагентов
+## Общие субагенты
 
-### Субагент reviewer — ` + modified + `
+### Общий субагент reviewer — ` + modified + `
 
 Касается проектов: shop
 

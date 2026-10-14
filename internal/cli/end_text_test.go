@@ -42,7 +42,7 @@ func TestTaskCancelText(t *testing.T) {
 			msg.Text(msg.ReasonLine, "Отложено до релиза каталога."),
 			msg.Text(msg.WorktreeReleased, shopFix),
 			"",
-			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
+			hintLineOf(msg.HintTaskAgain, "gentry task take SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			msg.Text(msg.TaskCancelled, "SHOP-1"),
 			msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
@@ -56,7 +56,7 @@ func TestTaskCancelText(t *testing.T) {
 			msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
 			msg.Text(msg.WorktreeReleased, shopFix),
 			"",
-			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
+			hintLineOf(msg.HintTaskAgain, "gentry task take SHOP-1 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			msg.Text(msg.TaskCancelled, "SHOP-1"),
 			msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
@@ -77,24 +77,24 @@ func TestNotFinishedText(t *testing.T) {
 		"Сценарий задачи SHOP-1 ещё не пройден.",
 		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 		"",
-		hintLineOf(msg.HintStageShow, "gentry stage show"),
+		hintLineOf(msg.HintStageShow, "gentry task stage show"),
 	), lines(
 		"Сценарий задачи SHOP-1 ещё не пройден.",
 		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 		"",
-		hintLineOf(msg.HintStageShow, "stage_show"),
+		hintLineOf(msg.HintStageShow, "task_stage_show"),
 	))
 	f.hints = taskHints("SHOP-1", false, f.hints...)
 	wantFail(t, "outside the worktree", f, lines(
 		msg.Text(msg.ErrScenarioNotFinished, "SHOP-1"),
 		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 		"",
-		hintLineOf(msg.HintStageShow, "gentry stage show --task SHOP-1"),
+		hintLineOf(msg.HintStageShow, "gentry task stage show --task SHOP-1"),
 	), lines(
 		msg.Text(msg.ErrScenarioNotFinished, "SHOP-1"),
 		msg.Text(msg.TaskStage, round("Ветка", "branch", 1)),
 		"",
-		hintLineOf(msg.HintStageShow, "stage_show (task: SHOP-1)"),
+		hintLineOf(msg.HintStageShow, "task_stage_show (task: SHOP-1)"),
 	))
 }
 
@@ -116,7 +116,7 @@ func TestEndFailureText(t *testing.T) {
 		{"task cancelled", &task.EndedError{Task: "SHOP-2", State: state.TaskCancelled}, lines(
 			"Задача SHOP-2 отменена.",
 			"",
-			hintLineOf(msg.HintTaskAgain, "gentry task take --task SHOP-2 --scenario "+msg.Text(msg.ArgScenario)),
+			hintLineOf(msg.HintTaskAgain, "gentry task take SHOP-2 --scenario "+msg.Text(msg.ArgScenario)),
 		), lines(
 			"Задача SHOP-2 отменена.",
 			"",
@@ -159,10 +159,10 @@ func TestEndFailureText(t *testing.T) {
 
 func TestAttemptsText(t *testing.T) {
 	inUTC(t)
-	out := contract.TaskAttemptsOutput{Task: "SHOP-1", Attempts: []contract.TaskAttempt{
-		{Attempt: 1, State: contract.TaskAttemptsOutputAttemptsElemStateCancelled, Scenario: contract.TaskScenario{Id: "feature", Title: "Фича"},
+	out := contract.TaskAttemptListOutput{Task: "SHOP-1", Attempts: []contract.TaskAttempt{
+		{Attempt: 1, State: contract.TaskAttemptListOutputAttemptsElemStateCancelled, Scenario: contract.TaskScenario{Id: "feature", Title: "Фича"},
 			Taken: shopTime, Ended: &contract.TaskEnded{Time: shopTime, Source: contract.EndedSourceOperator, Reason: ptr("Отложено.")}},
-		{Attempt: 2, State: contract.TaskAttemptsOutputAttemptsElemStateActive, Scenario: contract.TaskScenario{Id: "bug", Title: "Баг"}, Taken: shopTime},
+		{Attempt: 2, State: contract.TaskAttemptListOutputAttemptsElemStateActive, Scenario: contract.TaskScenario{Id: "bug", Title: "Баг"}, Taken: shopTime},
 	}}
 	attempts := table(
 		[]string{msg.Text(msg.ColAttempt), msg.Text(msg.ColState), msg.Text(msg.ColScenario), msg.Text(msg.ColTaken),
@@ -172,8 +172,8 @@ func TestAttemptsText(t *testing.T) {
 	) + "\n"
 	wantText(t, "attempts", func(p *page) {
 		attemptsText(p, out, taskHints("SHOP-1", false, hintOf(msg.HintAttempt)))
-	}, attempts+lines(hintLineOf(msg.HintAttempt, "gentry task attempts SHOP-1 "+msg.Text(msg.ArgAttempt))),
-		attempts+lines(hintLineOf(msg.HintAttempt, "task_attempts (task: SHOP-1, attempt)")))
+	}, attempts+lines(hintLineOf(msg.HintAttempt, "gentry task attempt show "+msg.Text(msg.ArgAttempt)+" --task SHOP-1")),
+		attempts+lines(hintLineOf(msg.HintAttempt, "task_attempt_show (attempt, task: SHOP-1)")))
 }
 
 func TestAttemptText(t *testing.T) {
@@ -235,4 +235,14 @@ func TestAttemptText(t *testing.T) {
 		"     "+msg.Text(msg.DecisionAnswer)+": Только для карт.",
 	)
 	wantText(t, "attempt", func(p *page) { attemptText(p, out, shopNames()) }, text, "")
+}
+
+// TestAttemptMissingText checks the refusal of task attempt show without the
+// number of an attempt.
+func TestAttemptMissingText(t *testing.T) {
+	wantRefusal(t, "no attempt", "task attempt show", nil, lines(
+		"Не указан номер попытки.",
+		"",
+		hintLineOf(msg.HintCommandHelp, "gentry task attempt show --help"),
+	), "Не указан номер попытки.\n")
 }

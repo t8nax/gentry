@@ -425,8 +425,9 @@ func stageOfNode(sc flow.Scenario, node string) string {
 	return node
 }
 
-// errUnreadable means the snapshot of the flow of a task cannot be read.
-var errUnreadable = errors.New("the flow of the task cannot be read")
+// ErrUnreadable means the snapshot of the flow of a task cannot be read, as a
+// later Gentry may have written it.
+var ErrUnreadable = errors.New("the flow of the task cannot be read")
 
 // txFlow reads the flow of the task from its snapshot in the transaction.
 func txFlow(tx *state.Tx, t state.Task) (*flow.Flow, error) {
@@ -435,7 +436,7 @@ func txFlow(tx *state.Tx, t state.Task) (*flow.Flow, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, errUnreadable
+		return nil, ErrUnreadable
 	}
 	return readSnapshot(s.Content)
 }
@@ -444,14 +445,14 @@ func txFlow(tx *state.Tx, t state.Task) (*flow.Flow, error) {
 func readSnapshot(content string) (*flow.Flow, error) {
 	snap, err := flow.DecodeSnapshot([]byte(content))
 	if err != nil {
-		return nil, errUnreadable
+		return nil, ErrUnreadable
 	}
 	res, err := flow.ReadSnapshot(snap)
 	if err != nil {
 		return nil, err
 	}
 	if res.Flow == nil {
-		return nil, errUnreadable
+		return nil, ErrUnreadable
 	}
 	return res.Flow, nil
 }
@@ -490,7 +491,7 @@ func closeData(p state.Pass, returns int, finished bool) any {
 	return d
 }
 
-// StageView is the current stage of a task, as stage show gives it.
+// StageView is the current stage of a task, as task stage show gives it.
 type StageView struct {
 	View
 	Node        flow.Node
@@ -517,7 +518,7 @@ func StageOf(v View, decisions []state.Decision) (StageView, error) {
 		return StageView{}, &FinishedError{Task: v.Key()}
 	}
 	if v.Flow == nil {
-		return StageView{}, errUnreadable
+		return StageView{}, ErrUnreadable
 	}
 	sc, node, stage, err := position(v.Flow, v.Scenario, v.Node)
 	if err != nil {

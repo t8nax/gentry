@@ -154,7 +154,7 @@ type TakeRequest struct {
 	Again     *state.Task     // a cancelled task to take anew: its next attempt keeps its title and statement
 	Snapshot  flow.Snapshot   // the active flow
 	Flow      process.Applied // the commit that applied the flow
-	Library   process.Applied // the commit that applied the library; zero if none
+	Shared    process.Applied // the commit that applied the shared subagents; zero if none
 }
 
 // Take records the task in one transaction with its event: the worktree is
@@ -253,16 +253,17 @@ func CheckAgain(last state.Task) error {
 
 // keepSnapshot stores the snapshot of the flow unless it is stored already,
 // and returns the commit it is stored by. The commit that applied the flow
-// names it; if the library changed a subagent of the flow after that commit,
-// the commit that applied the library does, so that a snapshot never changes.
+// names it; if a change of the shared subagents changed a subagent of the
+// flow after that commit, the commit that applied it does, so that a
+// snapshot never changes.
 func keepSnapshot(tx *state.Tx, req TakeRequest, content string) (process.Applied, error) {
 	key := req.Flow
 	s, ok, err := tx.Snapshot(req.Project, key.Commit)
 	if err != nil {
 		return process.Applied{}, err
 	}
-	if ok && s.Content != content && req.Library.Commit != "" {
-		key = req.Library
+	if ok && s.Content != content && req.Shared.Commit != "" {
+		key = req.Shared
 		if s, ok, err = tx.Snapshot(req.Project, key.Commit); err != nil {
 			return process.Applied{}, err
 		}

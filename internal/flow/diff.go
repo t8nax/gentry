@@ -126,15 +126,15 @@ func closesLoop(s *Scenario, from string, t Transition) bool {
 	return reachable(t.To, next)[from]
 }
 
-// LibraryAgents returns the subagents of the library files as far as they
+// SharedAgents returns the shared subagents of the files as far as they
 // can be read, by identifier.
-func LibraryAgents(files process.Files) map[string]Agent {
+func SharedAgents(files process.Files) map[string]Agent {
 	inside := map[string]string{}
 	for p, text := range files {
 		inside[agentsDir+"/"+p] = text
 	}
-	l := newLoader(treeOf(inside), mapLibrary(nil))
-	l.inLibrary = true
+	l := newLoader(treeOf(inside), mapShared(nil))
+	l.inShared = true
 	for _, e := range l.src.entries("") {
 		if e.dir && e.name == agentsDir {
 			l.scan(agentsDir)
@@ -144,18 +144,18 @@ func LibraryAgents(files process.Files) map[string]Agent {
 	out := map[string]Agent{}
 	for id, a := range l.agents {
 		out[id] = Agent{
-			ID: id, Library: true, Purpose: a.purpose,
+			ID: id, Shared: true, Purpose: a.purpose,
 			Capabilities: append([]string{}, a.capabilities...), Model: a.model, Instruction: a.instruction,
 		}
 	}
 	return out
 }
 
-// Users returns the stages of flow f that subagent id of the library
+// Users returns the stages of flow f that shared subagent id
 // carries out: none if a subagent of the project of the same name replaces
 // it.
 func (f *Flow) Users(id string) []string {
-	if slices.ContainsFunc(f.Agents, func(a Agent) bool { return a.ID == id && !a.Library }) {
+	if slices.ContainsFunc(f.Agents, func(a Agent) bool { return a.ID == id && !a.Shared }) {
 		return nil
 	}
 	return f.StagesBy(id)

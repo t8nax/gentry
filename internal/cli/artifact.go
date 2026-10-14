@@ -12,11 +12,12 @@ import (
 	"github.com/t8nax/gentry/internal/task"
 )
 
-// artifactFields are the fields of artifact save; the name is the argument.
+// artifactFields are the fields of task artifact save; the name is the
+// argument.
 var artifactFields = textFields("name", "file", "url")
 
 func runArtifactSave(args []string, env Env) int {
-	const cmd = "artifact save"
+	const cmd = "task artifact save"
 	f := newFlags(cmd)
 	flags := map[string]*stringFlag{"file": f.String("file"), "url": f.String("url")}
 	key := f.String("task")
@@ -67,13 +68,13 @@ func runArtifactSave(args []string, env Env) int {
 		return w.fail(env, f)
 	}
 	path, _ := task.ArtifactPath(w.task, name)
-	out := contract.ArtifactSaveOutput{Task: w.task.Key(), Artifact: artifactJSON(a, path), Replaced: replaced}
+	out := contract.TaskArtifactSaveOutput{Task: w.task.Key(), Artifact: artifactJSON(a, path), Replaced: replaced}
 	return emit(env, out, artifactSaveText)
 }
 
 // artifactSaveText prints the artifact saved: the copy of its file or its
 // link.
-func artifactSaveText(p *page, out contract.ArtifactSaveOutput) {
+func artifactSaveText(p *page, out contract.TaskArtifactSaveOutput) {
 	k := msg.ArtifactSaved
 	if out.Replaced {
 		k = msg.ArtifactReplaced

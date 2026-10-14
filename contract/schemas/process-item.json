@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/process-item.json",
   "title": "ProcessItem",
-  "description": "A kind of the process of the operator: the flow of a project or the library of subagents.",
+  "description": "A kind of the process of the operator: the flow of a project or the shared subagents.",
   "type": "object",
   "properties": {
     "kind": {
-      "description": "flow for the flow of a project, library for the library of subagents.",
+      "description": "flow for the flow of a project, shared for the shared subagents. library is the shared subagents in the process.synced events of earlier versions of Gentry, which called them the library of subagents; Gentry no longer writes it.",
       "type": "string",
-      "enum": ["flow", "library"]
+      "enum": ["flow", "shared", "library"]
     },
     "project": {
       "description": "Identifier of the project; only for a flow.",

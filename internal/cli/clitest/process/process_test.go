@@ -34,10 +34,10 @@ func twoMachines(t *testing.T) machines {
 		root := filepath.Dir(os.Getenv(home.EnvVar))
 		remote := filepath.Join(root, "remote.git")
 		gittest.Run(t, root, "init", "--quiet", "--bare", remote)
-		clitest.MustRun(t, "process", "remote", remote)
+		clitest.MustRun(t, "process", "remote", "set", remote)
 		t.Setenv(home.EnvVar, filepath.Join(root, "home-b"))
 		clitest.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
-		clitest.MustRun(t, "process", "remote", remote)
+		clitest.MustRun(t, "process", "remote", "set", remote)
 	})
 	root := filepath.Dir(os.Getenv(home.EnvVar))
 	return machines{t: t, a: filepath.Join(root, "home"), b: filepath.Join(root, "home-b"), remote: filepath.Join(root, "remote.git")}
@@ -55,32 +55,32 @@ var (
 	laidOut = clitest.Lines(msg.Text(msg.AgentsFreeSynced, "shop"), msg.Text(msg.AgentsNextSession))
 )
 
-func TestProcessRemote(t *testing.T) {
+func TestProcessRemoteSet(t *testing.T) {
 	p := clitest.ShopFlow(t)
 	root := filepath.Dir(os.Getenv(home.EnvVar))
 	remote := filepath.Join(root, "remote.git")
 	gittest.Run(t, root, "init", "--quiet", "--bare", remote)
 
-	_, stdout, _ := clitest.Run("process", "status")
+	_, stdout, _ := clitest.Run("process", "show")
 	if want := clitest.Lines(msg.Text(msg.ProcessNoRemote), "", cli.HintText(msg.HintProcessRemote)); stdout != want {
 		t.Errorf("status without a remote:\n%s\nwant:\n%s", stdout, want)
 	}
-	code, stdout, stderr := clitest.Run("process", "remote", remote)
+	code, stdout, stderr := clitest.Run("process", "remote", "set", remote)
 	if want := clitest.Lines(msg.Text(msg.ProcessRemoteSet, remote), msg.Text(msg.ProcessResultSent)); code != contract.ExitOK || stderr != "" || stdout != want {
 		t.Errorf("remote: exit code %d, stderr %q, output:\n%s\nwant:\n%s", code, stderr, stdout, want)
 	}
-	_, stdout, _ = clitest.Run("process", "status")
+	_, stdout, _ = clitest.Run("process", "show")
 	if want := clitest.Lines(msg.Text(msg.ProcessRemote, remote), msg.Text(msg.ProcessSyncedAt, "<время>")); clitest.Masked(stdout) != want {
 		t.Errorf("status:\n%s\nwant:\n%s", stdout, want)
 	}
-	if _, stdout, _ := clitest.Run("process", "remote", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultUnchanged)+"\n") {
+	if _, stdout, _ := clitest.Run("process", "remote", "set", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultUnchanged)+"\n") {
 		t.Errorf("remote again:\n%s", stdout)
 	}
 
 	// Another machine gets the process and shows the same flow.
 	t.Setenv(home.EnvVar, filepath.Join(root, "home-b"))
 	clitest.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
-	if _, stdout, _ := clitest.Run("process", "remote", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultReceived)+"\n") {
+	if _, stdout, _ := clitest.Run("process", "remote", "set", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultReceived)+"\n") {
 		t.Errorf("remote on b:\n%s", stdout)
 	}
 	b := clitest.ShopPlaces()
@@ -96,11 +96,11 @@ func TestProcessRemote(t *testing.T) {
 		exit   int
 		stderr string
 	}{
-		{"no address", []string{"process", "remote"}, contract.ExitUsage,
-			msg.Text(msg.ErrRemoteMissing) + "\n\n" + cli.HintText(msg.HintCommandHelp, "process remote")},
-		{"unavailable", []string{"process", "remote", filepath.Join(root, "none.git")}, contract.ExitError,
+		{"no address", []string{"process", "remote", "set"}, contract.ExitUsage,
+			msg.Text(msg.ErrRemoteMissing) + "\n\n" + cli.HintText(msg.HintCommandHelp, "process remote set")},
+		{"unavailable", []string{"process", "remote", "set", filepath.Join(root, "none.git")}, contract.ExitError,
 			msg.Text(msg.ErrRemoteUnavailable, filepath.Join(root, "none.git")) + "\n\n" + msg.Text(msg.HintRemoteAccess, filepath.Join(root, "none.git"))},
-		{"code", []string{"process", "remote", filepath.Join(root, "shop")}, contract.ExitError,
+		{"code", []string{"process", "remote", "set", filepath.Join(root, "shop")}, contract.ExitError,
 			msg.Text(msg.ErrRemoteNotProcess, filepath.Join(root, "shop"))},
 	}
 	for _, tt := range tests {
@@ -109,7 +109,7 @@ func TestProcessRemote(t *testing.T) {
 			t.Errorf("%s: exit code %d, stdout %q, stderr %q, want %q", tt.name, code, stdout, stderr, tt.stderr)
 		}
 	}
-	if _, stdout, _ := clitest.Run("process", "status"); !strings.HasPrefix(stdout, msg.Text(msg.ProcessRemote, remote)+"\n") {
+	if _, stdout, _ := clitest.Run("process", "show"); !strings.HasPrefix(stdout, msg.Text(msg.ProcessRemote, remote)+"\n") {
 		t.Errorf("a refused address is kept:\n%s", stdout)
 	}
 }
@@ -141,32 +141,26 @@ func TestProcessSync(t *testing.T) {
 	}
 	m.onA()
 
-	// The library goes the same way.
+	// The shared subagents go the same way, applied by flow apply.
 	a := clitest.ShopPlaces()
-	clitest.WriteFiles(t, a.Library, map[string]string{"reviewer.md": "Проверить изменения задачи и тексты.\n"})
-	_, stdout, _ = clitest.Run("library", "diff")
-	want := clitest.Lines(msg.Text(msg.LibraryAppliedAt, "<время>"), "", msg.Text(msg.FlowChanges),
-		"  "+msg.Text(msg.FlowChange, msg.Text(msg.FlowObjAgent, "reviewer"), msg.Text(msg.FlowChangeModified)), "", cli.HintText(msg.HintLibraryApply))
-	if clitest.Masked(stdout) != want {
-		t.Errorf("library diff:\n%s\nwant:\n%s", stdout, want)
-	}
-	if _, stdout, _ := clitest.Run("library", "apply"); clitest.Masked(stdout) != clitest.Lines(msg.Text(msg.LibraryApplied),
-		msg.Text(msg.LibraryAppliedAt, "<время>"), "", msg.Text(msg.AgentsFreeSyncedAll), msg.Text(msg.AgentsNextSession)) {
-		t.Errorf("library apply:\n%s", stdout)
+	clitest.WriteFiles(t, a.Shared, map[string]string{"reviewer.md": "Проверить изменения задачи и тексты.\n"})
+	if _, stdout, _ := clitest.Run("flow", "apply"); clitest.Masked(stdout) != clitest.Lines(msg.Text(msg.FlowApplied),
+		msg.Text(msg.FlowProject, "shop"), msg.Text(msg.FlowAppliedAt, "<время>"), "", msg.Text(msg.AgentsFreeSynced, "shop"), msg.Text(msg.AgentsNextSession)) {
+		t.Errorf("flow apply of the shared subagents:\n%s", stdout)
 	}
 	m.onB()
-	if _, stdout, _ := clitest.Run("process", "sync"); stdout != synced+clitest.Lines("", msg.Text(msg.ProcessReceived), "  "+msg.Text(msg.KindLibrary)) {
+	if _, stdout, _ := clitest.Run("process", "sync"); stdout != synced+clitest.Lines("", msg.Text(msg.ProcessReceived), "  "+msg.Text(msg.KindShared)) {
 		t.Errorf("sync on b:\n%s", stdout)
 	}
 	if _, err := os.Stat(report); !os.IsNotExist(err) {
-		t.Errorf("the file of changes on b after a change of the library: %v", err)
+		t.Errorf("the file of changes on b after a change of the shared subagents: %v", err)
 	}
 	clitest.MustRun(t, "flow", "discard")
-	clitest.WriteFiles(t, b.Library, map[string]string{"reviewer.md": "Черновик.\n"})
-	if _, stdout, _ := clitest.Run("library", "discard"); stdout != msg.Text(msg.LibraryDiscarded)+"\n" {
-		t.Errorf("library discard:\n%s", stdout)
+	clitest.WriteFiles(t, b.Shared, map[string]string{"reviewer.md": "Черновик.\n"})
+	if _, stdout, _ := clitest.Run("flow", "discard"); stdout != clitest.Lines(msg.Text(msg.FlowDiscarded), msg.Text(msg.FlowProject, "shop")) {
+		t.Errorf("flow discard of the shared subagents:\n%s", stdout)
 	}
-	if b, _ := os.ReadFile(filepath.Join(b.Library, "reviewer.md")); string(b) != "Проверить изменения задачи и тексты.\n" {
+	if b, _ := os.ReadFile(filepath.Join(b.Shared, "reviewer.md")); string(b) != "Проверить изменения задачи и тексты.\n" {
 		t.Errorf("reviewer after discard: %q", b)
 	}
 }
@@ -189,7 +183,7 @@ func TestProcessConflict(t *testing.T) {
 	if text, err := os.ReadFile(filepath.Join(b.Conflict, "stages", "review.md")); err != nil || string(text) != "Проверить изменения по списку машины А.\n" {
 		t.Errorf("variant of a: %q, %v", text, err)
 	}
-	_, stdout, _ = clitest.Run("process", "status")
+	_, stdout, _ = clitest.Run("process", "show")
 	if want := clitest.Lines(msg.Text(msg.ProcessRemote, m.remote), msg.Text(msg.ProcessSyncedAt, "<время>"), "", msg.Text(msg.ProcessDrafts),
 		"  "+flowShop, "", msg.Text(msg.ProcessConflicts), "  "+flowShop); clitest.Masked(stdout) != want {
 		t.Errorf("status:\n%s\nwant:\n%s", stdout, want)
@@ -245,7 +239,7 @@ func TestProcessOffline(t *testing.T) {
 	if _, _, stderr := clitest.Run("flow", "show"); stderr != msg.Text(msg.SyncSkipped)+"\n\n" {
 		t.Errorf("show offline: stderr %q", stderr)
 	}
-	_, stdout, _ = clitest.Run("process", "status")
+	_, stdout, _ = clitest.Run("process", "show")
 	if want := "\n" + clitest.Lines(msg.Text(msg.ProcessUnsent), "  "+flowShop, "", cli.HintText(msg.HintProcessSync)); !strings.HasSuffix(stdout, want) {
 		t.Errorf("status:\n%s", stdout)
 	}
@@ -261,23 +255,22 @@ func TestProcessOffline(t *testing.T) {
 	}
 }
 
-func TestLibraryRefusals(t *testing.T) {
+// TestSharedRefusals checks a draft of the shared subagents with problems of
+// a project without a flow: the problems of the shared subagents are those of
+// the draft, without a file, and nothing is applied.
+func TestSharedRefusals(t *testing.T) {
 	clitest.ConnectedShop(t)
 	p := clitest.ShopPlaces()
-	code, _, stderr := clitest.Run("library", "diff")
-	if want := clitest.Lines(msg.Text(msg.ErrLibraryDraftNotFound), msg.Text(msg.LibraryDir, p.Library)); code != contract.ExitError || stderr != want {
-		t.Errorf("no draft: exit code %d, stderr:\n%s", code, stderr)
-	}
-	clitest.WriteFiles(t, p.Library, map[string]string{"tester.yaml": "capabilities: [read]\n", "notes.txt": "x\n"})
-	code, _, stderr = clitest.Run("library", "apply")
-	tester := msg.Text(msg.FlowObjAgent, "tester")
-	want := clitest.Lines(msg.Text(msg.ErrLibraryDraftInvalid), msg.Text(msg.LibraryDir, p.Library), "", msg.Text(msg.FlowProblems),
+	clitest.WriteFiles(t, p.Shared, map[string]string{"tester.yaml": "capabilities: [read]\n", "notes.txt": "x\n"})
+	code, _, stderr := clitest.Run("flow", "apply")
+	tester := msg.Text(msg.FlowObjSharedAgent, "tester")
+	want := clitest.Lines(msg.Text(msg.ErrDraftInvalid, "shop"), msg.Text(msg.FlowDir, p.Dir), "", msg.Text(msg.FlowProblems),
 		"  "+msg.Text(msg.ProblemMissingField, tester, "purpose"), "  "+msg.Text(msg.ProblemMissingInstruction, tester),
-		"  "+msg.Text(msg.ProblemLibraryExtraFile, "notes.txt"))
+		"  "+msg.Text(msg.ProblemSharedExtraFile, "notes.txt"))
 	if code != contract.ExitError || stderr != want {
 		t.Errorf("invalid: exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)
 	}
-	_, stdout, _ := clitest.Run("library", "apply", "--json")
+	_, stdout, _ := clitest.Run("flow", "apply", "--json")
 	var out struct {
 		Error struct {
 			Code    string          `json:"code"`
@@ -287,12 +280,12 @@ func TestLibraryRefusals(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatal(err)
 	}
-	clitest.Validate(t, "schemas/library-draft-invalid.json", string(out.Error.Details))
-	if out.Error.Code != contract.CodeLibraryDraftInvalid || !strings.Contains(string(out.Error.Details), `"file":"tester.yaml"`) {
+	clitest.Validate(t, "schemas/flow-draft-invalid.json", string(out.Error.Details))
+	if out.Error.Code != contract.CodeFlowDraftInvalid || strings.Contains(string(out.Error.Details), `"file"`) {
 		t.Errorf("--json: %s", stdout)
 	}
-	if _, stdout, _ := clitest.Run("library", "--help"); !strings.HasPrefix(stdout, msg.Text(msg.CmdLibraryDesc)+"\n") {
-		t.Errorf("help:\n%s", stdout)
+	if code, c := clitest.ErrorCode(t, "library", "apply"); code != contract.ExitUsage || c != contract.CodeUnknownCommand {
+		t.Errorf("library apply: exit code %d, code %s", code, c)
 	}
 }
 
@@ -301,43 +294,50 @@ func TestProcessJSON(t *testing.T) {
 	root := filepath.Dir(os.Getenv(home.EnvVar))
 	remote := filepath.Join(root, "remote.git")
 	gittest.Run(t, root, "init", "--quiet", "--bare", remote)
-	_, stdout, _ := clitest.Run("process", "status", "--json")
-	clitest.Validate(t, "schemas/process-status.json", stdout)
+	_, stdout, _ := clitest.Run("process", "show", "--json")
+	clitest.Validate(t, "schemas/process-show.json", stdout)
 	if stdout != `{"conflicts":[],"drafts":[],"unsent":[]}`+"\n" {
 		t.Errorf("status: %s", stdout)
 	}
-	_, stdout, _ = clitest.Run("process", "remote", remote, "--json")
-	clitest.Validate(t, "schemas/process-remote.json", stdout)
+	_, stdout, _ = clitest.Run("process", "remote", "set", remote, "--json")
+	clitest.Validate(t, "schemas/process-remote-set.json", stdout)
 	if want := `{"drafts":[],"remote":` + clitest.JSONString(remote) + `,"result":"sent"}` + "\n"; stdout != want {
 		t.Errorf("remote: %s, want %s", stdout, want)
 	}
 	p := clitest.ShopPlaces()
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.md": "Новая инструкция.\n"})
-	_, stdout, _ = clitest.Run("library", "diff", "--json")
-	clitest.Validate(t, "schemas/library-diff.json", stdout)
-	if !strings.HasSuffix(stdout, `"changes":[{"change":"modified","id":"reviewer"}],"dir":`+clitest.JSONString(p.Library)+"}\n") {
-		t.Errorf("library diff: %s", stdout)
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.md": "Новая инструкция.\n"})
+	_, stdout, _ = clitest.Run("flow", "diff", "--json")
+	clitest.Validate(t, "schemas/flow-diff.json", stdout)
+	if !strings.Contains(stdout, `"changes":[],"project":"shop","report":`) ||
+		!strings.Contains(stdout, `"shared":{"applied":{"commit":"`) || !strings.Contains(stdout, `"changes":[{"change":"modified","id":"reviewer","projects":["shop"]}]}`) {
+		t.Errorf("flow diff: %s", stdout)
 	}
-	_, stdout, _ = clitest.Run("library", "apply", "--json")
-	clitest.Validate(t, "schemas/library-apply.json", stdout)
-	if !strings.Contains(stdout, `"sent":true,"sync":{"sent":[{"kind":"library"}]}`) {
-		t.Errorf("library apply: %s", stdout)
+	_, stdout, _ = clitest.Run("flow", "apply", "--json")
+	clitest.Validate(t, "schemas/flow-apply.json", stdout)
+	if !strings.Contains(stdout, `"projects":[],"sent":true,"sync":{"sent":[{"kind":"shared"}]}`) {
+		t.Errorf("flow apply: %s", stdout)
 	}
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.md": "Ещё.\n"})
-	_, stdout, _ = clitest.Run("library", "discard", "--json")
-	clitest.Validate(t, "schemas/library-discard.json", stdout)
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.md": "Ещё.\n"})
+	_, stdout, _ = clitest.Run("process", "show", "--json")
+	clitest.Validate(t, "schemas/process-show.json", stdout)
+	if !strings.Contains(stdout, `"drafts":[{"kind":"shared"}]`) {
+		t.Errorf("process show with a draft of the shared subagents: %s", stdout)
+	}
+	_, stdout, _ = clitest.Run("flow", "discard", "--json")
+	clitest.Validate(t, "schemas/flow-discard.json", stdout)
 	_, stdout, _ = clitest.Run("process", "sync", "--json")
 	clitest.Validate(t, "schemas/process-sync.json", stdout)
 	if stdout != `{"conflicts":[],"received":[],"restored":[],"sent":[]}`+"\n" {
 		t.Errorf("sync: %s", stdout)
 	}
-	_, stdout, _ = clitest.Run("process", "status", "--json")
-	clitest.Validate(t, "schemas/process-status.json", stdout)
+	_, stdout, _ = clitest.Run("process", "show", "--json")
+	clitest.Validate(t, "schemas/process-show.json", stdout)
 	if !strings.Contains(stdout, `"remote":`+clitest.JSONString(remote)+`,"synced":"`) {
 		t.Errorf("status with a remote: %s", stdout)
 	}
 
-	// Events of the process have no project and match their schemas.
+	// Events of the process have no project and match their schemas; the
+	// shared subagents are applied and discarded by the events of the flow.
 	_, stdout, _ = clitest.Run("events")
 	var types []string
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
@@ -345,7 +345,7 @@ func TestProcessJSON(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(e.Type, "process.") && !strings.HasPrefix(e.Type, "library.") {
+		if !strings.HasPrefix(e.Type, "process.") {
 			continue
 		}
 		if e.Project != nil {
@@ -355,7 +355,7 @@ func TestProcessJSON(t *testing.T) {
 		clitest.Validate(t, "schemas/events/"+e.Type+".json", string(data))
 		types = append(types, e.Type)
 	}
-	if got := strings.Join(types, " "); got != "library.applied process.remote_set process.synced library.applied process.synced library.draft_discarded" {
+	if got := strings.Join(types, " "); got != "process.remote_set process.synced process.synced" {
 		t.Errorf("events: %s", got)
 	}
 }
@@ -365,7 +365,7 @@ func TestProcessJSON(t *testing.T) {
 func TestProjectAddMakesFlowDir(t *testing.T) {
 	clitest.ConnectedShop(t)
 	p := clitest.ShopPlaces()
-	process := filepath.Dir(p.Library)
+	process := filepath.Dir(p.Shared)
 	if log := gittest.Run(t, process, "log", "--format=%s"); log != "Create the process repository\n" {
 		t.Errorf("log: %q", log)
 	}
@@ -374,19 +374,19 @@ func TestProjectAddMakesFlowDir(t *testing.T) {
 	}
 }
 
-// TestLibraryBreaksFlow checks that a library that breaks an active flow is
-// not applied.
-func TestLibraryBreaksFlow(t *testing.T) {
+// TestSharedBreaksFlow checks that a change of the shared subagents that
+// breaks the flow of the project is a problem of its draft, and is applied
+// with a change of the flow that does without the subagent.
+func TestSharedBreaksFlow(t *testing.T) {
 	p := clitest.ShopFlow(t)
-	clitest.WriteFiles(t, p.Library, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
-	code, stdout, stderr := clitest.Run("library", "apply")
+	clitest.WriteFiles(t, p.Shared, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
+	code, stdout, stderr := clitest.Run("flow", "apply")
 	noReviewer := msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewer")
-	want := clitest.Lines(msg.Text(msg.ErrLibraryBreaksFlows), msg.Text(msg.LibraryDir, p.Library), "",
-		msg.Text(msg.LibraryFlowProblems, "shop"), "  "+noReviewer)
+	want := clitest.Lines(msg.Text(msg.ErrDraftInvalid, "shop"), msg.Text(msg.FlowDir, p.Dir), "", msg.Text(msg.FlowProblems), "  "+noReviewer)
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("exit code %d, stderr:\n%s\nwant:\n%s", code, stderr, want)
 	}
-	_, stdout, _ = clitest.Run("library", "apply", "--json")
+	_, stdout, _ = clitest.Run("flow", "apply", "--json")
 	var out struct {
 		Error struct {
 			Details json.RawMessage `json:"details"`
@@ -395,16 +395,15 @@ func TestLibraryBreaksFlow(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatal(err)
 	}
-	clitest.Validate(t, "schemas/library-draft-invalid.json", string(out.Error.Details))
-	if want := `{"dir":` + clitest.JSONString(p.Library) + `,"flows":[{"problems":[{"code":"unknown_executor","file":"stages/review.yaml","line":3,` +
-		`"message":` + clitest.JSONString(noReviewer) + `}],"project":"shop"}],"problems":[]}`; string(out.Error.Details) != want {
+	clitest.Validate(t, "schemas/flow-draft-invalid.json", string(out.Error.Details))
+	if want := `{"dir":` + clitest.JSONString(p.Dir) + `,"problems":[{"code":"unknown_executor","file":"stages/review.yaml","line":3,` +
+		`"message":` + clitest.JSONString(noReviewer) + `}],"project":"shop"}`; string(out.Error.Details) != want {
 		t.Errorf("details:\n%s\nwant:\n%s", out.Error.Details, want)
 	}
 
-	// Once the flow does without the subagent, the library is applied.
+	// Once the flow does without the subagent, both are applied.
 	clitest.WriteDraft(t, p, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания ревью записаны и разобраны\nexecutor: orchestrator\ninclude: [review-checklist]\n"})
 	clitest.MustRun(t, "flow", "apply")
-	clitest.MustRun(t, "library", "apply")
 }
 
 func TestSyncLaysOutFreeWorktrees(t *testing.T) {
@@ -413,13 +412,13 @@ func TestSyncLaysOutFreeWorktrees(t *testing.T) {
 	file := filepath.Join(shop, ".claude", "agents", "reviewer.md")
 
 	m.onA()
-	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
-	clitest.MustRun(t, "library", "apply")
+	clitest.WriteFiles(t, clitest.ShopPlaces().Shared, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
+	clitest.MustRun(t, "flow", "apply")
 	os.Remove(file)
 
 	m.onB()
 	_, stdout, _ := clitest.Run("process", "sync")
-	want := synced + clitest.Lines("", msg.Text(msg.ProcessReceived), "  "+msg.Text(msg.KindLibrary), "") + laidOut
+	want := synced + clitest.Lines("", msg.Text(msg.ProcessReceived), "  "+msg.Text(msg.KindShared), "") + laidOut
 	if stdout != want {
 		t.Errorf("process sync:\n%s\nwant:\n%s", stdout, want)
 	}
@@ -435,11 +434,11 @@ func TestImplicitSyncLaysOut(t *testing.T) {
 	file := filepath.Join(shop, ".claude", "agents", "reviewer.md")
 
 	m.onA()
-	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
-	clitest.MustRun(t, "library", "apply")
+	clitest.WriteFiles(t, clitest.ShopPlaces().Shared, map[string]string{"reviewer.md": "Проверить изменения и тексты.\n"})
+	clitest.MustRun(t, "flow", "apply")
 	os.Remove(file)
 
-	// flow show takes the library on its way: the block goes with the
+	// flow show takes the shared subagents on its way: the block goes with the
 	// messages of the synchronization, before the output.
 	m.onB()
 	_, _, stderr := clitest.Run("flow", "show")
@@ -459,7 +458,7 @@ func TestProjectAddWithFlow(t *testing.T) {
 
 	// A third machine takes the process first, then connects the shop.
 	t.Setenv(home.EnvVar, filepath.Join(filepath.Dir(m.a), "home-c"))
-	clitest.MustRun(t, "process", "remote", m.remote)
+	clitest.MustRun(t, "process", "remote", "set", m.remote)
 	_, stdout, _ := clitest.Run("project", "add", "--knowledge", "../shop-knowledge")
 	if !strings.Contains(stdout, "\n\n"+laidOut) {
 		t.Errorf("project add:\n%s", stdout)

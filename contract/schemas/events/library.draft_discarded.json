@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/events/library.draft_discarded.json",
   "title": "LibraryDraftDiscardedData",
-  "description": "Data of the library.draft_discarded event: the library directory is back to the active library. The event has no project; the data is an empty object.",
+  "description": "Data of the library.draft_discarded event of earlier versions of Gentry: the directory of the shared subagents, then called the library of subagents, is back to its active content. The event has no project; the data is an empty object. Gentry no longer writes it: the draft of the shared subagents is discarded with the flow of a project, by flow.draft_discarded; the journal keeps the events written before.",
   "type": "object",
   "properties": {}
 }

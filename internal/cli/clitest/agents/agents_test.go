@@ -45,12 +45,12 @@ var (
 // changed is the line of the subagents of one worktree changed.
 func changed(change string) string { return msg.Text(msg.AgentsWorktreeChanged, change) }
 
-// changeLibrary rewrites the instruction of reviewer in the library and
-// applies it.
-func changeLibrary(t *testing.T, text string) string {
+// changeShared rewrites the instruction of the shared reviewer and applies
+// it by flow apply of the shop.
+func changeShared(t *testing.T, text string) string {
 	t.Helper()
-	clitest.WriteFiles(t, clitest.ShopPlaces().Library, map[string]string{"reviewer.md": text})
-	_, stdout, _ := clitest.Run("library", "apply")
+	clitest.WriteFiles(t, clitest.ShopPlaces().Shared, map[string]string{"reviewer.md": text})
+	_, stdout, _ := clitest.Run("flow", "apply")
 	return stdout
 }
 
@@ -166,9 +166,9 @@ func TestApplyLaysOutFreeWorktreesOnly(t *testing.T) {
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	before := read(t, reviewerFile(fix))
 
-	stdout := changeLibrary(t, "Проверить изменения и тексты.\n")
-	if !strings.HasSuffix(clitest.Masked(stdout), "\n\n"+clitest.Lines(msg.Text(msg.AgentsFreeSyncedAll), nextSession)) {
-		t.Errorf("library apply:\n%s", stdout)
+	stdout := changeShared(t, "Проверить изменения и тексты.\n")
+	if !strings.HasSuffix(clitest.Masked(stdout), "\n\n"+clitest.Lines(msg.Text(msg.AgentsFreeSynced, "shop"), nextSession)) {
+		t.Errorf("flow apply:\n%s", stdout)
 	}
 	if !strings.Contains(read(t, reviewerFile(shop)), "Проверить изменения и тексты.") {
 		t.Error("the free worktree keeps the old reviewer")
@@ -205,7 +205,7 @@ func TestFlowApplyRemoves(t *testing.T) {
 	}
 }
 
-func TestAgentsSync(t *testing.T) {
+func TestAgentsDeploy(t *testing.T) {
 	shop, fix := clitest.TaskShop(t)
 	clitest.MustRun(t, clitest.TakeArgs("--worktree", fix)...)
 	gone := filepath.Join(filepath.Dir(shop), "shop-gone")
@@ -219,17 +219,17 @@ func TestAgentsSync(t *testing.T) {
 		[]string{shop, clitest.None, "reviewer", clitest.None},
 		[]string{fix, "SHOP-1", "reviewer", clitest.None},
 		[]string{gone, clitest.None, clitest.None, missing},
-	), "", "agents", "sync")
+	), "", "agents", "deploy")
 
 	os.Remove(reviewerFile(shop))
-	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.AgentsSynced, "shop"), nextSession, "")+clitest.Table(header,
+	clitest.WantRun(t, contract.ExitOK, clitest.Lines(msg.Text(msg.AgentsDeployed, "shop"), nextSession, "")+clitest.Table(header,
 		[]string{shop, clitest.None, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
 		[]string{fix, "SHOP-1", "reviewer", clitest.None},
 		[]string{gone, clitest.None, clitest.None, missing},
-	), "", "agents", "sync")
+	), "", "agents", "deploy")
 
-	out := clitest.WantJSON(t, contract.ExitOK, "schemas/agents-sync.json", "agents", "sync")
-	var res contract.AgentsSyncOutput
+	out := clitest.WantJSON(t, contract.ExitOK, "schemas/agents-deploy.json", "agents", "deploy")
+	var res contract.AgentsDeployOutput
 	json.Unmarshal([]byte(out), &res)
 	if res.Project != "shop" || res.Changed || len(res.Worktrees) != 3 || res.Worktrees[1].Task == nil || *res.Worktrees[1].Task != "SHOP-1" {
 		t.Errorf("JSON: %s", out)
@@ -238,7 +238,7 @@ func TestAgentsSync(t *testing.T) {
 	// A conflict in any worktree refuses the command and changes nothing.
 	os.Remove(reviewerFile(shop))
 	os.WriteFile(reviewerFile(fix), []byte("личный\n"), 0o644)
-	if code, c := clitest.ErrorCode(t, "agents", "sync"); code != contract.ExitError || c != contract.CodeAgentsConflict {
+	if code, c := clitest.ErrorCode(t, "agents", "deploy"); code != contract.ExitError || c != contract.CodeAgentsConflict {
 		t.Errorf("conflict: exit code %d, code %q", code, c)
 	}
 	if clitest.FileExists(reviewerFile(shop)) {
@@ -251,10 +251,10 @@ func TestAgentsSync(t *testing.T) {
 func passScenario(t *testing.T) {
 	t.Helper()
 	for range 3 {
-		clitest.MustRun(t, "stage", "skip", "--reason", "Не нужен")
+		clitest.MustRun(t, "task", "stage", "skip", "--reason", "Не нужен")
 	}
-	clitest.MustRun(t, "stage", "skip", "--reason", "Не нужен", "--to", "merge")
-	clitest.MustRun(t, "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
+	clitest.MustRun(t, "task", "stage", "skip", "--reason", "Не нужен", "--to", "merge")
+	clitest.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
 }
 
 func TestCloseAndFlowApplyWithTask(t *testing.T) {
@@ -293,7 +293,7 @@ func TestLayoutFailure(t *testing.T) {
 
 	code, stdout, _ := clitest.Run("worktree", "add", extra)
 	head := clitest.Lines(msg.Text(msg.WorktreeAdded, "shop", extra), "", msg.Text(msg.AgentsSyncFailed))
-	tail := clitest.Lines("", cli.HintText(msg.HintAgentsSyncFailed))
+	tail := clitest.Lines("", cli.HintText(msg.HintAgentsDeployFailed))
 	if code != contract.ExitOK || !strings.HasPrefix(stdout, head+msg.Text(msg.AgentsSyncFailedReason, "")) || !strings.HasSuffix(stdout, tail) {
 		t.Errorf("exit code %d, output:\n%s", code, stdout)
 	}

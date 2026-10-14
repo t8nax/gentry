@@ -18,8 +18,8 @@ func (a Applied) MarshalJSON() ([]byte, error) {
 
 // MarshalJSON writes the time of the synchronization in TimeFormat. Fields
 // keep the order of the other outputs: by name.
-func (s ProcessStatusOutput) MarshalJSON() ([]byte, error) {
-	type plain ProcessStatusOutput
+func (s ProcessShowOutput) MarshalJSON() ([]byte, error) {
+	type plain ProcessShowOutput
 	b, err := json.Marshal(plain(s))
 	if err != nil {
 		return nil, err

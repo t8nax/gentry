@@ -57,11 +57,11 @@ func TestHelpText(t *testing.T) {
 		}
 	}
 
-	record, _ := lookup("operator record")
+	record, _ := lookup("task decision add")
 	got = describe(record)
 	if !strings.Contains(got, "Поля одним объектом JSON: question, options, answer, allow_return.\n") ||
 		!strings.Contains(got, "Варианты в options — объекты с полями:\n") {
-		t.Errorf("operator record --help:\n%s", got)
+		t.Errorf("task decision add --help:\n%s", got)
 	}
 
 	flowGroup, _ := topLevel("flow")
@@ -86,16 +86,224 @@ func TestHelpText(t *testing.T) {
 	got = describe(flowShow)
 	for _, part := range []string{
 		lines(
-			"Показать сценарии, этапы и субагентов флоу проекта.",
-			"В рабочей копии с задачей выводится флоу задачи.",
+			"Показать сценарии, этапы и субагентов действующего флоу проекта.",
 			"С флагом объекта выводится этот объект подробно.",
 			"Если во флоу есть ошибки, выводится их перечень.",
 		),
-		"  gentry flow show [--scenario <сценарий> | --stage <этап> | --agent <субагент> | --part <фрагмент>] [--active | --draft] [--project <идентификатор>] [--json]\n",
-		"  --active                    Показать действующий флоу проекта, а не флоу задачи рабочей копии.\n",
+		"  gentry flow show [--scenario <сценарий> | --stage <этап> | --agent <субагент> | --part <фрагмент>] [--draft] [--project <идентификатор>] [--json]\n",
 	} {
 		if !strings.Contains(got, part) {
 			t.Errorf("flow show --help:\n%s\nwant within:\n%s", got, part)
+		}
+	}
+}
+
+// part returns the group or the action of a group named by the words of its
+// name, such as task, flow.
+func part(t *testing.T, words ...string) command {
+	t.Helper()
+	c, ok := topLevel(words[0])
+	for _, w := range words[1:] {
+		if !ok {
+			break
+		}
+		c, ok = c.action(w)
+	}
+	if !ok {
+		t.Fatalf("no command %v", words)
+	}
+	return c
+}
+
+// TestSchemeHelpText states the help of the groups, parts and actions the
+// scheme gentry <object> [<part>] <verb> brings: the list of commands, the
+// group task with its parts, the parts and their actions.
+func TestSchemeHelpText(t *testing.T) {
+	for _, tt := range []struct {
+		words []string
+		want  string
+	}{
+		{[]string{"task"}, lines(
+			"Взять задачу в работу или отменить её, показать задачу или перечень задач и работать с частями задачи.",
+			"",
+			"Использование:",
+			"  gentry task <действие> [аргументы] [флаги]",
+			"  gentry task <часть> <действие> [аргументы] [флаги]",
+			"",
+			"Действия:",
+			"  take       Взять задачу в работу",
+			"  show       Показать задачу",
+			"  list       Показать задачи",
+			"  cancel     Отменить задачу",
+			"",
+			"Части задачи:",
+			"  flow       Показать флоу задачи",
+			"  stage      Показать этап задачи",
+			"  note       Добавить или показать заметки задачи",
+			"  decision   Записать решение оператора",
+			"  attempt    Показать попытки задачи",
+			"",
+			"Посмотреть описание действия: gentry task <действие> --help",
+			"Посмотреть действия части: gentry task <часть> --help",
+		)},
+		{[]string{"task", "flow"}, lines(
+			"Показать флоу, по которому идёт задача.",
+			"",
+			"Использование:",
+			"  gentry task flow <действие> [аргументы] [флаги]",
+			"",
+			"Действия:",
+			"  show   Показать флоу задачи",
+			"",
+			"Посмотреть описание действия: gentry task flow <действие> --help",
+		)},
+		{[]string{"task", "decision"}, lines(
+			"Записать решение оператора по задаче.",
+			"",
+			"Использование:",
+			"  gentry task decision <действие> [аргументы] [флаги]",
+			"",
+			"Действия:",
+			"  add   Записать решение оператора",
+			"",
+			"Посмотреть описание действия: gentry task decision <действие> --help",
+		)},
+		{[]string{"task", "attempt"}, lines(
+			"Показать попытки задачи.",
+			"Каждое взятие отменённой задачи заново начинает следующую попытку.",
+			"",
+			"Использование:",
+			"  gentry task attempt <действие> [аргументы] [флаги]",
+			"",
+			"Действия:",
+			"  list   Показать попытки задачи",
+			"  show   Показать одну попытку целиком",
+			"",
+			"Посмотреть описание действия: gentry task attempt <действие> --help",
+		)},
+		{[]string{"task", "stage"}, lines(
+			"Показать текущий этап задачи.",
+			"",
+			"Использование:",
+			"  gentry task stage <действие> [аргументы] [флаги]",
+			"",
+			"Действия:",
+			"  show   Показать текущий этап задачи",
+			"",
+			"Посмотреть описание действия: gentry task stage <действие> --help",
+		)},
+		{[]string{"process", "remote"}, lines(
+			"Подключить удалённый репозиторий процесса.",
+			"",
+			"Использование:",
+			"  gentry process remote <действие> [аргументы] [флаги]",
+			"",
+			"Действия:",
+			"  set   Подключить удалённый репозиторий процесса или заменить его адрес",
+			"",
+			"Посмотреть описание действия: gentry process remote <действие> --help",
+		)},
+	} {
+		if got := groupHelp(part(t, tt.words...)); got != tt.want {
+			t.Errorf("%s --help:\n%s\nwant:\n%s", strings.Join(tt.words, " "), got, tt.want)
+		}
+	}
+
+	for _, tt := range []struct {
+		words []string
+		parts []string
+	}{
+		{[]string{"process"}, []string{lines(
+			"Синхронизировать процесс оператора между машинами.",
+			"Процесс — флоу проектов и общие субагенты; он хранится в git и передаётся через удалённый репозиторий.",
+		), lines(
+			"Действия:",
+			"  remote   Подключить удалённый репозиторий процесса",
+			"  sync     Синхронизировать процесс",
+			"  show     Показать состояние процесса",
+		)}},
+		{[]string{"agents"}, []string{lines(
+			"Действия:",
+			"  deploy   Разложить субагентов флоу во все рабочие копии пула проекта",
+		)}},
+	} {
+		got := groupHelp(part(t, tt.words...))
+		for _, p := range tt.parts {
+			if !strings.Contains(got, p) {
+				t.Errorf("%s --help:\n%s\nwant within:\n%s", strings.Join(tt.words, " "), got, p)
+			}
+		}
+	}
+
+	for _, tt := range []struct {
+		words []string
+		parts []string
+	}{
+		{[]string{"task", "take"}, []string{
+			"\nОтменённую задачу можно взять заново: укажите её номер аргументом.\n",
+			"  gentry task take [<задача>] [--scenario <сценарий>] [--title <название>]",
+			"  <задача>                Отменённая задача, которую нужно взять заново.\n" +
+				"                          Название и постановка берутся из неё.\n",
+			"  --input <файл>          Поля задачи одним объектом JSON: scenario, title, statement, worktree.\n" +
+				"                          Вместо файла можно указать «-» — стандартный ввод. Вместе с флагами полей не указывается.\n",
+		}},
+		{[]string{"flow", "diff"}, []string{lines(
+			"Показать, чем черновик флоу проекта и общих субагентов отличается от действующего.",
+			"Подробности со схемами сценариев записываются в файл изменений.",
+			"",
+		)}},
+		{[]string{"flow", "apply"}, []string{lines(
+			"Проверить черновик флоу проекта и общих субагентов и сделать его действующим на всех машинах.",
+			"Черновик с ошибками не применяется.",
+			"Изменения общих субагентов касаются всех проектов, которые их называют.",
+			"",
+		)}},
+		{[]string{"flow", "discard"}, []string{lines(
+			"Вернуть папку флоу проекта и папку общих субагентов к действующему виду.",
+			"Изменения черновика теряются.",
+			"",
+		)}},
+		{[]string{"task", "cancel"}, []string{
+			"\nОтменённую задачу можно взять заново: gentry task take <задача> --scenario <сценарий>\n",
+		}},
+		{[]string{"task", "flow", "show"}, []string{
+			lines(
+				"Показать сценарии, этапы и субагентов флоу, по которому идёт задача.",
+				"Задача идёт по флоу, сохранённому при её взятии, даже если действующий флоу проекта изменён.",
+				"С флагом объекта выводится этот объект подробно.",
+			),
+			"  gentry task flow show [--scenario <сценарий> | --stage <этап> | --agent <субагент> | --part <фрагмент>] [--task <задача>] [--json]\n",
+		}},
+		{[]string{"task", "attempt", "show"}, []string{
+			"  gentry task attempt show <попытка> [--task <задача>] [--json]\n",
+			"  <попытка>         Номер попытки.\n",
+		}},
+		{[]string{"task", "attempt", "list"}, []string{
+			"Показать попытки задачи: состояние, сценарий, время взятия и завершения, причину отмены.\n",
+		}},
+		{[]string{"task", "attempt", "show"}, []string{
+			"Показать одну попытку задачи целиком: состояние, пройденный путь с шагами, артефакты, заметки и решения оператора.\n",
+		}},
+		{[]string{"process", "remote", "set"}, []string{lines(
+			"Подключить удалённый репозиторий процесса или заменить его адрес.",
+			"Репозиторий нужно создать заранее и сделать закрытым.",
+			"Если процесс есть и на машине, и в репозитории, они сводятся, а отличия этой машины сохраняются как черновики.",
+			"",
+			"Использование:",
+			"  gentry process remote set <адрес> [--json]",
+		)}},
+		{[]string{"task", "decision", "add"}, []string{lines(
+			"Записать решение оператора по задаче: ответ на вопрос или указание без вопроса.",
+			"Слова оператора указываются дословно.",
+			"Варианты ответа передаются через --input.",
+			"Решения оператора не изменяются и не удаляются; чтобы отменить решение, запишите новое.",
+		)}},
+	} {
+		got := describe(part(t, tt.words...))
+		for _, p := range tt.parts {
+			if !strings.Contains(got, p) {
+				t.Errorf("%s --help:\n%s\nwant within:\n%s", strings.Join(tt.words, " "), got, p)
+			}
 		}
 	}
 }
@@ -183,7 +391,47 @@ func TestSetupText(t *testing.T) {
 		), ""},
 	}
 	for _, tt := range tests {
-		wantText(t, tt.name, func(p *page) { setupText(p, tt.out) }, tt.cli, tt.agent)
+		wantText(t, tt.name, func(p *page) { setupText(p, tt.out, setupExtra{}) }, tt.cli, tt.agent)
+	}
+
+	// With a project connected, an updated or switched plugin asks to lay
+	// out the subagents anew, last; a plugin installed or unchanged does not.
+	deploy := "Переложить субагентов в рабочие копии каждого проекта: gentry agents deploy --project <идентификатор>"
+	deployTool := hintLineOf(msg.HintAgentsDeployAll, "agents_deploy (project)")
+	withProjects := []struct {
+		name       string
+		out        contract.SetupOutput
+		cli, agent string
+	}{
+		{"updated with projects", setup(claude.Updated, claude.PermissionPresent, true), lines(
+			msg.Text(msg.SetupUpdated),
+			"",
+			deploy,
+		), lines(
+			msg.Text(msg.SetupUpdated),
+			"",
+			deployTool,
+		)},
+		{"switched and disabled with projects", disabled, lines(
+			msg.Text(msg.SetupSwitched, previous),
+			"",
+			msg.Text(msg.SetupDisabled),
+			"",
+			msg.Text(msg.HintPluginEnable),
+			deploy,
+		), lines(
+			msg.Text(msg.SetupSwitched, previous),
+			"",
+			msg.Text(msg.SetupDisabled),
+			"",
+			msg.Text(msg.HintPluginEnable),
+			deployTool,
+		)},
+		{"installed with projects", setup(claude.Installed, claude.PermissionPresent, true), msg.Text(msg.SetupInstalled) + "\n", ""},
+		{"unchanged with projects", setup(claude.Unchanged, claude.PermissionPresent, true), msg.Text(msg.SetupUnchanged) + "\n", ""},
+	}
+	for _, tt := range withProjects {
+		wantText(t, tt.name, func(p *page) { setupText(p, tt.out, setupExtra{projects: true}) }, tt.cli, tt.agent)
 	}
 }
 

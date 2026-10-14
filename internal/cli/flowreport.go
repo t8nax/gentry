@@ -19,10 +19,10 @@ func (d diffView) report(now time.Time) string {
 	fmt.Fprintln(&b, msg.Text(msg.ReportTitle, d.project))
 	b.WriteString("\n")
 	head := []string{msg.Text(msg.FlowProject, d.project), flowAppliedLine(d.res)}
-	if res.Library != nil {
-		head = append(head, msg.Text(msg.LibraryAppliedAt, appliedText(appliedJSON(res.Library.Applied))))
+	if res.Shared != nil {
+		head = append(head, msg.Text(msg.SharedAppliedAt, appliedText(appliedJSON(res.Shared.Applied))))
 	}
-	problems := d.problems()
+	problems := d.res.Problems
 	if len(problems) == 0 {
 		head = append(head, msg.Text(msg.ReportProblemsNone))
 	}
@@ -48,10 +48,10 @@ func (d diffView) report(now time.Time) string {
 	for _, c := range res.Changes {
 		rows = append(rows, []string{d.objectName(c), changeWord(c)})
 	}
-	if res.Library != nil {
-		for _, c := range res.Library.Changes {
+	if res.Shared != nil {
+		for _, c := range res.Shared.Changes {
 			word := changeWord(flow.Change{Object: flow.ObjectAgent, Change: c.Change})
-			rows = append(rows, []string{msg.Text(msg.FlowObjLibraryAgent, c.ID), word + "; " + usedBy(c.Projects)})
+			rows = append(rows, []string{msg.Text(msg.FlowObjSharedAgent, c.ID), word + "; " + usedBy(c.Projects)})
 		}
 	}
 	if len(rows) > 1 {
@@ -82,11 +82,11 @@ func (d diffView) report(now time.Time) string {
 			})
 		}
 	}
-	if res.Library != nil && len(res.Library.Changes) > 0 {
-		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.ReportLibrary))
-		for _, c := range res.Library.Changes {
+	if res.Shared != nil && len(res.Shared.Changes) > 0 {
+		fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.ReportShared))
+		for _, c := range res.Shared.Changes {
 			word := changeWord(flow.Change{Object: flow.ObjectAgent, Change: c.Change})
-			fmt.Fprintf(&b, "\n%s\n\n", msg.Text(msg.ReportLibraryAgent, c.ID, word))
+			fmt.Fprintf(&b, "\n%s\n\n", msg.Text(msg.ReportSharedAgent, c.ID, word))
 			projects := msg.Text(msg.ReportProjects, joined(c.Projects))
 			d.writeAgent(&b, c.Change, c.Old, c.New, func(*flow.Flow) string { return projects })
 		}
@@ -346,7 +346,7 @@ func (d diffView) writePart(b *strings.Builder, c flow.Change) {
 // is none.
 func projectAgent(fl *flow.Flow, id string) *flow.Agent {
 	for _, a := range fl.Agents {
-		if a.ID == id && !a.Library {
+		if a.ID == id && !a.Shared {
 			return &a
 		}
 	}
@@ -355,7 +355,7 @@ func projectAgent(fl *flow.Flow, id string) *flow.Agent {
 
 // writeAgent prints the fields of a changed subagent. lead is the line
 // about where it is used: the stages of a subagent of the project, the
-// projects of one of the library.
+// projects of one of the shared subagents.
 func (d diffView) writeAgent(b *strings.Builder, change string, old, cur *flow.Agent, lead func(*flow.Flow) string) {
 	fields := func(a *flow.Agent, fl *flow.Flow) {
 		writeLines(b, []string{

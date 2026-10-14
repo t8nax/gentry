@@ -29,13 +29,13 @@ func runHelp(args []string, env Env) int {
 	if !ok || c.agentOnly {
 		return fail(env, unknownCommand(f.args[0]))
 	}
-	if len(f.args) == 2 {
+	for i, name := range f.args[1:] {
 		if c.actions == nil {
-			return fail(env, extraArgs("help", f.args[1:]))
+			return fail(env, extraArgs("help", f.args[1+i:]))
 		}
-		a, ok := c.action(f.args[1])
+		a, ok := c.action(name)
 		if !ok || a.agentOnly {
-			return fail(env, unknownAction(c, f.args[1]))
+			return fail(env, unknownAction(c, name))
 		}
 		c = a
 	}
@@ -107,20 +107,40 @@ func commandList() string {
 	return b.String()
 }
 
-// groupHelp is the help of a group: what it is for and its actions.
+// groupHelp is the help of a group: what it is for, its actions and, for a
+// group with a heading of parts, its parts, which have actions of their own.
+// Actions and parts share one column width, as one table. A group of actions
+// in a group without such a heading is listed among its actions, as process
+// remote is.
 func groupHelp(g command) string {
-	var rows []row
+	var actions, parts []row
 	for _, a := range g.actions {
 		if a.agentOnly {
 			continue
 		}
-		rows = append(rows, row{strings.TrimPrefix(a.name, g.name+" "), msg.Text(a.summary)})
+		r := row{strings.TrimPrefix(a.name, g.name+" "), msg.Text(a.summary)}
+		if a.actions != nil && g.parts != "" {
+			parts = append(parts, r)
+		} else {
+			actions = append(actions, r)
+		}
 	}
+	width := nameWidth(slices.Concat(actions, parts))
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n\n%s\n  %s\n\n%s\n", msg.Text(g.desc), msg.Text(msg.HelpUsageTitle),
-		msg.Text(msg.HelpGroupUsage, g.name), msg.Text(msg.HelpActions))
-	writeRows(&b, rows, nameWidth(rows))
+	fmt.Fprintf(&b, "%s\n\n%s\n  %s\n", msg.Text(g.desc), msg.Text(msg.HelpUsageTitle), msg.Text(msg.HelpGroupUsage, g.name))
+	if len(parts) > 0 {
+		fmt.Fprintf(&b, "  %s\n", msg.Text(msg.HelpPartUsage, g.name))
+	}
+	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HelpActions))
+	writeRows(&b, actions, width)
+	if len(parts) > 0 {
+		fmt.Fprintf(&b, "\n%s\n", msg.Text(g.parts))
+		writeRows(&b, parts, width)
+	}
 	fmt.Fprintf(&b, "\n%s\n", msg.Text(msg.HelpGroupMore, g.name))
+	if len(parts) > 0 {
+		fmt.Fprintf(&b, "%s\n", msg.Text(msg.HelpPartMore, g.name))
+	}
 	return b.String()
 }
 

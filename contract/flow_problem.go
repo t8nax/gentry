@@ -14,8 +14,8 @@ type FlowProblem struct {
 	Code string `json:"code"`
 
 	// Path of the file inside the flow, with forward slashes, such as
-	// scenarios/bug.yaml; absent when the problem is of the whole flow or of a
-	// subagent of the library.
+	// scenarios/bug.yaml; absent when the problem is of the whole flow or of a shared
+	// subagent.
 	File *string `json:"file,omitempty,omitzero"`
 
 	// Line of the file, from 1; absent when unknown.

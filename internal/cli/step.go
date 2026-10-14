@@ -18,7 +18,7 @@ var (
 )
 
 func runStepAdd(args []string, env Env) int {
-	const cmd = "step add"
+	const cmd = "task step add"
 	f := newFlags(cmd)
 	key := f.String("task")
 	input := f.String("input")
@@ -61,16 +61,17 @@ func runStepAdd(args []string, env Env) int {
 }
 
 func runStepDone(args []string, env Env) int {
-	return runStepClose("step done", args, env)
+	return runStepClose("task step done", args, env)
 }
 
 func runStepDrop(args []string, env Env) int {
-	return runStepClose("step drop", args, env)
+	return runStepClose("task step drop", args, env)
 }
 
-// runStepClose marks a step done for step done, or drops it for step drop.
+// runStepClose marks a step done for task step done, or drops it for task
+// step drop.
 func runStepClose(cmd string, args []string, env Env) int {
-	done := cmd == "step done"
+	done := cmd == "task step done"
 	fields, textField := stepDoneFields, "check"
 	if !done {
 		fields, textField = stepDropFields, "reason"
@@ -118,12 +119,12 @@ func runStepClose(cmd string, args []string, env Env) int {
 // number of steps left with, once none is left, the hint to close the stage.
 // The table of steps is in task show.
 func writeSteps(env Env, w wayTask, res task.Steps, change stepChange) int {
-	out := contract.StepListOutput{Task: res.Task.Key(), Node: res.Pass.Node, Round: res.Pass.Round, Steps: stepsJSON(res.Pass.Steps)}
+	out := contract.TaskStepListOutput{Task: res.Task.Key(), Node: res.Pass.Node, Round: res.Pass.Round, Steps: stepsJSON(res.Pass.Steps)}
 	if res.Added != nil {
 		out.Added = res.Added
 	}
 	hints := w.hints(hintOf(msg.HintStageExit))
-	return emit(env, out, func(p *page, out contract.StepListOutput) { stepsText(p, out, change, hints) })
+	return emit(env, out, func(p *page, out contract.TaskStepListOutput) { stepsText(p, out, change, hints) })
 }
 
 // stepChange is the step a command marked, which the contract has not: its
@@ -136,7 +137,7 @@ type stepChange struct {
 
 // stepsText prints what changed, then the numbers of the steps added or the
 // number of steps left; hints are the hints for the task.
-func stepsText(p *page, out contract.StepListOutput, change stepChange, hints []hint) {
+func stepsText(p *page, out contract.TaskStepListOutput, change stepChange, hints []hint) {
 	switch {
 	case change.step == 0:
 		fmt.Fprintln(p, msg.Text(msg.StepsAdded, len(out.Added)))

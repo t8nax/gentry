@@ -43,49 +43,10 @@ func (j *FlowChange) UnmarshalJSON(value []byte) error {
 	return nil
 }
 
-type FlowDiffLibraryChange struct {
-	// What happened to the subagent.
-	Change FlowDiffOutputLibraryChangesElemChange `json:"change"`
-
-	// Identifier of the subagent, the name of its files.
-	Id string `json:"id"`
-
-	// Projects whose flows name the subagent as the executor of a stage and do not
-	// replace it with a subagent of their own, sorted: the project of the command by
-	// its draft, the others by their active flows. May be empty.
-	Projects []string `json:"projects"`
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-func (j *FlowDiffLibraryChange) UnmarshalJSON(value []byte) error {
-	var raw map[string]interface{}
-	if err := json.Unmarshal(value, &raw); err != nil {
-		return err
-	}
-	if _, ok := raw["change"]; raw != nil && !ok {
-		return fmt.Errorf("field change in FlowDiffLibraryChange: required")
-	}
-	if _, ok := raw["id"]; raw != nil && !ok {
-		return fmt.Errorf("field id in FlowDiffLibraryChange: required")
-	}
-	if _, ok := raw["projects"]; raw != nil && !ok {
-		return fmt.Errorf("field projects in FlowDiffLibraryChange: required")
-	}
-	type Plain FlowDiffLibraryChange
-	var plain Plain
-	if err := json.Unmarshal(value, &plain); err != nil {
-		return err
-	}
-	if utf8.RuneCountInString(string(plain.Id)) < 1 {
-		return fmt.Errorf("field %s length: must be >= %d", "id", 1)
-	}
-	*j = FlowDiffLibraryChange(plain)
-	return nil
-}
-
-// Output of `gentry flow diff --json`: the objects of the drafts of the flow of a
-// project and of the library of subagents that differ from the active ones, and
-// the file of changes with them in full.
+// Output of `gentry flow diff --json`: the objects of the draft of the flow of a
+// project that differ from the active flow: of its flow directory and of the
+// shared subagents, which the draft of every project holds; and the file of
+// changes with them in full.
 type FlowDiffOutput struct {
 	// The commit that applied the active flow the draft is compared with; absent if
 	// the project has no flow, and then every object of the draft is added.
@@ -93,11 +54,8 @@ type FlowDiffOutput struct {
 
 	// Changed objects of the flow: the common rules first, then scenarios, stages,
 	// parts and subagents of the project, each kind by identifier. Empty if only the
-	// library has a draft.
+	// shared subagents have changes.
 	Changes []FlowChange `json:"changes"`
-
-	// The draft of the library of subagents; absent if the library has none.
-	Library *FlowDiffOutputLibrary `json:"library,omitempty,omitzero"`
 
 	// Identifier of the project.
 	Project string `json:"project"`
@@ -105,6 +63,9 @@ type FlowDiffOutput struct {
 	// Absolute path of the file of changes: schemas of the scenarios and the changed
 	// objects in full, in markdown. Gentry writes it anew at each call.
 	Report string `json:"report"`
+
+	// The changes of the shared subagents; absent if they have none.
+	Shared *FlowDiffOutputShared `json:"shared,omitempty,omitzero"`
 
 	// What the synchronization before the command did; present only when there is
 	// something to tell.
@@ -179,63 +140,63 @@ func (j *FlowDiffOutputChangesElemObject) UnmarshalJSON(value []byte) error {
 	return nil
 }
 
-// The draft of the library of subagents; absent if the library has none.
-type FlowDiffOutputLibrary struct {
-	// The commit that applied the active library; absent if the library has never
+// The changes of the shared subagents; absent if they have none.
+type FlowDiffOutputShared struct {
+	// The commit that last applied the shared subagents; absent if they have never
 	// been applied.
 	Applied *Applied `json:"applied,omitempty,omitzero"`
 
-	// Changed subagents of the library by identifier.
-	Changes []FlowDiffLibraryChange `json:"changes"`
+	// Changed shared subagents by identifier.
+	Changes []FlowDiffSharedChange `json:"changes"`
 }
 
-type FlowDiffOutputLibraryChangesElemChange string
+type FlowDiffOutputSharedChangesElemChange string
 
-const FlowDiffOutputLibraryChangesElemChangeAdded FlowDiffOutputLibraryChangesElemChange = "added"
-const FlowDiffOutputLibraryChangesElemChangeModified FlowDiffOutputLibraryChangesElemChange = "modified"
-const FlowDiffOutputLibraryChangesElemChangeRemoved FlowDiffOutputLibraryChangesElemChange = "removed"
+const FlowDiffOutputSharedChangesElemChangeAdded FlowDiffOutputSharedChangesElemChange = "added"
+const FlowDiffOutputSharedChangesElemChangeModified FlowDiffOutputSharedChangesElemChange = "modified"
+const FlowDiffOutputSharedChangesElemChangeRemoved FlowDiffOutputSharedChangesElemChange = "removed"
 
-var enumValues_FlowDiffOutputLibraryChangesElemChange = []interface{}{
+var enumValues_FlowDiffOutputSharedChangesElemChange = []interface{}{
 	"added",
 	"modified",
 	"removed",
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *FlowDiffOutputLibraryChangesElemChange) UnmarshalJSON(value []byte) error {
+func (j *FlowDiffOutputSharedChangesElemChange) UnmarshalJSON(value []byte) error {
 	var v string
 	if err := json.Unmarshal(value, &v); err != nil {
 		return err
 	}
 	var ok bool
-	for _, expected := range enumValues_FlowDiffOutputLibraryChangesElemChange {
+	for _, expected := range enumValues_FlowDiffOutputSharedChangesElemChange {
 		if reflect.DeepEqual(v, expected) {
 			ok = true
 			break
 		}
 	}
 	if !ok {
-		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_FlowDiffOutputLibraryChangesElemChange, v)
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_FlowDiffOutputSharedChangesElemChange, v)
 	}
-	*j = FlowDiffOutputLibraryChangesElemChange(v)
+	*j = FlowDiffOutputSharedChangesElemChange(v)
 	return nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (j *FlowDiffOutputLibrary) UnmarshalJSON(value []byte) error {
+func (j *FlowDiffOutputShared) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
 	}
 	if _, ok := raw["changes"]; raw != nil && !ok {
-		return fmt.Errorf("field changes in FlowDiffOutputLibrary: required")
+		return fmt.Errorf("field changes in FlowDiffOutputShared: required")
 	}
-	type Plain FlowDiffOutputLibrary
+	type Plain FlowDiffOutputShared
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
-	*j = FlowDiffOutputLibrary(plain)
+	*j = FlowDiffOutputShared(plain)
 	return nil
 }
 
@@ -266,5 +227,45 @@ func (j *FlowDiffOutput) UnmarshalJSON(value []byte) error {
 		return fmt.Errorf("field %s length: must be >= %d", "report", 1)
 	}
 	*j = FlowDiffOutput(plain)
+	return nil
+}
+
+type FlowDiffSharedChange struct {
+	// What happened to the subagent.
+	Change FlowDiffOutputSharedChangesElemChange `json:"change"`
+
+	// Identifier of the subagent, the name of its files.
+	Id string `json:"id"`
+
+	// Projects whose flows name the subagent as the executor of a stage and do not
+	// replace it with a subagent of their own, sorted: the project of the command by
+	// its draft, the others by their active flows. May be empty.
+	Projects []string `json:"projects"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *FlowDiffSharedChange) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["change"]; raw != nil && !ok {
+		return fmt.Errorf("field change in FlowDiffSharedChange: required")
+	}
+	if _, ok := raw["id"]; raw != nil && !ok {
+		return fmt.Errorf("field id in FlowDiffSharedChange: required")
+	}
+	if _, ok := raw["projects"]; raw != nil && !ok {
+		return fmt.Errorf("field projects in FlowDiffSharedChange: required")
+	}
+	type Plain FlowDiffSharedChange
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if utf8.RuneCountInString(string(plain.Id)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "id", 1)
+	}
+	*j = FlowDiffSharedChange(plain)
 	return nil
 }

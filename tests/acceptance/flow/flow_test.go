@@ -13,7 +13,6 @@ import (
 	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/gittest"
-	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/tests/testkit"
 )
@@ -603,14 +602,14 @@ func TestFlowRefusals(t *testing.T) {
 	}
 
 	// Outside any project, without a state store.
-	t.Setenv(home.EnvVar, t.TempDir())
+	t.Setenv(testkit.HomeEnv, t.TempDir())
 	t.Chdir(t.TempDir())
 	for _, args := range [][]string{{"flow", "show"}, {"flow", "diff"}} {
 		if code, _, stderr := testkit.Run(args...); code != contract.ExitError || !strings.HasPrefix(stderr, msg.Text(msg.ErrProjectUndetermined, "")) {
 			t.Errorf("%v outside a project: exit code %d, stderr %q", args, code, stderr)
 		}
 	}
-	if entries, _ := os.ReadDir(os.Getenv(home.EnvVar)); len(entries) != 0 {
+	if entries, _ := os.ReadDir(os.Getenv(testkit.HomeEnv)); len(entries) != 0 {
 		t.Errorf("reading must not create the store: %v", entries)
 	}
 }

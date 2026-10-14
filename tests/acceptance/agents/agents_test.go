@@ -9,7 +9,6 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/cli"
-	"github.com/t8nax/gentry/internal/git"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/tests/testkit"
@@ -29,8 +28,8 @@ func read(t *testing.T, p string) string {
 
 func clean(t *testing.T, w string) {
 	t.Helper()
-	if files, err := git.Changed(w); err != nil || len(files) > 0 {
-		t.Errorf("git status of %s: %v, %v; want clean", w, files, err)
+	if status := gittest.Run(t, w, "status", "--porcelain=v1", "--untracked-files=all"); status != "" {
+		t.Errorf("git status of %s:\n%swant clean", w, status)
 	}
 }
 

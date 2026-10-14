@@ -10,7 +10,6 @@ import (
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
 	"github.com/t8nax/gentry/internal/buildinfo"
-	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/integration"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/tests/testkit"
@@ -120,7 +119,7 @@ func TestIntroOutsidePool(t *testing.T) {
 	shop, _ := testkit.TaskShop(t)
 	for name, dir := range map[string]string{
 		"knowledge": filepath.Join(filepath.Dir(shop), "shop-knowledge"),
-		"process":   filepath.Join(os.Getenv(home.EnvVar), "process", "shop"),
+		"process":   filepath.Join(os.Getenv(testkit.HomeEnv), "process", "shop"),
 		"outside":   t.TempDir(),
 		"missing":   filepath.Join(t.TempDir(), "gone"),
 	} {
@@ -131,11 +130,11 @@ func TestIntroOutsidePool(t *testing.T) {
 }
 
 func TestIntroWithoutStore(t *testing.T) {
-	t.Setenv(home.EnvVar, t.TempDir())
+	t.Setenv(testkit.HomeEnv, t.TempDir())
 	if got := introIn(t, t.TempDir()); got != "" {
 		t.Errorf("want no introduction, got:\n%s", got)
 	}
-	if testkit.FileExists(filepath.Join(os.Getenv(home.EnvVar), "state", "state.db")) {
+	if testkit.FileExists(filepath.Join(os.Getenv(testkit.HomeEnv), "state", "state.db")) {
 		t.Error("the hook created the state store")
 	}
 }

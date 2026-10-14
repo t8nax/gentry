@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
@@ -200,7 +199,7 @@ func TestTaskTakeByAgent(t *testing.T) {
 
 	// A command in a session of Claude Code is the agent's, whoever typed it.
 	testkit.MustRun(t, "task", "cancel", "SHOP-2")
-	t.Setenv(caller.ClaudeCodeEnv, "1")
+	t.Setenv(testkit.ClaudeCodeEnv, "1")
 	if _, stdout, _ := testkit.Run(testkit.TakeArgs()...); !strings.Contains(stdout, msg.Text(msg.TaskSource, msg.Text(msg.TaskSourceAgent))+"\n") {
 		t.Errorf("in a session of Claude Code:\n%s", stdout)
 	}
@@ -295,8 +294,8 @@ func TestTaskTakeRefusals(t *testing.T) {
 }
 
 func TestTaskTakeWithoutFlow(t *testing.T) {
-	t.Setenv(caller.SessionEnv, "")
-	t.Setenv(caller.ClaudeCodeEnv, "")
+	t.Setenv(testkit.SessionEnv, "")
+	t.Setenv(testkit.ClaudeCodeEnv, "")
 	p := testkit.EmptyShopFlow(t)
 	code, _, stderr := testkit.Run(testkit.TakeArgs()...)
 	want := msg.Text(msg.ErrFlowNotFound, "shop") + "\n" + msg.Text(msg.FlowDir, p.Dir) + "\n"

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/state"
@@ -369,7 +368,7 @@ func TestStageByAgent(t *testing.T) {
 	_, fix := testkit.TaskShop(t)
 	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
-	t.Setenv(caller.SessionEnv, "drv-1")
+	t.Setenv(testkit.SessionEnv, "drv-1")
 	closeStage(t, "Создать ветку")
 	testkit.MustRun(t, "task", "artifact", "save", "plan", "--url", "https://example.com/plan")
 	testkit.MustRun(t, "task", "step", "add", "Согласовать план")

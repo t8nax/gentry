@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/tests/testkit"
 )
@@ -34,7 +33,7 @@ func TestStageChecks(t *testing.T) {
 	testkit.MustRun(t, "flow", "apply")
 	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
-	logs := filepath.Join(os.Getenv(home.EnvVar), "state", "shop", "tasks", "SHOP-1", "checks")
+	logs := filepath.Join(os.Getenv(testkit.HomeEnv), "state", "shop", "tasks", "SHOP-1", "checks")
 	log1, log2 := filepath.Join(logs, "branch-1-1.log"), filepath.Join(logs, "branch-1-2.log")
 
 	stdout := testkit.MustRun(t, "task", "stage", "show")
@@ -155,7 +154,7 @@ func TestStageCheckNotStarted(t *testing.T) {
 		e.Error.Code != contract.CodeCheckProgramNotStarted || reason == "" || !testkit.JSONEqual(e.Error.Details, want) {
 		t.Errorf("exit with a program not started: exit code %d: %s", code, out)
 	}
-	if logs := filepath.Join(os.Getenv(home.EnvVar), "state", "shop", "tasks", "SHOP-1", "checks", "branch-1-1.log"); testkit.FileExists(logs) {
+	if logs := filepath.Join(os.Getenv(testkit.HomeEnv), "state", "shop", "tasks", "SHOP-1", "checks", "branch-1-1.log"); testkit.FileExists(logs) {
 		t.Error("a program not started has a file of output")
 	}
 }
@@ -176,7 +175,7 @@ func TestStageSkipChecks(t *testing.T) {
 	t.Chdir(fix)
 	t.Setenv(helperEnv, "fail")
 	testkit.WantJSON(t, contract.ExitOK, "schemas/task-stage-close.json", "task", "stage", "skip", "--reason", "Ветка есть")
-	if logs := filepath.Join(os.Getenv(home.EnvVar), "state", "shop", "tasks", "SHOP-1", "checks"); testkit.FileExists(logs) {
+	if logs := filepath.Join(os.Getenv(testkit.HomeEnv), "state", "shop", "tasks", "SHOP-1", "checks"); testkit.FileExists(logs) {
 		t.Error("the skip ran the commands of checks")
 	}
 }

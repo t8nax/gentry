@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/tests/testkit"
@@ -50,12 +49,12 @@ func TestDecisionAdd(t *testing.T) {
 	testkit.WantRun(t, contract.ExitOK, recorded, "", "task", "decision", "add", "--input", input)
 	closeStage(t, "Создать ветку")
 	// The agent records the words of the operator: two lines, no question.
-	t.Setenv(caller.SessionEnv, "drv-1")
+	t.Setenv(testkit.SessionEnv, "drv-1")
 	code, stdout, stderr := testkit.RunWith(`{"answer": "Сумму возврата писать в лог.\nУровень — info."}`, "task", "decision", "add", "--input", "-")
 	if code != contract.ExitOK || stdout != recorded {
 		t.Errorf("task decision add --input -: exit code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
-	t.Setenv(caller.SessionEnv, "")
+	t.Setenv(testkit.SessionEnv, "")
 
 	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
 		msg.Text(msg.StatementHeading, "SHOP-1"),

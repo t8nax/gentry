@@ -10,7 +10,6 @@ import (
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/gittest"
-	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/tests/testkit"
 )
@@ -31,20 +30,20 @@ func twoMachines(t *testing.T) machines {
 	t.Helper()
 	testkit.Layer(t, "machines", func() {
 		testkit.ShopFlow(t)
-		root := filepath.Dir(os.Getenv(home.EnvVar))
+		root := filepath.Dir(os.Getenv(testkit.HomeEnv))
 		remote := filepath.Join(root, "remote.git")
 		gittest.Run(t, root, "init", "--quiet", "--bare", remote)
 		testkit.MustRun(t, "process", "remote", "set", remote)
-		t.Setenv(home.EnvVar, filepath.Join(root, "home-b"))
+		t.Setenv(testkit.HomeEnv, filepath.Join(root, "home-b"))
 		testkit.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
 		testkit.MustRun(t, "process", "remote", "set", remote)
 	})
-	root := filepath.Dir(os.Getenv(home.EnvVar))
+	root := filepath.Dir(os.Getenv(testkit.HomeEnv))
 	return machines{t: t, a: filepath.Join(root, "home"), b: filepath.Join(root, "home-b"), remote: filepath.Join(root, "remote.git")}
 }
 
-func (m machines) onA() { m.t.Setenv(home.EnvVar, m.a) }
-func (m machines) onB() { m.t.Setenv(home.EnvVar, m.b) }
+func (m machines) onA() { m.t.Setenv(testkit.HomeEnv, m.a) }
+func (m machines) onB() { m.t.Setenv(testkit.HomeEnv, m.b) }
 
 // The words of the process are those of the catalog: the tests of the output
 // in package cli state them.
@@ -57,7 +56,7 @@ var (
 
 func TestProcessRemoteSet(t *testing.T) {
 	p := testkit.ShopFlow(t)
-	root := filepath.Dir(os.Getenv(home.EnvVar))
+	root := filepath.Dir(os.Getenv(testkit.HomeEnv))
 	remote := filepath.Join(root, "remote.git")
 	gittest.Run(t, root, "init", "--quiet", "--bare", remote)
 
@@ -78,7 +77,7 @@ func TestProcessRemoteSet(t *testing.T) {
 	}
 
 	// Another machine gets the process and shows the same flow.
-	t.Setenv(home.EnvVar, filepath.Join(root, "home-b"))
+	t.Setenv(testkit.HomeEnv, filepath.Join(root, "home-b"))
 	testkit.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
 	if _, stdout, _ := testkit.Run("process", "remote", "set", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultReceived)+"\n") {
 		t.Errorf("remote on b:\n%s", stdout)
@@ -291,7 +290,7 @@ func TestSharedRefusals(t *testing.T) {
 
 func TestProcessJSON(t *testing.T) {
 	testkit.ShopFlow(t)
-	root := filepath.Dir(os.Getenv(home.EnvVar))
+	root := filepath.Dir(os.Getenv(testkit.HomeEnv))
 	remote := filepath.Join(root, "remote.git")
 	gittest.Run(t, root, "init", "--quiet", "--bare", remote)
 	_, stdout, _ := testkit.Run("process", "show", "--json")
@@ -457,7 +456,7 @@ func TestProjectAddWithFlow(t *testing.T) {
 	os.Remove(file)
 
 	// A third machine takes the process first, then connects the shop.
-	t.Setenv(home.EnvVar, filepath.Join(filepath.Dir(m.a), "home-c"))
+	t.Setenv(testkit.HomeEnv, filepath.Join(filepath.Dir(m.a), "home-c"))
 	testkit.MustRun(t, "process", "remote", "set", m.remote)
 	_, stdout, _ := testkit.Run("project", "add", "--knowledge", "../shop-knowledge")
 	if !strings.Contains(stdout, "\n\n"+laidOut) {

@@ -37,6 +37,14 @@ import (
 	"github.com/t8nax/gentry/internal/paths"
 )
 
+// The environment variables of Gentry the acceptance tests set and read: the
+// tests name them through testkit, not through the packages that read them.
+const (
+	HomeEnv       = home.EnvVar          // the data root
+	SessionEnv    = caller.SessionEnv    // set by the driver for its sessions
+	ClaudeCodeEnv = caller.ClaudeCodeEnv // set by Claude Code for its commands
+)
+
 // Main points the data root and the user's home at a temporary directory, so
 // no test can touch the operator's data, and runs the tests. Claude Code is a
 // program that does not exist: the commands under test must not call it.

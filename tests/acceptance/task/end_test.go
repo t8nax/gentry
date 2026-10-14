@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/cli"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
@@ -228,7 +227,7 @@ func TestTaskCancel(t *testing.T) {
 	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
 	t.Chdir(fix)
 	passScenario(t)
-	t.Setenv(caller.SessionEnv, "s1")
+	t.Setenv(testkit.SessionEnv, "s1")
 	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
 		msg.Text(msg.TaskCancelled, "SHOP-2"),
 		msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
@@ -236,7 +235,7 @@ func TestTaskCancel(t *testing.T) {
 		"",
 		cli.HintFor(msg.HintTaskAgain, "task", "SHOP-2"),
 	), "", "task", "cancel")
-	t.Setenv(caller.SessionEnv, "")
+	t.Setenv(testkit.SessionEnv, "")
 	if _, stdout, _ := testkit.Run("task", "show", "SHOP-2"); !strings.Contains(testkit.Masked(stdout), msg.Text(msg.TaskCancelledByAgent, "<время>")+"\n") ||
 		strings.Contains(stdout, msg.Text(msg.CancelReasonLine, "")) {
 		t.Errorf("task show of a task cancelled by the agent:\n%s", stdout)
@@ -332,7 +331,7 @@ func TestTaskTakeAgain(t *testing.T) {
 	// Taken anew in the main worktree by the agent: the title and the
 	// statement stay those of the operator.
 	t.Chdir(shop)
-	t.Setenv(caller.SessionEnv, "s1")
+	t.Setenv(testkit.SessionEnv, "s1")
 	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
 		msg.Text(msg.TaskTakenAnew, "SHOP-1"),
 		msg.Text(msg.AttemptLine, 2),
@@ -344,7 +343,7 @@ func TestTaskTakeAgain(t *testing.T) {
 		"",
 		cli.HintText(msg.HintTaskShow),
 	), "", "task", "take", "shop-1", "--scenario", "bug")
-	t.Setenv(caller.SessionEnv, "")
+	t.Setenv(testkit.SessionEnv, "")
 	typ, data := lastEvent(t)
 	testkit.Validate(t, "schemas/events/task.taken.json", data)
 	if typ != "task.taken" || !strings.HasPrefix(data, `{"attempt":2,`) || !strings.Contains(data, `"source":"operator"`) {

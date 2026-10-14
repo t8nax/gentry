@@ -53,9 +53,15 @@ const (
 )
 
 // BinaryEnv names a gentry the commands run on instead of the process of the
-// test. It is built for the tests, with the version of a test binary:
+// test, by an absolute path: go test runs each package in its own directory,
+// so a relative path is taken from the directory of the package. It is built
+// for the tests, with the version of a test binary:
 //
 //	go build -tags acceptance -buildvcs=false -o <path> ./cmd/gentry
+//
+// Build it anew from the same code before each run: every such build prints
+// the same version, so the check of Main does not tell a stale build, and the
+// tests would check the old code.
 const BinaryEnv = "GENTRY_TEST_BINARY"
 
 // The entries of the build with the tag acceptance, as cmd/gentry names

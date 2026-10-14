@@ -76,7 +76,7 @@ var allowed = []allowance{
 	{"internal/cli", "the hints in the form of the channel (HintText, HintFor, CallTool) are built by the functions the output uses"},
 	{"internal/gittest", "the test helper makes the repositories and worktrees of the shop"},
 	{"internal/state", "a test makes a state the commands cannot make, such as a newer schema, and finds whether a command created the state store"},
-	{"internal/flow", "testkit gives the places of the flow of the shop as flow.Places, and the tests of the events name the types the flow writes"},
+	{"internal/flow", "testkit gives the places of the flow of the shop as flow.Places, and the tests of flow apply and flow discard check the types of the events the flow writes"},
 	{"internal/adapter/claude", "the test of a stale plugin builds the plugin by the adapter, and the tests of the hook name its tool and folder"},
 	{"internal/integration", "the test of a stale plugin builds the plugin of the integration of Gentry"},
 	{"internal/buildinfo", "the test of a stale plugin builds the plugin of the version of Gentry"},

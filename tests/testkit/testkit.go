@@ -85,12 +85,6 @@ var binary string
 // directory of the test at the moment they run, so the tests change them as
 // they do for the commands of the process.
 func Main(m *testing.M) int {
-	if p := os.Getenv(BinaryEnv); p != "" {
-		var err error
-		if binary, err = testBinary(p); err != nil {
-			panic(err)
-		}
-	}
 	dir, err := os.MkdirTemp("", "gentry-test-")
 	if err != nil {
 		panic(err)
@@ -114,6 +108,13 @@ func Main(m *testing.M) int {
 	}
 	work = filepath.Join(canonical, "work")
 	layers.dir = filepath.Join(canonical, "layers")
+	// The check runs a command of the gentry, so it runs in the environment
+	// of the tests, not of the operator.
+	if p := os.Getenv(BinaryEnv); p != "" {
+		if binary, err = testBinary(p); err != nil {
+			panic(err)
+		}
+	}
 	return m.Run()
 }
 

@@ -1,0 +1,664 @@
+package stage_test
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/cli"
+	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/state"
+	"github.com/t8nax/gentry/tests/testkit"
+)
+
+// closeStage adds a step to the current stage, marks it done and closes the
+// stage by a result with the flags given.
+func closeStage(t *testing.T, step string, flags ...string) {
+	t.Helper()
+	testkit.MustRun(t, "task", "step", "add", step)
+	testkit.MustRun(t, "task", "step", "done", "1")
+	testkit.MustRun(t, append([]string{"task", "stage", "exit", "--kind", "result", "--text", "Готово"}, flags...)...)
+}
+
+// The words of the outputs are those of the catalog: the tests of the output
+// in package cli state them.
+var result = msg.Text(msg.ExitKindResult)
+
+// progress is the line of the progress of a task of the feature scenario,
+// which has five stages.
+func progress(passed int) string {
+	return msg.Text(msg.ProgressLine, msg.Text(msg.ProgressValue, passed, 5))
+}
+
+// returnLimit is the refusal of a return to the node to when its limit of n
+// returns is used up.
+func returnLimit(to string, n int) string {
+	return testkit.Lines(
+		msg.Text(msg.ErrReturnLimit, to),
+		msg.Text(msg.ReturnsLine, n, n),
+		"",
+		cli.HintText(msg.HintOtherTransitions),
+		cli.HintFor(msg.HintAllowReturn, "allow_return", to),
+	)
+}
+
+// TestStageFeature takes a task of the shop through the feature scenario
+// with returns from review to implementation up to the limit.
+func TestStageFeature(t *testing.T) {
+	_, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.FlowStage, testkit.Round("Ветка", "branch", 1)),
+		msg.Text(msg.StageTask, "SHOP-1"),
+		msg.Text(msg.FlowExecutor, "orchestrator"),
+		msg.Text(msg.FlowExit, "создана ветка задачи"),
+		msg.Text(msg.FlowParts, testkit.None),
+		"",
+	)+testkit.Table(
+		[]string{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)},
+		[]string{"plan", "План фичи", testkit.None, testkit.None},
+	)+testkit.Lines(
+		"",
+		msg.Text(msg.FlowInstruction),
+		"  Создать ветку задачи от main.",
+	), "", "task", "stage", "show")
+	out := testkit.WantJSON(t, contract.ExitOK, "schemas/task-stage-show.json", "task", "stage", "show")
+	if !strings.Contains(out, `"transitions":[{"stage":"plan-feature","title":"План фичи","to":"plan"}]`) {
+		t.Errorf("task stage show --json: %s", out)
+	}
+
+	// A stage without steps is not closed.
+	testkit.WantRun(t, contract.ExitError, "", testkit.Lines(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", cli.HintText(msg.HintStepAdd)),
+		"task", "stage", "exit", "--kind", "result", "--text", "Создана ветка")
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StepsAdded, 1),
+		msg.Text(msg.StepNumber, 1),
+	), "", "task", "step", "add", "Создать ветку feature/shop-1")
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StepMarkedDone, 1),
+		msg.Text(msg.StepsLeft, 0),
+		"",
+		cli.HintText(msg.HintStageExit),
+	), "", "task", "step", "done", "1", "--check", "git branch --show-current")
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StageExited, "Ветка"),
+		msg.Text(msg.ExitKindLine, result),
+		msg.Text(msg.ExitTextLine, "Создана ветка feature/shop-1"),
+		msg.Text(msg.TransitionLine, "plan"),
+		msg.Text(msg.TaskStage, testkit.Round("План фичи", "plan-feature", 1)),
+		progress(1),
+		"",
+		cli.HintText(msg.HintStageShow),
+	), "", "task", "stage", "exit", "--kind", "result", "--text", "Создана ветка feature/shop-1")
+
+	// An exit by an artifact needs the artifact saved.
+	testkit.MustRun(t, "task", "step", "add", "Согласовать план")
+	testkit.MustRun(t, "task", "step", "done", "1")
+	testkit.WantRun(t, contract.ExitError, "", testkit.Lines(msg.Text(msg.ErrArtifactNotFound, "plan"), "", cli.HintFor(msg.HintArtifactSave, "name", "plan")),
+		"task", "stage", "exit", "--kind", "artifact", "--artifact", "plan", "--text", "План согласован с оператором")
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(msg.Text(msg.ArtifactSaved, "plan"), msg.Text(msg.ArtifactURLLine, "https://claude.ai/code/artifact/plan")), "",
+		"task", "artifact", "save", "plan", "--url", "https://claude.ai/code/artifact/plan")
+	out = testkit.WantJSON(t, contract.ExitOK, "schemas/task-stage-close.json",
+		"task", "stage", "exit", "--kind", "artifact", "--artifact", "plan", "--text", "План согласован с оператором")
+	var closed contract.TaskStageCloseOutput
+	json.Unmarshal([]byte(out), &closed)
+	if c := closed.Closed; c.Node != "plan" || c.Exit == nil || c.Exit.Kind != "artifact" || *c.Exit.Artifact != "plan" ||
+		*c.To != "implementation" || closed.Task.Stage.Node != "implementation" || closed.Task.Progress.Passed != 2 {
+		t.Errorf("task stage exit --json: %s", out)
+	}
+
+	// Implementation: a step not done is listed; a dropped step needs a reason.
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StepsAdded, 2),
+		msg.Text(msg.StepNumbers, 1, 2),
+	), "", "task", "step", "add", "Добавить расчёт суммы", "Покрыть расчёт тестами")
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StepMarkedDone, 1),
+		msg.Text(msg.StepsLeft, 1),
+	), "", "task", "step", "done", "1", "--check", "go test ./backend/payments/...")
+	testkit.WantRun(t, contract.ExitError, "", testkit.Lines(
+		msg.Text(msg.ErrStepsOpen),
+		"",
+		msg.Text(msg.StepsOpenHeading),
+		"  2. Покрыть расчёт тестами",
+		"",
+		cli.HintText(msg.HintStepDone),
+		cli.HintText(msg.HintStepDrop),
+	), "task", "stage", "exit", "--kind", "result", "--text", "Изменения сделаны")
+	if code, c := testkit.ErrorCode(t, "task", "step", "drop", "2"); code != contract.ExitUsage || c != contract.CodeMissingField {
+		t.Errorf("task step drop without a reason: exit code %d, code %s", code, c)
+	}
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StepMarkedDropped, 2),
+		msg.Text(msg.StepsLeft, 0),
+		"",
+		cli.HintText(msg.HintStageExit),
+	), "", "task", "step", "drop", "2", "--reason", "Тесты уже есть в шаге 1")
+	testkit.WantRun(t, contract.ExitOK, msg.Text(msg.NoteAdded, 1)+"\n", "", "task", "note", "add", "На ревью проверить, что возврат по СБП не задет")
+	testkit.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Изменения сделаны, тесты проходят")
+
+	// Review is a fork: the transition and its reason are required.
+	testkit.MustRun(t, "task", "step", "add", "Провести ревью")
+	testkit.MustRun(t, "task", "step", "done", "1")
+	testkit.WantRun(t, contract.ExitUsage, "", testkit.Lines(msg.Text(msg.ErrForkToMissing), "", cli.HintText(msg.HintStageTransitions)),
+		"task", "stage", "exit", "--kind", "result", "--text", "Замечания записаны")
+	testkit.WantRun(t, contract.ExitUsage, "", testkit.Lines(msg.Text(msg.ErrForkReasonMissing), "", cli.HintText(msg.HintCommandHelp, "task stage exit")),
+		"task", "stage", "exit", "--kind", "result", "--text", "Замечания записаны", "--to", "implementation")
+	testkit.WantRun(t, contract.ExitError, "", testkit.Lines(msg.Text(msg.ErrTransitionNotFound, "Ревью", "deploy"), "", cli.HintText(msg.HintStageTransitions)),
+		"task", "stage", "exit", "--kind", "result", "--text", "Замечания записаны", "--to", "deploy", "--reason", "Выкатить")
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StageExited, "Ревью"),
+		msg.Text(msg.ExitKindLine, result),
+		msg.Text(msg.ExitTextLine, "Замечания записаны"),
+		msg.Text(msg.TransitionLine, "implementation"),
+		msg.Text(msg.ReasonLine, "Две ошибки в расчёте суммы"),
+		msg.Text(msg.TaskStage, testkit.Round("Реализация", "implementation", 2)),
+		progress(4),
+		"",
+		cli.HintText(msg.HintStageShow),
+	), "", "task", "stage", "exit", "--kind", "result", "--text", "Замечания записаны", "--to", "implementation", "--reason", "Две ошибки в расчёте суммы")
+	// The new pass starts without steps.
+	if code, c := testkit.ErrorCode(t, "task", "stage", "exit", "--kind", "result", "--text", "Исправлено"); code != contract.ExitError || c != contract.CodeStepsEmpty {
+		t.Errorf("a new round with the steps of the last: exit code %d, code %s", code, c)
+	}
+	// Two more returns are allowed, the fourth is not.
+	for range 2 {
+		closeStage(t, "Исправить замечания")
+		closeStage(t, "Провести ревью", "--to", "implementation", "--reason", "Есть замечания")
+	}
+	closeStage(t, "Исправить замечания")
+	testkit.MustRun(t, "task", "step", "add", "Провести ревью")
+	testkit.MustRun(t, "task", "step", "done", "1")
+	_, stdout, _ := testkit.Run("task", "stage", "show")
+	if !strings.Contains(stdout, msg.Text(msg.FlowStage, testkit.Round("Ревью", "review", 4))+"\n") ||
+		!strings.Contains(stdout, "ревью выявило существенные замечания  "+msg.Text(msg.StageReturns, 3, 3)+"\n") {
+		t.Errorf("task stage show at the limit:\n%s", stdout)
+	}
+	testkit.WantRun(t, contract.ExitError, "", returnLimit("implementation", 3),
+		"task", "stage", "exit", "--kind", "result", "--text", "Замечания", "--to", "implementation", "--reason", "Ещё замечания")
+	testkit.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Замечаний нет", "--to", "merge", "--reason", "Существенных замечаний нет")
+
+	// Merge is the operator's: no steps needed. Its exit passes the scenario.
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StageExited, "Слияние"),
+		msg.Text(msg.ExitKindLine, result),
+		msg.Text(msg.ExitTextLine, "Ветка влита в main"),
+		msg.Text(msg.TransitionLine, msg.Text(msg.FlowEnd)),
+		msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)),
+		progress(5),
+		"",
+		cli.HintText(msg.HintTaskClose),
+	), "", "task", "stage", "exit", "--kind", "result", "--text", "Ветка влита в main")
+	finished := testkit.Lines(msg.Text(msg.ErrScenarioFinished, "SHOP-1"), "", cli.HintText(msg.HintTaskClose))
+	testkit.WantRun(t, contract.ExitError, "", finished, "task", "stage", "show")
+	testkit.WantRun(t, contract.ExitError, "", finished, "task", "step", "add", "Ещё шаг")
+	testkit.WantRun(t, contract.ExitError, "", finished, "task", "stage", "skip", "--reason", "Не нужен")
+	if code, c := testkit.ErrorCode(t, "task", "stage", "exit", "--kind", "result", "--text", "Ещё"); code != contract.ExitError || c != contract.CodeScenarioFinished {
+		t.Errorf("task stage exit after the end: exit code %d, code %s", code, c)
+	}
+	// Notes and artifacts are taken until the task is closed.
+	testkit.MustRun(t, "task", "note", "add", "Первая строка.\nВторая строка.")
+
+	_, stdout, _ = testkit.Run("task", "show")
+	// The table of the path: the columns are as wide as the longest cell.
+	pathTable := testkit.Table(
+		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
+		[]string{"Ветка", "1", result, "plan"},
+		[]string{"План фичи", "1", msg.Text(msg.ExitKindArtifact, "plan"), "implementation"},
+		[]string{"Реализация", "1", result, "review"},
+		[]string{"Ревью", "1", result, "implementation"},
+		[]string{"Реализация", "2", result, "review"},
+		[]string{"Ревью", "2", result, "implementation"},
+		[]string{"Реализация", "3", result, "review"},
+		[]string{"Ревью", "3", result, "implementation"},
+		[]string{"Реализация", "4", result, "review"},
+		[]string{"Ревью", "4", result, "merge"},
+		[]string{"Слияние", "1", result, msg.Text(msg.FlowEnd)},
+	)
+	for _, want := range []string{
+		msg.Text(msg.TaskStage, msg.Text(msg.StageFinished)) + "\n" + progress(5) + "\n",
+		pathTable + "\n" + msg.Text(msg.ColArtifact),
+		testkit.Table(
+			[]string{msg.Text(msg.ColArtifact), msg.Text(msg.ColKind), msg.Text(msg.ColSaved), msg.Text(msg.ColPlace)},
+			[]string{"plan", msg.Text(msg.ArtifactKindLink), "2006-01-02 15:04", "https://claude.ai/code/artifact/plan"},
+		),
+		"\n\n" + cli.HintText(msg.HintStatement) + "\n" + cli.HintText(msg.HintNotes) + "\n",
+	} {
+		if !strings.Contains(testkit.Masked(stdout), testkit.Masked(want)) {
+			t.Errorf("task show has no\n%s\noutput:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "На ревью") || strings.Contains(stdout, msg.Text(msg.TaskSource, "")) {
+		t.Errorf("task show has the notes or the statement:\n%s", stdout)
+	}
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.NoteHeading, 1, testkit.Round("Реализация", "implementation", 1)),
+		"   На ревью проверить, что возврат по СБП не задет",
+		"",
+		msg.Text(msg.NoteHeading, 2, testkit.Round("Слияние", "merge", 1)),
+		"   Первая строка.",
+		"   Вторая строка.",
+	), "", "task", "note", "list")
+	out = testkit.WantJSON(t, contract.ExitOK, "schemas/task-note-list.json", "task", "note", "list")
+	if !strings.Contains(out, `"task":"SHOP-1"`) || strings.Count(out, `"number":`) != 2 {
+		t.Errorf("task note list --json: %s", out)
+	}
+	_, stdout, _ = testkit.Run("task", "show", "--path")
+	for _, want := range []string{
+		testkit.Lines(
+			testkit.Round("Реализация", "implementation", 1),
+			msg.Text(msg.OutcomeLine, result),
+			msg.Text(msg.ExitTextLine, "Изменения сделаны, тесты проходят"),
+			msg.Text(msg.TransitionLine, "review"),
+			msg.Text(msg.RecordedLine, msg.Text(msg.RecordedByAgent)),
+			msg.Text(msg.ClosedLine, "<время>"),
+			"",
+		) + testkit.Table(
+			[]string{msg.Text(msg.ColStepNumber), msg.Text(msg.ColState), msg.Text(msg.ColStep), msg.Text(msg.ColComment)},
+			[]string{"1", msg.Text(msg.StepStateDone), "Добавить расчёт суммы", "go test ./backend/payments/..."},
+			[]string{"2", msg.Text(msg.StepStateDropped), "Покрыть расчёт тестами", "Тесты уже есть в шаге 1"},
+		),
+		msg.Text(msg.TransitionLine, "implementation") + "\n" + msg.Text(msg.ReasonLine, "Две ошибки в расчёте суммы") + "\n",
+	} {
+		if !strings.Contains(testkit.Masked(stdout), want) {
+			t.Errorf("task show --path has no\n%s\noutput:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, msg.Text(msg.ColRound)) {
+		t.Errorf("task show --path has the table of the path:\n%s", stdout)
+	}
+
+	out = testkit.WantJSON(t, contract.ExitOK, "schemas/task-show.json", "task", "show")
+	var shown contract.TaskShowOutput
+	json.Unmarshal([]byte(out), &shown)
+	if !shown.Task.Finished || shown.Task.Stage != nil || len(shown.Path) != 11 || len(shown.Notes) != 2 || len(shown.Artifacts) != 1 ||
+		shown.Task.Progress != (contract.TaskProgress{Passed: 5, TotalMin: 5, TotalMax: 5}) {
+		t.Errorf("task show --json: %s", out)
+	}
+	list := testkit.WantJSON(t, contract.ExitOK, "schemas/task-list.json", "task", "list")
+	if !strings.Contains(list, `"finished":true`) || strings.Contains(list, `"stage":`) {
+		t.Errorf("task list --json: %s", list)
+	}
+
+	// Every event of the way matches its schema.
+	_, events, _ := testkit.Run("events")
+	seen := map[string]int{}
+	for _, line := range strings.Split(strings.TrimSpace(events), "\n") {
+		var e struct {
+			Type string          `json:"type"`
+			Task string          `json:"task"`
+			Data json.RawMessage `json:"data"`
+		}
+		json.Unmarshal([]byte(line), &e)
+		switch e.Type {
+		case "stage.exited", "stage.skipped", "step.added", "step.done", "step.dropped", "note.added", "artifact.saved":
+			testkit.Validate(t, "schemas/events/"+e.Type+".json", string(e.Data))
+			if e.Task != "SHOP-1" {
+				t.Errorf("event %s of task %q", e.Type, e.Task)
+			}
+			seen[e.Type]++
+		}
+	}
+	if seen["stage.exited"] != 11 || seen["step.dropped"] != 1 || seen["note.added"] != 2 || seen["artifact.saved"] != 1 {
+		t.Errorf("events %v", seen)
+	}
+	if !strings.Contains(events, `"returns":3`) || !strings.Contains(events, `"finished":true`) {
+		t.Errorf("events have no third return or no end:\n%s", events)
+	}
+}
+
+// TestStageSkip skips stages: the reason is required, at a fork the
+// transition too, and steps not done refuse a skip as an exit.
+func TestStageSkip(t *testing.T) {
+	_, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	testkit.WantRun(t, contract.ExitUsage, "", testkit.Lines(msg.Text(msg.ErrSkipReasonMissing), "", cli.HintText(msg.HintCommandHelp, "task stage skip")),
+		"task", "stage", "skip")
+	testkit.WantRun(t, contract.ExitOK, testkit.Lines(
+		msg.Text(msg.StageSkipped, "Ветка"),
+		msg.Text(msg.ReasonLine, "Ветка уже создана оператором"),
+		msg.Text(msg.TransitionLine, "plan"),
+		msg.Text(msg.TaskStage, testkit.Round("План фичи", "plan-feature", 1)),
+		progress(1),
+		"",
+		cli.HintText(msg.HintStageShow),
+	), "", "task", "stage", "skip", "--reason", "Ветка уже создана оператором")
+	testkit.MustRun(t, "task", "step", "add", "Согласовать план")
+	if code, c := testkit.ErrorCode(t, "task", "stage", "skip", "--reason", "Не нужен"); code != contract.ExitError || c != contract.CodeStepsOpen {
+		t.Errorf("skip with a step not done: exit code %d, code %s", code, c)
+	}
+	testkit.MustRun(t, "task", "step", "drop", "1", "--reason", "План не нужен")
+	input := filepath.Join(t.TempDir(), "skip.json")
+	testkit.WriteFiles(t, filepath.Dir(input), map[string]string{"skip.json": `{"reason":"План не нужен"}`})
+	out := testkit.WantJSON(t, contract.ExitOK, "schemas/task-stage-close.json", "task", "stage", "skip", "--input", input)
+	if !strings.Contains(out, `"outcome":"skip","reason":"План не нужен"`) {
+		t.Errorf("task stage skip --json: %s", out)
+	}
+	closeStage(t, "Сделать")
+	if code, c := testkit.ErrorCode(t, "task", "stage", "skip", "--reason", "Нечего смотреть"); code != contract.ExitUsage || c != contract.CodeMissingField {
+		t.Errorf("skip at a fork without the transition: exit code %d, code %s", code, c)
+	}
+	_, stdout, _ := testkit.Run("task", "stage", "skip", "--reason", "Нечего смотреть", "--to", "merge")
+	if !strings.Contains(stdout, testkit.Lines(msg.Text(msg.TransitionLine, "merge"), msg.Text(msg.TaskStage, testkit.Round("Слияние", "merge", 1)), progress(4))) {
+		t.Errorf("skip at a fork:\n%s", stdout)
+	}
+	_, stdout, _ = testkit.Run("task", "show")
+	skip := msg.Text(msg.OutcomeSkip)
+	if !strings.Contains(stdout, testkit.Table(
+		[]string{msg.Text(msg.ColStage), msg.Text(msg.ColRound), msg.Text(msg.ColOutcome), msg.Text(msg.ColTransition)},
+		[]string{"Ветка", "1", skip, "plan"},
+		[]string{"План фичи", "1", skip, "implementation"},
+		[]string{"Реализация", "1", result, "review"},
+		[]string{"Ревью", "1", skip, "merge"},
+		[]string{"Слияние", "1", msg.Text(msg.OutcomeCurrent), testkit.None},
+	)) {
+		t.Errorf("task show:\n%s", stdout)
+	}
+}
+
+// TestStageByAgent checks the source of what the agent records: the stage
+// of the operator closed by the agent is recorded from the operator's words.
+func TestStageByAgent(t *testing.T) {
+	_, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	t.Setenv(testkit.SessionEnv, "drv-1")
+	closeStage(t, "Создать ветку")
+	testkit.MustRun(t, "task", "artifact", "save", "plan", "--url", "https://example.com/plan")
+	testkit.MustRun(t, "task", "step", "add", "Согласовать план")
+	testkit.MustRun(t, "task", "step", "done", "1")
+	testkit.MustRun(t, "task", "stage", "exit", "--kind", "artifact", "--artifact", "plan", "--text", "План согласован")
+	closeStage(t, "Сделать")
+	closeStage(t, "Проверить", "--to", "merge", "--reason", "Замечаний нет")
+	testkit.MustRun(t, "task", "stage", "exit", "--kind", "result", "--text", "Влито оператором")
+	_, stdout, _ := testkit.Run("task", "show", "--path")
+	for _, want := range []string{
+		testkit.Lines(msg.Text(msg.TransitionLine, "plan"), msg.Text(msg.RecordedLine, msg.Text(msg.RecordedByAgent))),
+		testkit.Lines(msg.Text(msg.TransitionLine, msg.Text(msg.FlowEnd)), msg.Text(msg.RecordedLine, msg.Text(msg.TaskSourceAgent))),
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("task show --path has no %q:\n%s", want, stdout)
+		}
+	}
+	_, out, _ := testkit.Run("task", "show", "--json")
+	var shown contract.TaskShowOutput
+	json.Unmarshal([]byte(out), &shown)
+	for _, p := range shown.Path {
+		if p.Source == nil || *p.Source != "agent" {
+			t.Errorf("a pass closed by the agent has the source %v: %s", p.Source, out)
+		}
+		for _, s := range p.Steps {
+			if s.Source != "agent" || s.ClosedSource == nil || *s.ClosedSource != "agent" {
+				t.Errorf("a step of the agent has the source %s: %s", s.Source, out)
+			}
+		}
+	}
+	if len(shown.Artifacts) != 1 || shown.Artifacts[0].Source != "agent" {
+		t.Errorf("artifacts: %s", out)
+	}
+}
+
+// TestStageOtherDirectory works with the task by --task from outside its
+// worktree: hints name the task.
+func TestStageOtherDirectory(t *testing.T) {
+	shop, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(shop)
+	testkit.WantRun(t, contract.ExitError, "", testkit.Lines(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", cli.HintFor(msg.HintStepAdd, "task", "SHOP-1")),
+		"task", "stage", "exit", "--kind", "result", "--text", "Готово", "--task", "SHOP-1")
+	testkit.MustRun(t, "task", "step", "add", "Создать ветку", "--task", "shop-1")
+	_, stdout, _ := testkit.Run("task", "step", "done", "1", "--task", "SHOP-1")
+	// The commands are the agent's: the hints name tools.
+	if want := testkit.InChannel(cli.HintFor(msg.HintStageExit, "task", "SHOP-1")+"\n", []string{"task", "step", "done"}); !strings.HasSuffix(stdout, "\n"+want) {
+		t.Errorf("task step done:\n%s", stdout)
+	}
+	_, stdout, _ = testkit.Run("task", "stage", "exit", "--kind", "result", "--text", "Готово", "--task", "SHOP-1")
+	if want := testkit.InChannel(cli.HintFor(msg.HintStageShow, "task", "SHOP-1")+"\n", []string{"task", "stage", "exit"}); !strings.HasSuffix(stdout, "\n"+want) {
+		t.Errorf("task stage exit:\n%s", stdout)
+	}
+	// In the main worktree, which holds no task, a command without --task finds none.
+	if code, c := testkit.ErrorCode(t, "task", "stage", "show"); code != contract.ExitError || c != contract.CodeTaskUndetermined {
+		t.Errorf("task stage show without a task: exit code %d, code %s", code, c)
+	}
+	if code, c := testkit.ErrorCode(t, "task", "stage", "show", "--task", "SHOP-9"); code != contract.ExitError || c != contract.CodeTaskNotFound {
+		t.Errorf("task stage show of no task: exit code %d, code %s", code, c)
+	}
+	if code, c := testkit.ErrorCode(t, "task", "stage", "show", "--task", "shop"); code != contract.ExitUsage || c != contract.CodeFlagValue {
+		t.Errorf("task stage show --task shop: exit code %d, code %s", code, c)
+	}
+}
+
+// TestWayRefusals checks the refusals of the fields of the commands.
+func TestWayRefusals(t *testing.T) {
+	_, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	testkit.MustRun(t, "task", "step", "add", "Создать ветку")
+	testkit.MustRun(t, "task", "step", "done", "1")
+	input := func(text string) string {
+		p := filepath.Join(t.TempDir(), "input.json")
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	exitHelp := cli.HintText(msg.HintCommandHelp, "task stage exit")
+	long := strings.Repeat("ш", 121)
+	tests := []struct {
+		name   string
+		args   []string
+		exit   int
+		code   string
+		stderr string
+	}{
+		{"no kind", []string{"task", "stage", "exit", "--text", "Т"}, contract.ExitUsage, contract.CodeMissingField,
+			testkit.Lines(msg.Text(msg.ErrExitKindMissing), "", exitHelp)},
+		{"bad kind", []string{"task", "stage", "exit", "--kind", "fact", "--text", "Т"}, contract.ExitUsage, contract.CodeFlagValue,
+			testkit.Lines(msg.Text(msg.ErrFlagValueInvalid, "--kind", "fact"), "", exitHelp)},
+		{"bad kind in input", []string{"task", "stage", "exit", "--input", input(`{"kind":"fact","text":"Т"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
+			testkit.Lines(msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputBadValue, "kind")), "", exitHelp)},
+		{"no text", []string{"task", "stage", "exit", "--kind", "result"}, contract.ExitUsage, contract.CodeMissingField,
+			testkit.Lines(msg.Text(msg.ErrExitTextMissing), "", exitHelp)},
+		{"no artifact", []string{"task", "stage", "exit", "--kind", "artifact", "--text", "Т"}, contract.ExitUsage, contract.CodeMissingField,
+			testkit.Lines(msg.Text(msg.ErrExitArtifactMissing), "", exitHelp)},
+		{"artifact of a result", []string{"task", "stage", "exit", "--kind", "result", "--artifact", "plan", "--text", "Т"}, contract.ExitUsage, contract.CodeConflictingFlags,
+			testkit.Lines(msg.Text(msg.ErrArtifactForKind), "", exitHelp)},
+		{"flag with input", []string{"task", "stage", "exit", "--kind", "result", "--input", "x.json"}, contract.ExitUsage, contract.CodeConflictingFlags,
+			testkit.Lines(msg.Text(msg.ErrConflictingFlags, "--kind", "--input"), "", exitHelp)},
+		{"no step", []string{"task", "step", "add"}, contract.ExitUsage, contract.CodeMissingField,
+			testkit.Lines(msg.Text(msg.ErrStepsMissing), "", cli.HintText(msg.HintCommandHelp, "task step add"))},
+		{"long step", []string{"task", "step", "add", long}, contract.ExitUsage, contract.CodeFieldInvalid,
+			testkit.Lines(msg.Text(msg.ErrStepTooLong), "", msg.Text(msg.HintStep))},
+		{"step of two lines", []string{"task", "step", "add", "А\nБ"}, contract.ExitUsage, contract.CodeFieldInvalid,
+			testkit.Lines(msg.Text(msg.ErrStepMultiline), "", msg.Text(msg.HintStep))},
+		{"steps not a list", []string{"task", "step", "add", "--input", input(`{"steps":"Шаг"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
+			testkit.Lines(msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputNotList, "steps")), "", cli.HintText(msg.HintCommandHelp, "task step add"))},
+		{"arguments with input", []string{"task", "step", "add", "Шаг", "--input", input(`{"steps":["Шаг"]}`)}, contract.ExitUsage, contract.CodeConflictingFlags,
+			testkit.Lines(msg.Text(msg.ErrInputWithArgs), "", cli.HintText(msg.HintCommandHelp, "task step add"))},
+		{"step number", []string{"task", "step", "done", "первый"}, contract.ExitUsage, contract.CodeInvalidArgument,
+			testkit.Lines(msg.Text(msg.ErrStepNumberInvalid, "первый"), "", cli.HintText(msg.HintSteps))},
+		{"step number not an integer", []string{"task", "step", "done", "--input", input(`{"step":"1"}`)}, contract.ExitUsage, contract.CodeInputInvalid,
+			testkit.Lines(msg.Text(msg.ErrInputInvalid, msg.Text(msg.InputNotInteger, "step")), "", cli.HintText(msg.HintCommandHelp, "task step done"))},
+		{"no step number", []string{"task", "step", "done"}, contract.ExitUsage, contract.CodeMissingField,
+			testkit.Lines(msg.Text(msg.ErrStepNumberMissing), "", cli.HintText(msg.HintCommandHelp, "task step done"))},
+		{"step not found", []string{"task", "step", "done", "7"}, contract.ExitError, contract.CodeStepNotFound,
+			testkit.Lines(msg.Text(msg.ErrStepNotFound, 7), "", cli.HintText(msg.HintSteps))},
+		{"task step done", []string{"task", "step", "done", "1"}, contract.ExitError, contract.CodeStepClosed,
+			testkit.Lines(msg.Text(msg.ErrStepDoneAlready, 1), "", cli.HintText(msg.HintSteps))},
+		{"no note", []string{"task", "note", "add"}, contract.ExitUsage, contract.CodeMissingField,
+			testkit.Lines(msg.Text(msg.ErrNoteMissing), "", cli.HintText(msg.HintCommandHelp, "task note add"))},
+		{"no artifact name", []string{"task", "artifact", "save", "--url", "https://example.com"}, contract.ExitUsage, contract.CodeMissingField,
+			testkit.Lines(msg.Text(msg.ErrArtifactNameMissing), "", cli.HintText(msg.HintCommandHelp, "task artifact save"))},
+		{"bad artifact name", []string{"task", "artifact", "save", "план", "--url", "https://example.com"}, contract.ExitUsage, contract.CodeFieldInvalid,
+			testkit.Lines(msg.Text(msg.ErrArtifactNameInvalid, "план"), "", msg.Text(msg.HintArtifactName))},
+		{"no file or address", []string{"task", "artifact", "save", "plan"}, contract.ExitUsage, contract.CodeMissingField,
+			testkit.Lines(msg.Text(msg.ErrArtifactSourceMissing), "", cli.HintText(msg.HintCommandHelp, "task artifact save"))},
+		{"file and address", []string{"task", "artifact", "save", "plan", "--file", "plan.md", "--url", "https://example.com"}, contract.ExitUsage, contract.CodeConflictingFlags,
+			testkit.Lines(msg.Text(msg.ErrConflictingFlags, "--file", "--url"), "", cli.HintText(msg.HintCommandHelp, "task artifact save"))},
+		{"bad address", []string{"task", "artifact", "save", "plan", "--url", "claude.ai/code/artifact/1"}, contract.ExitUsage, contract.CodeFieldInvalid,
+			testkit.Lines(msg.Text(msg.ErrArtifactURLInvalid, "claude.ai/code/artifact/1"), "", msg.Text(msg.HintArtifactURL))},
+		{"no file", []string{"task", "artifact", "save", "plan", "--file", "plan.md"}, contract.ExitUsage, contract.CodeFieldInvalid,
+			testkit.Lines(msg.Text(msg.ErrArtifactFileNotFound, "plan.md"), "", msg.Text(msg.HintArtifactFile))},
+	}
+	for _, tt := range tests {
+		code, stdout, stderr := testkit.Run(tt.args...)
+		if want := testkit.InChannel(tt.stderr, tt.args); code != tt.exit || stdout != "" || stderr != want {
+			tt.stderr = want
+			t.Errorf("%s: exit code %d, stdout %q, stderr:\n%s\nwant %d:\n%s", tt.name, code, stdout, stderr, tt.exit, tt.stderr)
+		}
+		if code, c := testkit.ErrorCode(t, tt.args...); code != tt.exit || c != tt.code {
+			t.Errorf("%s in JSON: exit code %d, code %q; want %d, %q", tt.name, code, c, tt.exit, tt.code)
+		}
+	}
+	testkit.MustRun(t, "task", "step", "add", "Проверить ветку")
+	testkit.MustRun(t, "task", "step", "drop", "2", "--reason", "Не нужно")
+	testkit.WantRun(t, contract.ExitError, "", testkit.Lines(msg.Text(msg.ErrStepDroppedAlready, 2), "", cli.HintText(msg.HintSteps)), "task", "step", "drop", "2", "--reason", "Ещё раз")
+}
+
+// TestStepsInput adds steps, marks and drops them through --input.
+func TestStepsInput(t *testing.T) {
+	_, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	out := testkit.WantJSON(t, contract.ExitOK, "schemas/task-step-list.json", "task", "step", "add", "Первый", "Второй")
+	if !strings.Contains(out, `"added":[1,2]`) || !strings.Contains(out, `"node":"branch","round":1`) {
+		t.Errorf("task step add --json: %s", out)
+	}
+	code, out, _ := testkit.RunWith(`{"steps":["Третий"]}`, "task", "step", "add", "--input", "-", "--json")
+	if code != contract.ExitOK || !strings.Contains(out, `"added":[3]`) {
+		t.Errorf("task step add --input: exit code %d, %s", code, out)
+	}
+	code, out, _ = testkit.RunWith(`{"step":2,"check":"git status"}`, "task", "step", "done", "--input", "-", "--json")
+	testkit.Validate(t, "schemas/task-step-list.json", out)
+	if code != contract.ExitOK || !strings.Contains(out, `"check":"git status"`) || strings.Contains(out, `"added":[`) {
+		t.Errorf("task step done --input: exit code %d, %s", code, out)
+	}
+	code, out, _ = testkit.RunWith(`{"step":3,"reason":"Лишний"}`, "task", "step", "drop", "--input", "-", "--json")
+	if code != contract.ExitOK || !strings.Contains(out, `"reason":"Лишний"`) || !strings.Contains(out, `"closed_source":"agent"`) {
+		t.Errorf("task step drop --input: exit code %d, %s", code, out)
+	}
+	code, out, _ = testkit.RunWith(`{"text":"Строка 1.\nСтрока 2."}`, "task", "note", "add", "--input", "-", "--json")
+	testkit.Validate(t, "schemas/task-note-add.json", out)
+	if code != contract.ExitOK || !strings.Contains(out, `"node":"branch"`) || !strings.Contains(out, `"number":1`) {
+		t.Errorf("task note add --input: exit code %d, %s", code, out)
+	}
+}
+
+// TestArtifactFile keeps a copy of a file, replaces it, and replaces it by a
+// link, which removes the copy.
+func TestArtifactFile(t *testing.T) {
+	_, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	testkit.WriteFiles(t, dir, map[string]string{"plan.md": "# План\n"})
+	_, stdout, _ := testkit.Run("task", "artifact", "save", "plan.md", "--file", "plan.md", "--task", "SHOP-1")
+	copyPath := filepath.Join(os.Getenv("GENTRY_HOME"), "state", "shop", "tasks", "SHOP-1", "artifacts", "plan.md")
+	if want := testkit.Lines(msg.Text(msg.ArtifactSaved, "plan.md"), msg.Text(msg.ArtifactFileLine, copyPath)); stdout != want {
+		t.Errorf("task artifact save:\n%s\nwant:\n%s", stdout, want)
+	}
+	testkit.WriteFiles(t, dir, map[string]string{"plan.md": "# План, вторая версия\n"})
+	out := testkit.WantJSON(t, contract.ExitOK, "schemas/task-artifact-save.json", "task", "artifact", "save", "plan.md", "--file", "plan.md", "--task", "SHOP-1")
+	if !strings.Contains(out, `"replaced":true`) || !strings.Contains(out, `"kind":"file"`) {
+		t.Errorf("task artifact save --json: %s", out)
+	}
+	if b, err := os.ReadFile(copyPath); err != nil || string(b) != "# План, вторая версия\n" {
+		t.Errorf("copy %q, %v", b, err)
+	}
+	if entries, _ := os.ReadDir(filepath.Dir(copyPath)); len(entries) != 1 {
+		t.Errorf("files left in the artifacts: %v", entries)
+	}
+	_, stdout, _ = testkit.Run("task", "artifact", "save", "plan.md", "--url", "https://example.com/plan", "--task", "SHOP-1")
+	if stdout != testkit.Lines(msg.Text(msg.ArtifactReplaced, "plan.md"), msg.Text(msg.ArtifactURLLine, "https://example.com/plan")) {
+		t.Errorf("replaced by a link:\n%s", stdout)
+	}
+	if testkit.FileExists(copyPath) {
+		t.Error("the copy of the file is left after the link replaced it")
+	}
+	big := filepath.Join(dir, "big.bin")
+	if err := os.WriteFile(big, make([]byte, 10<<20+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testkit.WantRun(t, contract.ExitUsage, "", testkit.Lines(msg.Text(msg.ErrArtifactFileTooLarge, "big.bin"), "", cli.HintFor(msg.HintArtifactLink, "task", "SHOP-1")),
+		"task", "artifact", "save", "big", "--file", "big.bin", "--task", "SHOP-1")
+}
+
+// TestWayWithoutStore checks that the commands of the way of a task find no
+// task without a state store and do not create one.
+func TestWayWithoutStore(t *testing.T) {
+	testkit.EmptyHome(t)
+	t.Chdir(t.TempDir())
+	for _, args := range [][]string{{"task", "stage", "show"}, {"task", "step", "add", "Шаг"}, {"task", "note", "add", "Заметка"}, {"task", "stage", "exit", "--kind", "result", "--text", "Т", "--task", "SHOP-1"}} {
+		if code, _, _ := testkit.Run(args...); code != contract.ExitError {
+			t.Errorf("%v: exit code %d", args, code)
+		}
+	}
+	if p, _ := state.Path(); testkit.FileExists(p) {
+		t.Errorf("the commands must not create the state store %s", p)
+	}
+}
+
+// TestNoteListEmpty shows a task without notes, from another directory.
+func TestNoteListEmpty(t *testing.T) {
+	shop, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(shop)
+	testkit.WantRun(t, contract.ExitOK, msg.Text(msg.NotesNone)+"\n", "", "task", "note", "list", "--task", "SHOP-1")
+	if out := testkit.WantJSON(t, contract.ExitOK, "schemas/task-note-list.json", "task", "note", "list", "--task", "SHOP-1"); out != `{"notes":[],"task":"SHOP-1"}`+"\n" {
+		t.Errorf("task note list --json: %s", out)
+	}
+	testkit.MustRun(t, "task", "note", "add", "Заметка", "--task", "SHOP-1")
+	_, stdout, _ := testkit.Run("task", "show", "SHOP-1")
+	if !strings.HasSuffix(stdout, "\n\n"+testkit.Lines(cli.HintFor(msg.HintStatement, "task", "SHOP-1"), cli.HintFor(msg.HintNotes, "task", "SHOP-1"))) {
+		t.Errorf("task show from another directory:\n%s", stdout)
+	}
+}
+
+// TestStageByTools passes a stage through the tools of the agent, as a
+// session does: hints name tools, and the records are the agent's.
+func TestStageByTools(t *testing.T) {
+	_, fix := testkit.TaskShop(t)
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	t.Chdir(fix)
+	// byTool is the text of lines as a tool gives it: the hints name tools,
+	// and the text has no newline at its end.
+	byTool := func(ls ...string) string {
+		return strings.TrimSuffix(testkit.InChannel(testkit.Lines(ls...), []string{"task", "stage", "exit"}), "\n")
+	}
+	for _, c := range []struct {
+		tool, args, want string
+		failed           bool
+	}{
+		{"task_stage_exit", `{"kind":"result","text":"Создана ветка"}`, byTool(msg.Text(msg.ErrStepsEmpty, "Ветка"), "", cli.HintText(msg.HintStepAdd)), true},
+		{"task_step_add", `{"steps":["Создать ветку feature/shop-1"]}`, byTool(msg.Text(msg.StepsAdded, 1), msg.Text(msg.StepNumber, 1)), false},
+		{"task_step_done", `{"step":1,"check":"git branch --show-current"}`,
+			byTool(msg.Text(msg.StepMarkedDone, 1), msg.Text(msg.StepsLeft, 0), "", cli.HintText(msg.HintStageExit)), false},
+		{"task_stage_exit", `{"kind":"artifact","artifact":"plan","text":"План"}`,
+			byTool(msg.Text(msg.ErrArtifactNotFound, "plan"), "", cli.HintFor(msg.HintArtifactSave, "name", "plan")), true},
+		{"task_stage_exit", `{"kind":"result","text":"Создана ветка"}`, byTool(
+			msg.Text(msg.StageExited, "Ветка"),
+			msg.Text(msg.ExitKindLine, result),
+			msg.Text(msg.ExitTextLine, "Создана ветка"),
+			msg.Text(msg.TransitionLine, "plan"),
+			msg.Text(msg.TaskStage, testkit.Round("План фичи", "plan-feature", 1)),
+			progress(1),
+			"",
+			cli.HintText(msg.HintStageShow),
+		), false},
+	} {
+		text, failed := cli.CallTool(c.tool, []byte(c.args))
+		if text != c.want || failed != c.failed {
+			t.Errorf("%s %s: failed %v:\n%s\nwant failed %v:\n%s", c.tool, c.args, failed, text, c.failed, c.want)
+		}
+	}
+	_, out, _ := testkit.Run("task", "show", "--path", "--json")
+	if !strings.Contains(out, `"source":"agent"`) || strings.Contains(out, `"source":"operator","state"`) {
+		t.Errorf("task show --path --json: %s", out)
+	}
+}

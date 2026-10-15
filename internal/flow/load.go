@@ -89,7 +89,14 @@ type Transition struct {
 	To        string // a node or Finish
 	If        string // the condition; empty for the default path
 	MaxRounds int    // the limit of rounds of the loop it closes; 0 if none
+	// UnlimitedReturn marks a return without a limit: one the operator
+	// decides. The flow is read with it; the files of the flow do not have it.
+	UnlimitedReturn bool
 }
+
+// Return reports whether t is a return: it closes a loop, with a limit of
+// rounds or without one.
+func (t Transition) Return() bool { return t.MaxRounds > 0 || t.UnlimitedReturn }
 
 // Stage is a stage of the flow, described once for all scenarios.
 type Stage struct {
@@ -384,6 +391,7 @@ type transition struct {
 	to, cond string
 	max      int
 	line     int
+	ret      bool // a return: with a limit, or one the operator decides
 }
 
 // stage is a stage as read, with the lines of its references.
@@ -917,7 +925,7 @@ func (l *loader) flow() *Flow {
 		for _, n := range s.nodes {
 			on := Node{ID: n.id, Stage: n.stage}
 			for _, t := range n.next {
-				on.Next = append(on.Next, Transition{To: t.to, If: t.cond, MaxRounds: t.max})
+				on.Next = append(on.Next, Transition{To: t.to, If: t.cond, MaxRounds: t.max, UnlimitedReturn: t.ret && t.max == 0})
 			}
 			out.Nodes = append(out.Nodes, on)
 		}

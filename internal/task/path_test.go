@@ -97,6 +97,47 @@ func TestCountReturnsOverlapping(t *testing.T) {
 	}
 }
 
+// release is acceptance whose return the operator decides, without a limit,
+// with a release after it.
+//
+//	branch → criteria → implementation → review → acceptance → release → finish
+//	                      ↑   ↑────────────┘ (2)     │
+//	                      └──────────────────────────┘ (no limit)
+var release = flow.Scenario{ID: "feature", Start: "branch", Nodes: []flow.Node{
+	{ID: "branch", Stage: "branch", Next: []flow.Transition{{To: "criteria"}}},
+	{ID: "criteria", Stage: "criteria", Next: []flow.Transition{{To: "implementation"}}},
+	{ID: "implementation", Stage: "implementation", Next: []flow.Transition{{To: "review"}}},
+	{ID: "review", Stage: "review", Next: []flow.Transition{
+		{To: "implementation", If: "есть замечания", MaxRounds: 2},
+		{To: "acceptance"},
+	}},
+	{ID: "acceptance", Stage: "acceptance", Next: []flow.Transition{
+		{To: "implementation", If: "приёмка не пройдена", UnlimitedReturn: true},
+		{To: "release"},
+	}},
+	{ID: "release", Stage: "release", Next: []flow.Transition{{To: "finish"}}},
+}}
+
+// TestUnlimitedReturn checks a return without a limit: a loop like any
+// return, counted and starting the returns within it anew, and left out of
+// the way to the end.
+func TestUnlimitedReturn(t *testing.T) {
+	loops := release.Loops()
+	if len(loops) != 2 || loops[1].Max != 0 || !loops[0].Within(loops[1]) {
+		t.Fatalf("loops %+v", loops)
+	}
+	counts := countReturns(loops, way("branch", "criteria", "implementation", "review", "implementation", "review", "acceptance",
+		"implementation", "review", "acceptance", "implementation", "review", "acceptance", "implementation", "review", "implementation"))
+	if review, accept := counts[[2]string{"review", "implementation"}], counts[[2]string{"acceptance", "implementation"}]; review != 1 || accept != 3 {
+		t.Errorf("review %d, acceptance %d; want 1, 3", review, accept)
+	}
+	// Taken as a transition forward, the return would make the way from
+	// acceptance end at implementation, passed already: 5–6.
+	if p := progressOf(release, way("branch", "criteria", "implementation", "review", "acceptance"), "acceptance"); p != (Progress{Passed: 4, Min: 6, Max: 6}) {
+		t.Errorf("progress at acceptance %+v, want 4 of 6", p)
+	}
+}
+
 func TestProgress(t *testing.T) {
 	// A fork ahead: from start, a short way through b or a long one through c, d.
 	fork := flow.Scenario{Start: "start", Nodes: []flow.Node{

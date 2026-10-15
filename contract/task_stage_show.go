@@ -171,18 +171,19 @@ func (j *TaskStageShowStage) UnmarshalJSON(value []byte) error {
 }
 
 type TaskStageShowTransition struct {
-	// Returns of the limit the operator allowed beyond the flow; only for a return.
+	// Returns of the limit the operator allowed beyond the flow; only for a return
+	// with a limit.
 	AllowedReturns *int `json:"allowed_returns,omitempty,omitzero"`
 
 	// Condition of the transition; absent for one without.
 	If *string `json:"if,omitempty,omitzero"`
 
 	// Limit of returns by the transition with the returns the operator allowed beyond
-	// the flow; only for a return.
+	// the flow; only for a return with a limit.
 	MaxReturns *int `json:"max_returns,omitempty,omitzero"`
 
 	// Returns made by the transition, counted anew after a return by an outer loop;
-	// only for a return.
+	// only for a return, with a limit or without one.
 	Returns *int `json:"returns,omitempty,omitzero"`
 
 	// Stage of that node; absent for finish.

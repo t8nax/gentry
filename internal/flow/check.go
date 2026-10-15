@@ -48,6 +48,7 @@ func (l *loader) check() error {
 				l.report(contract.ProblemUnknownStage, s.file, n.stageLine, msg.ProblemUnknownStage, objNode(s.id, n.id), n.stage)
 			}
 		}
+		l.markReturns(s)
 		// A malformed file would give false problems of the graph, such as a
 		// dead end at a node whose transitions cannot be read.
 		if !s.malformed {
@@ -72,11 +73,72 @@ func (l *loader) checkAgents() {
 	}
 }
 
+// markReturns marks the returns of scenario s: the transitions with a limit
+// of rounds, and the returns the operator decides. A return the operator
+// decides is a step back along the course of the scenario, which the path by
+// default sets. The scenario is walked from the start depth first, at each
+// node by its transition by default first, then by those with a condition in
+// the order of the file; a transition with a condition from a node whose
+// stage the operator does to a node on the current way of the walk is such a
+// return. Any other transition leads forward: though it lies on the loop of
+// another return, or leads to a node the walk has passed by another way. The
+// returns of the operator are marked only on the nodes the walk reaches.
+func (l *loader) markReturns(s *scenario) {
+	byID := map[string]*node{}
+	for _, n := range s.nodes {
+		byID[n.id] = n
+		for _, t := range n.next {
+			t.ret = t.max > 0
+		}
+	}
+	passed := map[string]bool{}
+	onWay := map[string]bool{}
+	var walk func(n *node)
+	walk = func(n *node) {
+		passed[n.id], onWay[n.id] = true, true
+		operator := false
+		if st := l.stages[n.stage]; st != nil {
+			operator = st.executor == Operator
+		}
+		for _, t := range byCourse(n.next) {
+			if operator && t.cond != "" && onWay[t.to] {
+				t.ret = true
+			}
+			if next := byID[t.to]; next != nil && !passed[t.to] {
+				walk(next)
+			}
+		}
+		onWay[n.id] = false
+	}
+	if n := byID[s.start]; n != nil {
+		walk(n)
+	}
+}
+
+// byCourse returns transitions next in the order the course of a scenario
+// takes them: the ones by default first, then the ones with a condition, each
+// in the order of the file.
+func byCourse(next []*transition) []*transition {
+	out := make([]*transition, 0, len(next))
+	for _, t := range next {
+		if t.cond == "" {
+			out = append(out, t)
+		}
+	}
+	for _, t := range next {
+		if t.cond != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // checkGraph checks the graph of scenario s by the rules of section 7.1: the
 // start node and every target exist; every node is reachable from the start
-// and reaches the end; every loop has a transition with a limit of rounds,
-// and only a transition that closes a loop has one; at most one transition of
-// a node is without a condition, and no two lead to one node.
+// and reaches the end; every loop has a return — a transition with a limit of
+// rounds or a return the operator decides — and only a transition that
+// closes a loop has a limit; at most one transition of a node is without a
+// condition, and no two lead to one node.
 func (l *loader) checkGraph(s *scenario) {
 	so := objScenario(s.id)
 	byID := map[string]*node{}
@@ -128,7 +190,7 @@ func (l *loader) checkGraph(s *scenario) {
 
 	// reach returns what is reachable from node id by zero or more
 	// transitions, Finish included; unlimited follows only transitions
-	// without a limit of rounds.
+	// that are no returns.
 	reach := func(id string, unlimited bool) map[string]bool {
 		seen := map[string]bool{id: true}
 		queue := []string{id}
@@ -136,7 +198,7 @@ func (l *loader) checkGraph(s *scenario) {
 			cur := queue[0]
 			queue = queue[1:]
 			for _, t := range edges[cur] {
-				if unlimited && t.max > 0 || seen[t.to] {
+				if unlimited && t.ret || seen[t.to] {
 					continue
 				}
 				seen[t.to] = true
@@ -188,12 +250,15 @@ func (l *loader) checkGraph(s *scenario) {
 		}
 	}
 
-	// A loop without a limit is a cycle of transitions without one. Each such
-	// group of nodes is reported once, by the shortest cycle through its
-	// first node in the order of the file.
+	// A loop without a limit is a cycle of transitions that are no returns.
+	// Each such group of nodes is reported once, by the shortest cycle
+	// through its first node in the order of the file. As with dead ends,
+	// only the nodes reachable from the start are checked: the returns of the
+	// operator are marked only there, and an unreachable node is a problem of
+	// its own.
 	covered := map[string]bool{}
 	for _, n := range s.nodes {
-		if covered[n.id] {
+		if covered[n.id] || !reaches[s.start][n.id] {
 			continue
 		}
 		cycle := shortestCycle(n.id, edges)
@@ -211,7 +276,7 @@ func (l *loader) checkGraph(s *scenario) {
 }
 
 // shortestCycle returns the shortest cycle from node id back to it by
-// transitions without a limit of rounds, both ends included; nil if none.
+// transitions that are no returns, both ends included; nil if none.
 func shortestCycle(id string, edges map[string][]*transition) []string {
 	parent := map[string]string{}
 	queue := []string{id}
@@ -219,7 +284,7 @@ func shortestCycle(id string, edges map[string][]*transition) []string {
 		cur := queue[0]
 		queue = queue[1:]
 		for _, t := range edges[cur] {
-			if t.max > 0 || t.to == Finish {
+			if t.ret || t.to == Finish {
 				continue
 			}
 			if t.to == id {

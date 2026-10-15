@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -192,20 +193,30 @@ func diffUnused(t *testing.T) flow.DiffResult {
 	}
 }
 
+// shopMerge is the node of the merge in the scenarios of the shop.
+const shopMerge = "  merge:           { stage: merge, next: finish }\n"
+
+// operatorReturn is the node of the merge with a return of the operator to
+// the implementation, with the limit given or without one if it is 0.
+func operatorReturn(limit int) string {
+	n := "  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n"
+	if limit > 0 {
+		n += "        max_rounds: " + strconv.Itoa(limit) + "\n"
+	}
+	return n + "      - to: finish\n"
+}
+
 // diffOperatorReturns is a draft with returns of the operator from the
 // merge without a limit: in the bug scenario its limit of 1 is removed, in
 // the feature scenario it is added.
 func diffOperatorReturns(t *testing.T) flow.DiffResult {
-	merge := "  merge:           { stage: merge, next: finish }\n"
-	unlimited := "  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n"
-	limited := strings.Replace(unlimited, "так\n", "так\n        max_rounds: 1\n", 1)
 	files := testdataFiles(t, "shop/flow", nil)
 	old := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
-		"scenarios/bug.yaml": strings.Replace(files["scenarios/bug.yaml"], merge, limited, 1),
+		"scenarios/bug.yaml": strings.Replace(files["scenarios/bug.yaml"], shopMerge, operatorReturn(1), 1),
 	}), nil)
 	cur := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
-		"scenarios/bug.yaml":     strings.Replace(files["scenarios/bug.yaml"], merge, unlimited, 1),
-		"scenarios/feature.yaml": strings.Replace(files["scenarios/feature.yaml"], merge, unlimited, 1),
+		"scenarios/bug.yaml":     strings.Replace(files["scenarios/bug.yaml"], shopMerge, operatorReturn(0), 1),
+		"scenarios/feature.yaml": strings.Replace(files["scenarios/feature.yaml"], shopMerge, operatorReturn(0), 1),
 	}), nil)
 	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read,
 		Changes: []flow.Change{change(flow.ObjectScenario, "bug", flow.Modified), change(flow.ObjectScenario, "feature", flow.Modified)},
@@ -213,6 +224,22 @@ func diffOperatorReturns(t *testing.T) flow.DiffResult {
 			scenarioDiff(old.Read, cur.Read, "bug", nil, false),
 			scenarioDiff(old.Read, cur.Read, "feature", nil, false),
 		},
+	}
+}
+
+// diffOperatorLimit is a draft that gives the return of the operator from the
+// merge of the bug scenario a limit of 2.
+func diffOperatorLimit(t *testing.T) flow.DiffResult {
+	bug := testdataFiles(t, "shop/flow", nil)["scenarios/bug.yaml"]
+	old := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
+		"scenarios/bug.yaml": strings.Replace(bug, shopMerge, operatorReturn(0), 1),
+	}), nil)
+	cur := readFlow(t, testdataFiles(t, "shop/flow", map[string]string{
+		"scenarios/bug.yaml": strings.Replace(bug, shopMerge, operatorReturn(2), 1),
+	}), nil)
+	return flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read,
+		Changes:   []flow.Change{change(flow.ObjectScenario, "bug", flow.Modified)},
+		Scenarios: []flow.ScenarioDiff{scenarioDiff(old.Read, cur.Read, "bug", nil, false)},
 	}
 }
 
@@ -301,6 +328,14 @@ func TestDiffText(t *testing.T) {
 			"    ~ возврат «Слияние → Реализация»: предел 1 снят",
 			"  Фича: Ветка → План фичи → Реализация → Ревью → Слияние",
 			"    + возврат «Слияние → Реализация»: если оператор назвал, что не так",
+			"",
+		) + legend,
+			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
+			[]string{hintLineOf(msg.HintFlowApply, "flow_apply")}},
+		{"a limit of a return of the operator appears", diffOperatorLimit(t), head(true, false) + lines(
+			msg.Text(msg.DiffScenarios),
+			"  Баг: Ветка → План бага → Реализация → Ревью → Слияние",
+			"    ~ возврат «Слияние → Реализация»: до 2 раз",
 			"",
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},

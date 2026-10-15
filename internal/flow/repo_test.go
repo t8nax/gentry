@@ -224,8 +224,8 @@ func TestApplyBreaksOther(t *testing.T) {
 
 // TestSharedUsedByAgents checks that a project whose stage runs a shared
 // subagent by its field agents uses it as one whose stage it carries out:
-// the diff names the project, and a removal of the subagent that breaks its
-// flow is refused.
+// the diff and the application of a change name the project, and a removal
+// of the subagent that breaks its flow is refused.
 func TestSharedUsedByAgents(t *testing.T) {
 	t.Parallel()
 	s := newProcessShop(t)
@@ -245,6 +245,12 @@ func TestSharedUsedByAgents(t *testing.T) {
 	}
 	if res.Shared == nil || len(res.Shared.Changes) != 1 || !slices.Equal(res.Shared.Changes[0].Projects, []string{"crm"}) {
 		t.Errorf("shared: %+v", res.Shared)
+	}
+	// The change applied names the crm among the other projects, which
+	// flow apply and the event flow.applied give.
+	applied, err := Apply(s.r, s.shop)
+	if err != nil || !slices.Equal(applied.Projects, []string{"crm"}) {
+		t.Fatalf("apply: %v, projects %q", err, applied.Projects)
 	}
 
 	s.write(s.shop.Shared, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})

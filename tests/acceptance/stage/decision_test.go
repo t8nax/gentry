@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -288,15 +289,45 @@ func TestOperatorAllowReturn(t *testing.T) {
 // TestOperatorReturnWithoutLimit takes a task back from the merge, a stage of
 // the operator, by a return without a limit: it is not refused however many
 // returns were made, shows only their number, starts the returns of review
-// anew, and an allowance of one more return to it is refused.
+// anew, and an allowance of one more return to it is refused. The release,
+// which the merge leads to with a condition, lies on the loop of the return
+// from the release, yet is a transition forward.
 func TestOperatorReturnWithoutLimit(t *testing.T) {
-	feature := strings.Replace(readTestdata(t, "scenarios/feature.yaml"), "  merge:           { stage: merge, next: finish }\n",
-		"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n", 1)
+	original := readTestdata(t, "scenarios/feature.yaml")
+	feature := strings.Replace(original, "  merge:           { stage: merge, next: finish }\n",
+		"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n"+
+			"      - to: release\n        if: нужен выпуск\n      - to: finish\n"+
+			"  release:\n    stage: merge\n    next:\n      - to: implementation\n        if: выпуск не прошёл\n      - to: finish\n", 1)
 	_, fix := testkit.TaskShop(t)
 	testkit.WriteDraft(t, testkit.ShopPlaces(), map[string]string{"scenarios/feature.yaml": feature})
 	testkit.MustRun(t, "flow", "apply")
 	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	// The active flow loses the returns of the operator: the task goes by the
+	// snapshot of its flow, which the same loader marks.
+	testkit.WriteDraft(t, testkit.ShopPlaces(), map[string]string{"scenarios/feature.yaml": original})
+	testkit.MustRun(t, "flow", "apply")
 	t.Chdir(fix)
+
+	_, stdout, _ := testkit.Run("task", "flow", "show", "--scenario", "feature")
+	for _, want := range []string{
+		msg.Text(msg.FlowTransition, "merge", "implementation", "оператор назвал, что не так"),
+		msg.Text(msg.FlowTransition, "merge", "release", "нужен выпуск"),
+		msg.Text(msg.FlowTransition, "release", "implementation", "выпуск не прошёл"),
+	} {
+		if !strings.Contains(stdout, "  "+want+"\n") {
+			t.Errorf("task flow show --scenario feature:\n%s\nwant within:\n%s", stdout, want)
+		}
+	}
+	out := testkit.WantJSON(t, contract.ExitOK, "schemas/flow-show.json", "task", "flow", "show", "--scenario", "feature")
+	for _, want := range []string{
+		`{"id":"merge","next":[{"if":"оператор назвал, что не так","return":true,"to":"implementation"},{"if":"нужен выпуск","to":"release"},{"to":"finish"}],"stage":"merge"}`,
+		`{"id":"release","next":[{"if":"выпуск не прошёл","return":true,"to":"implementation"},{"to":"finish"}],"stage":"merge"}`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("task flow show --scenario feature --json:\n%s\nwant within:\n%s", out, want)
+		}
+	}
+
 	closeStage(t, "Создать ветку")
 	closeStage(t, "Согласовать план")
 	closeStage(t, "Сделать")
@@ -307,13 +338,27 @@ func TestOperatorReturnWithoutLimit(t *testing.T) {
 	row := func(returns string) string {
 		return "оператор назвал, что не так  " + returns + "\n"
 	}
-	if _, stdout, _ := testkit.Run("task", "stage", "show"); !strings.Contains(stdout, row("0")) {
+	_, stdout, _ = testkit.Run("task", "stage", "show")
+	if !strings.Contains(stdout, row("0")) {
 		t.Errorf("task stage show before a return:\n%s", stdout)
+	}
+	// A transition forward has no returns.
+	release := false
+	for _, line := range strings.Split(stdout, "\n") {
+		if f := strings.Fields(line); len(f) > 0 && f[0] == "release" {
+			release = true
+			if f[len(f)-1] != msg.Text(msg.ValueNone) {
+				t.Errorf("task stage show, the transition to the release: %q", line)
+			}
+		}
+	}
+	if !release {
+		t.Errorf("task stage show has no transition to the release:\n%s", stdout)
 	}
 	// Nothing is to be allowed, and nothing is recorded.
 	testkit.WantRun(t, contract.ExitError, "", msg.Text(msg.ErrReturnUnlimited, "implementation")+"\n",
 		"task", "decision", "add", "--answer", "Да", "--allow-return", "implementation")
-	_, out, _ := testkit.Run("task", "decision", "add", "--answer", "Да", "--allow-return", "implementation", "--json")
+	_, out, _ = testkit.Run("task", "decision", "add", "--answer", "Да", "--allow-return", "implementation", "--json")
 	testkit.Validate(t, "schemas/error.json", out)
 	if !strings.Contains(out, `"code":"return_unlimited"`) || !strings.Contains(out, `"details":{"node":"merge","to":"implementation"}`) {
 		t.Errorf("return_unlimited --json: %s", out)
@@ -335,9 +380,32 @@ func TestOperatorReturnWithoutLimit(t *testing.T) {
 		}
 		testkit.MustRun(t, back...)
 	}
-	_, stdout, _ := testkit.Run("task", "show")
+	_, stdout, _ = testkit.Run("task", "show")
 	if !strings.Contains(stdout, msg.Text(msg.TaskStage, testkit.Round("Реализация", "implementation", 5))+"\n") {
 		t.Errorf("task show after three returns:\n%s", stdout)
+	}
+	// Each return without a limit is numbered in its event.
+	_, events, _ := testkit.Run("events")
+	var numbers []int
+	for _, line := range strings.Split(strings.TrimSpace(events), "\n") {
+		var e struct {
+			Type string          `json:"type"`
+			Data json.RawMessage `json:"data"`
+		}
+		json.Unmarshal([]byte(line), &e)
+		var d struct {
+			Node    string `json:"node"`
+			To      string `json:"to"`
+			Returns int    `json:"returns"`
+		}
+		json.Unmarshal(e.Data, &d)
+		if e.Type == "stage.exited" && d.Node == "merge" && d.To == "implementation" {
+			testkit.Validate(t, "schemas/events/stage.exited.json", string(e.Data))
+			numbers = append(numbers, d.Returns)
+		}
+	}
+	if !slices.Equal(numbers, []int{1, 2, 3}) {
+		t.Errorf("returns of the events stage.exited from the merge %v, want [1 2 3]:\n%s", numbers, events)
 	}
 	// The return of the operator started the returns of review anew.
 	closeStage(t, "Исправить")
@@ -348,9 +416,20 @@ func TestOperatorReturnWithoutLimit(t *testing.T) {
 	if _, stdout, _ := testkit.Run("task", "stage", "show"); !strings.Contains(stdout, row("3")) {
 		t.Errorf("task stage show after three returns:\n%s", stdout)
 	}
+	// Only a return has returns; only one with a limit has max_returns and
+	// allowed_returns.
 	out = testkit.WantJSON(t, contract.ExitOK, "schemas/task-stage-show.json", "task", "stage", "show")
-	if !strings.Contains(out, `"if":"оператор назвал, что не так","returns":3,"stage":"implementation"`) || strings.Contains(out, "max_returns") {
-		t.Errorf("task stage show --json: %s", out)
+	for _, want := range []string{
+		`{"if":"оператор назвал, что не так","returns":3,"stage":"implementation","title":"Реализация","to":"implementation"}`,
+		`{"if":"нужен выпуск","stage":"merge","title":"Слияние","to":"release"}`,
+		`{"to":"finish"}`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("task stage show --json:\n%s\nwant within:\n%s", out, want)
+		}
+	}
+	if strings.Contains(out, "max_returns") || strings.Contains(out, "allowed_returns") {
+		t.Errorf("task stage show --json has a limit: %s", out)
 	}
 }
 

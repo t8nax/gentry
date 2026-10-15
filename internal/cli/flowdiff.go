@@ -187,7 +187,7 @@ func (d diffView) hints() []hint {
 	return []hint{hintOf(msg.HintFlowApply)}
 }
 
-// usedBy names the projects a shared subagent concerns.
+// usedBy names the projects a shared subagent is used in.
 func usedBy(projects []string) string {
 	if len(projects) == 0 {
 		return msg.Text(msg.DiffUnused)

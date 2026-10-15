@@ -204,6 +204,47 @@ func TestFlowApplyRemoves(t *testing.T) {
 	}
 }
 
+// TestStageAgentsLaidOut checks that a shared subagent a stage runs by its
+// field agents is laid out as an executor is: by flow apply, task take and
+// agents deploy; a shared subagent no stage names is not.
+func TestStageAgentsLaidOut(t *testing.T) {
+	shop, fix := testkit.TaskShop(t)
+	p := testkit.ShopPlaces()
+	testkit.WriteFiles(t, p.Shared, map[string]string{
+		"scout.yaml":   "purpose: разведка кода\ncapabilities: [read, search]\n",
+		"scout.md":     "Найти места изменения и описать их.\n",
+		"auditor.yaml": "purpose: аудит\ncapabilities: [read]\n",
+		"auditor.md":   "Проверить изменения на риски.\n",
+	})
+	testkit.WriteDraft(t, p, map[string]string{
+		"stages/plan-feature.yaml": "title: План фичи\nexit: план согласован с оператором\nexecutor: orchestrator\ninclude: [plan-format]\nagents: [scout]\n",
+	})
+	testkit.MustRun(t, "flow", "apply")
+	scout := func(w string) string { return filepath.Join(w, ".claude", "agents", "scout.md") }
+	for _, w := range []string{shop, fix} {
+		if !strings.Contains(read(t, scout(w)), "Найти места изменения") {
+			t.Errorf("scout in %s", w)
+		}
+		if testkit.FileExists(filepath.Join(w, ".claude", "agents", "auditor.md")) {
+			t.Errorf("auditor, which no stage names, is in %s", w)
+		}
+	}
+
+	os.Remove(scout(fix))
+	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)
+	if !testkit.FileExists(scout(fix)) {
+		t.Error("task take does not lay out scout")
+	}
+	os.Remove(scout(shop))
+	testkit.MustRun(t, "agents", "deploy")
+	if !testkit.FileExists(scout(shop)) {
+		t.Error("agents deploy does not lay out scout")
+	}
+	for _, w := range []string{shop, fix} {
+		clean(t, w)
+	}
+}
+
 func TestAgentsDeploy(t *testing.T) {
 	shop, fix := testkit.TaskShop(t)
 	testkit.MustRun(t, testkit.TakeArgs("--worktree", fix)...)

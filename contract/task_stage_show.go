@@ -98,6 +98,10 @@ func (j *TaskStageShowPart) UnmarshalJSON(value []byte) error {
 
 // The stage of the node.
 type TaskStageShowStage struct {
+	// Subagents the stage runs besides its executor, by its instruction, in the order
+	// of the flow; empty if none.
+	Agents []string `json:"agents"`
+
 	// Commands of checks Gentry runs in the worktree of the task when the stage is
 	// closed by an exit, in order; absent if the stage has none.
 	Checks []string `json:"checks,omitempty,omitzero"`
@@ -130,6 +134,9 @@ func (j *TaskStageShowStage) UnmarshalJSON(value []byte) error {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(value, &raw); err != nil {
 		return err
+	}
+	if _, ok := raw["agents"]; raw != nil && !ok {
+		return fmt.Errorf("field agents in TaskStageShowStage: required")
 	}
 	if _, ok := raw["executor"]; raw != nil && !ok {
 		return fmt.Errorf("field executor in TaskStageShowStage: required")

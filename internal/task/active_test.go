@@ -198,6 +198,22 @@ func TestActiveFlow(t *testing.T) {
 	}
 }
 
+// TestActiveFlowAgents checks that a change of a shared subagent a stage runs
+// by its field agents changes the active flow, as one of an executor does.
+func TestActiveFlowAgents(t *testing.T) {
+	t.Parallel()
+	s := newActiveShop(t)
+	flowKind := process.FlowOf("shop")
+	s.write(flowKind, map[string]string{"stages/plan-feature.yaml": "title: План фичи\nexit: план согласован\nexecutor: orchestrator\nagents: [translator]\n"})
+	s.apply(flowKind)
+	task := s.take()
+	s.write(process.Shared, map[string]string{"translator.md": "Перевести тексты витрины и писем.\n"})
+	want := s.apply(process.Shared)
+	if got := s.active(task); got == nil || got.Commit != want.Commit {
+		t.Errorf("%+v, want %+v", got, want)
+	}
+}
+
 // TestActiveFlowAt checks that a task is shown without the change of the
 // active flow while the process repository cannot be read at once: another
 // command holds it, or there is none, which is not created.

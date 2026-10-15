@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 	"testing"
@@ -300,7 +301,7 @@ func TestDiffText(t *testing.T) {
 			"  + auditor",
 			"",
 			"Общие субагенты:",
-			"  ~ reviewer: касается проектов shop",
+			"  ~ reviewer: используется в проектах shop",
 			"",
 		) + legend,
 			[]string{hintLineOf(msg.HintFlowApply, "gentry flow apply")},
@@ -482,7 +483,7 @@ flowchart TD
 ` + msg.Text(msg.ReportHeadingChange, "Этап «Безопасность» (security)", added) + `
 
 ` + lines(msg.Text(msg.FlowExit, "проверка безопасности пройдена")+"  ", msg.Text(msg.FlowExecutor, "auditor")+"  ",
-		msg.Text(msg.FlowParts, noValue)+"  ", msg.Text(msg.FlowScenarios, "feature")) + `
+		msg.Text(msg.FlowAgents, noValue)+"  ", msg.Text(msg.FlowParts, noValue)+"  ", msg.Text(msg.FlowScenarios, "feature")) + `
 ` + msg.Text(msg.FlowInstruction) + `
 
 > Проверить изменения на уязвимости.
@@ -499,7 +500,7 @@ flowchart TD
 
 ### Общий субагент reviewer — ` + modified + `
 
-Касается проектов: shop
+Используется в проектах: shop
 
 | ` + msg.Text(msg.ColField) + ` | ` + msg.Text(msg.ColWas) + ` | ` + msg.Text(msg.ColNow) + ` |
 | --- | --- | --- |
@@ -544,6 +545,44 @@ func TestDiffReportChecks(t *testing.T) {
 		header + "| Время проверок | 10m | 90s |\n\n",
 		header + "| Время проверок | — | 10m |\n| Проверки | — | `go vet ./...`, `go test ./...` |\n",
 		lines(msg.Text(msg.FlowScenarios, "feature")+"  ", msg.Text(msg.FlowCheckTimeout, "1h30m")+"  ", "Проверки: `govulncheck ./...`, `gosec -exclude=G104 ./...`"),
+	} {
+		if !strings.Contains(report, part) {
+			t.Errorf("the file of changes:\n%s\nwant within:\n%s", report, part)
+		}
+	}
+}
+
+// TestDiffReportAgents checks the subagents a stage runs in the file of
+// changes: the row of the table of a stage whose field agents changed, the
+// lines of a stage added and of one removed, and the stages of a subagent of
+// the project, those it carries out and those that run it in one list.
+func TestDiffReportAgents(t *testing.T) {
+	inUTC(t)
+	auditor := map[string]string{
+		"agents/auditor.yaml": "purpose: проверка безопасности изменений\ncapabilities: [read, search]\n",
+		"agents/auditor.md":   "Найти уязвимости в изменениях задачи.\n",
+		"stages/merge.yaml":   "title: Слияние\nexit: ветка задачи влита в main\nexecutor: operator\nagents: [reviewer]\n",
+	}
+	changes := maps.Clone(auditor)
+	changes["agents/auditor.md"] = "Найти уязвимости и секреты в изменениях задачи.\n"
+	changes["stages/plan-feature.yaml"] = "title: План фичи\nexit: план согласован с оператором\nexecutor: orchestrator\n" +
+		"include: [plan-format]\nagents: [reviewer, auditor]\n"
+	changes["stages/security.yaml"] = "title: Безопасность\nexit: проверка безопасности пройдена\nexecutor: orchestrator\nagents: [auditor]\n"
+	changes["stages/security.md"] = "Проверить изменения на уязвимости.\n"
+	changes["stages/merge.yaml"], changes["stages/merge.md"] = "", ""
+	old := readFlow(t, testdataFiles(t, "shop/flow", auditor), nil)
+	cur := readFlow(t, testdataFiles(t, "shop/flow", changes), nil)
+	res := flow.DiffResult{Applied: applied, Draft: true, Old: old.Read, New: cur.Read, Changes: []flow.Change{
+		change(flow.ObjectStage, "merge", flow.Removed), change(flow.ObjectStage, "plan-feature", flow.Modified),
+		change(flow.ObjectStage, "security", flow.Added), change(flow.ObjectAgent, "auditor", flow.Modified),
+	}}
+	report := diffView{project: "shop", res: res}.report(shopTime)
+	header := "| " + msg.Text(msg.ColField) + " | " + msg.Text(msg.ColWas) + " | " + msg.Text(msg.ColNow) + " |\n| --- | --- | --- |\n"
+	for _, part := range []string{
+		header + "| Субагенты | — | reviewer, auditor |\n",
+		lines(msg.Text(msg.FlowExecutor, "operator")+"  ", msg.Text(msg.FlowAgents, "reviewer")+"  ", msg.Text(msg.FlowParts, noValue)+"  "),
+		lines(msg.Text(msg.FlowExecutor, "orchestrator")+"  ", msg.Text(msg.FlowAgents, "auditor")+"  ", msg.Text(msg.FlowParts, noValue)+"  "),
+		"\n" + msg.Text(msg.FlowStages, "plan-feature, security") + "\n",
 	} {
 		if !strings.Contains(report, part) {
 			t.Errorf("the file of changes:\n%s\nwant within:\n%s", report, part)

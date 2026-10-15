@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/t8nax/gentry/contract/schemas/flow-show.json",
   "title": "FlowShowOutput",
-  "description": "Output of `gentry flow show --json`: the active flow of the project with its texts, or with --draft the draft: the flow directory with its changes, in any directory. Also the output of `gentry task flow show --json`: the flow of the task, the snapshot it was taken with; then task is present, and applied, dir and draft are absent. With an object flag the arrays narrow to the object and what it refers to: for a scenario its stages, their parts and subagents; for a stage its parts and subagent; for a part or a subagent the object alone.",
+  "description": "Output of `gentry flow show --json`: the active flow of the project with its texts, or with --draft the draft: the flow directory with its changes, in any directory. Also the output of `gentry task flow show --json`: the flow of the task, the snapshot it was taken with; then task is present, and applied, dir and draft are absent. With an object flag the arrays narrow to the object and what it refers to: for a scenario its stages, their parts and subagents; for a stage its parts and subagents; for a part or a subagent the object alone.",
   "type": "object",
   "properties": {
     "project": {
@@ -189,6 +189,14 @@
               "minLength": 1
             }
           },
+          "agents": {
+            "description": "Identifiers of the subagents the stage runs besides its executor, by its instruction: subagents of the project or shared subagents, in the order of the stage file; empty if none. Only a stage of orchestrator or operator has them.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "checks": {
             "description": "Commands of checks Gentry runs in the worktree of the task when the stage is closed by an exit, in the order of the stage file; absent if the stage has none.",
             "type": "array",
@@ -208,7 +216,7 @@
             "type": "string"
           }
         },
-        "required": ["id", "title", "exit", "executor", "include", "instruction"]
+        "required": ["id", "title", "exit", "executor", "include", "agents", "instruction"]
       }
     },
     "parts": {
@@ -232,7 +240,7 @@
       }
     },
     "agents": {
-      "description": "Subagents by identifier: those of the project and the shared subagents the stages name. A project subagent replaces a shared one of the same identifier.",
+      "description": "Subagents by identifier: those of the project and the shared subagents the stages name, as their executor or in their agents. A project subagent replaces a shared one of the same identifier.",
       "type": "array",
       "items": {
         "title": "FlowAgent",

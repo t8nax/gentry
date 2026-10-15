@@ -41,6 +41,21 @@ func (l *loader) check() error {
 				l.report(contract.ProblemUnknownExecutor, st.file, st.executorLine, msg.ProblemUnknownExecutor, objStage(id), e)
 			}
 		}
+		for i, a := range st.agents {
+			// The main session and the operator are not subagents.
+			found := false
+			if a != Orchestrator && a != Operator {
+				var err error
+				if found, err = l.subagent(a); err != nil {
+					return err
+				}
+			}
+			if !found {
+				// The text is that of the executor: the subagent is not found
+				// either way, and the code names the field.
+				l.report(contract.ProblemUnknownAgent, st.file, st.agentLines[i], msg.ProblemUnknownExecutor, objStage(id), a)
+			}
+		}
 	}
 	for _, s := range l.scenarios {
 		for _, n := range s.nodes {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/process"
@@ -218,6 +219,46 @@ func TestApplyBreaksOther(t *testing.T) {
 	}
 	if d := s.drafts(); !slices.Equal(d, []bool{true, false, true}) {
 		t.Errorf("drafts after the refusal: %v", d)
+	}
+}
+
+// TestSharedUsedByAgents checks that a project whose stage runs a shared
+// subagent by its field agents uses it as one whose stage it carries out:
+// the diff and the application of a change name the project, and a removal
+// of the subagent that breaks its flow is refused.
+func TestSharedUsedByAgents(t *testing.T) {
+	t.Parallel()
+	s := newProcessShop(t)
+	// The crm runs reviewer at its plan by agents alone.
+	s.write(s.crm.Dir, map[string]string{
+		"stages/review.yaml":       "title: Ревью\nexit: замечания записаны\nexecutor: orchestrator\n",
+		"stages/plan-feature.yaml": "title: План фичи\nexit: план согласован\nexecutor: orchestrator\nagents: [reviewer]\n",
+	})
+	if _, err := Apply(s.r, s.crm); err != nil {
+		t.Fatal(err)
+	}
+	s.write(s.shop.Dir, map[string]string{"stages/review.yaml": "title: Ревью\nexit: замечания записаны\nexecutor: orchestrator\n"})
+	s.write(s.shop.Shared, map[string]string{"reviewer.md": "Проверить изменения и логи.\n"})
+	res, err := DiffDraft(s.r, s.shop)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Shared == nil || len(res.Shared.Changes) != 1 || !slices.Equal(res.Shared.Changes[0].Projects, []string{"crm"}) {
+		t.Errorf("shared: %+v", res.Shared)
+	}
+	// The change applied names the crm among the other projects, which
+	// flow apply and the event flow.applied give.
+	applied, err := Apply(s.r, s.shop)
+	if err != nil || !slices.Equal(applied.Projects, []string{"crm"}) {
+		t.Fatalf("apply: %v, projects %q", err, applied.Projects)
+	}
+
+	s.write(s.shop.Shared, map[string]string{"reviewer.yaml": "", "reviewer.md": ""})
+	_, err = Apply(s.r, s.shop)
+	var invalid *DraftInvalidError
+	if !errors.As(err, &invalid) || len(invalid.Problems) != 0 || len(invalid.Flows) != 1 || invalid.Flows[0].Project != "crm" ||
+		len(invalid.Flows[0].Problems) != 1 || invalid.Flows[0].Problems[0].Code != contract.ProblemUnknownAgent {
+		t.Fatalf("refusal: %v, %+v", err, invalid)
 	}
 }
 

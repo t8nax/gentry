@@ -818,3 +818,11 @@ const (
 	ReportFieldCheckTimeout Key = "report.field_check_timeout"
 	ReportFieldChecks       Key = "report.field_checks"
 )
+
+// Texts of the subagents a stage runs, the field agents (GEN-13).
+const (
+	ProblemAgents           Key = "problem.agents"
+	ProblemAgentsNotAllowed Key = "problem.agents_not_allowed"
+	FlowAgents              Key = "flow.agents"
+	ReportFieldAgents       Key = "report.field_agents"
+)

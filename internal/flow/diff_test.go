@@ -103,10 +103,14 @@ func TestClosesLoop(t *testing.T) {
 
 func TestUsers(t *testing.T) {
 	f := &Flow{
-		Stages: []Stage{{ID: "review", Executor: "reviewer"}, {ID: "audit", Executor: "auditor"}},
+		Stages: []Stage{
+			{ID: "plan", Executor: "orchestrator", Agents: []string{"reviewer", "auditor"}},
+			{ID: "review", Executor: "reviewer"}, {ID: "audit", Executor: "auditor"},
+		},
 		Agents: []Agent{{ID: "reviewer", Shared: true}, {ID: "auditor"}},
 	}
-	if got := f.Users("reviewer"); !reflect.DeepEqual(got, []string{"review"}) {
+	// A stage that runs the subagent by its field agents uses it too.
+	if got := f.Users("reviewer"); !reflect.DeepEqual(got, []string{"plan", "review"}) {
 		t.Errorf("reviewer: %v", got)
 	}
 	// A subagent of the project replaces the one of the shared subagents.

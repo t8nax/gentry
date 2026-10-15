@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
@@ -71,6 +72,69 @@ func TestProjectAgents(t *testing.T) {
 	res = readShop(t, shop(t, with(auditor, map[string]string{"stages/security.yaml": "title: Безопасность\nexit: пройдена\nexecutor: orchestrator\n"})))
 	if _, ok := res.Flow.Agent("auditor"); !ok || len(res.Flow.Agents) != 2 {
 		t.Errorf("agents: %+v", res.Flow.Agents)
+	}
+}
+
+// TestStageAgents checks the field agents of a stage: the subagents in the
+// order of the field, an empty list and null as no field, a shared subagent
+// it names in the flow and its snapshot, as an executor is, and the stages
+// that name a subagent in one list.
+func TestStageAgents(t *testing.T) {
+	p := shop(t, with(auditor, map[string]string{
+		"stages/plan-feature.yaml":   "title: План фичи\nexit: план согласован\nexecutor: orchestrator\nagents: [scout, reviewer]\n",
+		"stages/plan-bug.yaml":       "title: План бага\nexit: план согласован\nexecutor: operator\nagents: [auditor]\n",
+		"stages/implementation.yaml": "title: Реализация\nexit: тесты проходят\nexecutor: orchestrator\nagents: []\n",
+		"stages/review.yaml":         "title: Ревью\nexit: замечания разобраны\nexecutor: reviewer\nagents: []\n",
+		"stages/merge.yaml":          "title: Слияние\nexit: ветка влита\nexecutor: operator\nagents:\n",
+	}))
+	scout := map[string]string{"scout.yaml": "purpose: разведка кода\ncapabilities: [read, search]\n", "scout.md": "Найти места изменения.\n"}
+	for name, text := range scout {
+		if err := os.WriteFile(filepath.Join(p.Shared, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res := readShop(t, p)
+	if len(res.Problems) > 0 {
+		t.Fatal(dump(res.Problems))
+	}
+	fl := res.Flow
+	for id, want := range map[string][]string{
+		"plan-feature": {"scout", "reviewer"}, "plan-bug": {"auditor"}, "implementation": {}, "review": {}, "merge": {}, "branch": {},
+	} {
+		if st, _ := fl.Stage(id); !slices.Equal(st.Agents, want) {
+			t.Errorf("%s: agents %q, want %q", id, st.Agents, want)
+		}
+	}
+	if a, ok := fl.Agent("scout"); !ok || !a.Shared || a.Purpose != "разведка кода" {
+		t.Errorf("scout: %+v, %v", a, ok)
+	}
+	if res.Snapshot.Shared["scout.yaml"] != scout["scout.yaml"] || res.Snapshot.Shared["scout.md"] != scout["scout.md"] {
+		t.Errorf("snapshot shared: %v", res.Snapshot.Shared)
+	}
+	for id, want := range map[string][]string{"reviewer": {"plan-feature", "review"}, "scout": {"plan-feature"}, "auditor": {"plan-bug", "security"}} {
+		if got := fl.StagesBy(id); !slices.Equal(got, want) {
+			t.Errorf("stages by %s: %q, want %q", id, got, want)
+		}
+	}
+	st, _ := fl.Stage("plan-feature")
+	var ids []string
+	for _, a := range fl.OnlyStage(st).Agents {
+		ids = append(ids, a.ID)
+	}
+	if want := []string{"reviewer", "scout"}; !slices.Equal(ids, want) {
+		t.Errorf("agents of the flow of plan-feature: %q, want %q", ids, want)
+	}
+
+	// A subagent of the project replaces the shared one of the same name in
+	// the field too.
+	for name, text := range map[string]string{"scout.yaml": "purpose: разведка магазина\ncapabilities: [read]\n", "scout.md": "Найти места.\n"} {
+		if err := os.WriteFile(filepath.Join(p.Dir, "agents", name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res = readShop(t, p)
+	if a, _ := res.Flow.Agent("scout"); a.Shared || a.Purpose != "разведка магазина" || res.Snapshot.Shared["scout.yaml"] != "" {
+		t.Errorf("scout: %+v, shared %v", a, res.Snapshot.Shared)
 	}
 }
 

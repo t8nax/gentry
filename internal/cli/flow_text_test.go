@@ -128,6 +128,11 @@ func TestFlowShowText(t *testing.T) {
 		"agents/reviewer.md":   "Проверить изменения и вернуть замечания.\n",
 	}, "agent", "reviewer")
 	checklist, checklistX := object(base, nil, "part", "review-checklist")
+	// plan-feature runs reviewer, which carries out review.
+	runs := map[string]string{"stages/plan-feature.yaml": "title: План фичи\nexit: план согласован с оператором\nexecutor: orchestrator\n" +
+		"include: [plan-format]\nagents: [reviewer]\n"}
+	planFeature, planFeatureX := object(base, runs, "stage", "plan-feature")
+	runner, runnerX := object(base, runs, "agent", "reviewer")
 	securityText := head + "\n" + table(
 		[]string{msg.Text(msg.ColScenario), msg.Text(msg.ColTitle)},
 		[]string{"bug", "Баг"},
@@ -160,6 +165,34 @@ func TestFlowShowText(t *testing.T) {
 		{"draft with a subagent of the project", shown(security(t), true, &contract.FlowDraftInfo{}), flowShowExtra{draft: true},
 			securityText + lines(hintLineOf(msg.HintFlowApply, "gentry flow apply")),
 			securityText + lines(hintLineOf(msg.HintFlowApply, "flow_apply"))},
+		{"flow with a stage that runs a subagent", shown(runs, true, nil), flowShowExtra{},
+			head + "\n" + tables + table(agentsHeader, []string{"reviewer", sharedWord, "plan-feature, review"}) + "\n" +
+				lines(hintLineOf(msg.HintFlowStage, "gentry flow show --stage "+msg.Text(msg.ArgStage))),
+			head + "\n" + tables + table(agentsHeader, []string{"reviewer", sharedWord, "plan-feature, review"}) + "\n" +
+				lines(hintLineOf(msg.HintFlowStage, "flow_show (stage)"))},
+		{"stage that runs a subagent", planFeature, planFeatureX, lines(
+			msg.Text(msg.FlowStage, "plan-feature"),
+			msg.Text(msg.FlowTitle, "План фичи"),
+			msg.Text(msg.FlowExecutor, "orchestrator"),
+			msg.Text(msg.FlowAgents, "reviewer"),
+			msg.Text(msg.FlowExit, "план согласован с оператором"),
+			msg.Text(msg.FlowParts, "plan-format"),
+			msg.Text(msg.FlowScenarios, "feature"),
+			"",
+			msg.Text(msg.FlowInstruction),
+			"  Составить план фичи и согласовать его с оператором.",
+		), ""},
+		{"subagent a stage runs", runner, runnerX, lines(
+			msg.Text(msg.FlowAgent, "reviewer"),
+			msg.Text(msg.FlowSource, sharedWord),
+			msg.Text(msg.FlowPurpose, "ревью изменений задачи — поведение и текст"),
+			msg.Text(msg.FlowCapabilities, "read, search"),
+			msg.Text(msg.FlowModel, noValue),
+			msg.Text(msg.FlowStages, "plan-feature, review"),
+			"",
+			msg.Text(msg.FlowInstruction),
+			"  Проверить изменения задачи: поведение, тесты и тексты для оператора.",
+		), ""},
 		{"scenario", feature, featureX, lines(
 			"Сценарий: feature",
 			"Название: Фича",
@@ -198,6 +231,7 @@ func TestFlowShowText(t *testing.T) {
 			"Этап: review",
 			msg.Text(msg.FlowTitle, "Ревью"),
 			"Исполнитель: reviewer",
+			msg.Text(msg.FlowAgents, noValue),
 			"Выход: замечания ревью записаны и разобраны",
 			"Фрагменты: review-checklist",
 			"Сценарии: bug, feature",
@@ -209,6 +243,7 @@ func TestFlowShowText(t *testing.T) {
 			msg.Text(msg.FlowStage, "merge"),
 			msg.Text(msg.FlowTitle, "Слияние"),
 			msg.Text(msg.FlowExecutor, "operator"),
+			msg.Text(msg.FlowAgents, noValue),
 			msg.Text(msg.FlowExit, "ветка задачи влита в main"),
 			msg.Text(msg.FlowParts, noValue),
 			msg.Text(msg.FlowScenarios, "bug, feature"),
@@ -220,6 +255,7 @@ func TestFlowShowText(t *testing.T) {
 			msg.Text(msg.FlowStage, "implementation"),
 			msg.Text(msg.FlowTitle, "Реализация"),
 			msg.Text(msg.FlowExecutor, "orchestrator"),
+			msg.Text(msg.FlowAgents, noValue),
 			msg.Text(msg.FlowExit, "изменения сделаны, тесты проходят"),
 			msg.Text(msg.FlowParts, noValue),
 			msg.Text(msg.FlowScenarios, "bug, feature"),
@@ -303,6 +339,7 @@ func TestFlowShowTaskText(t *testing.T) {
 		msg.Text(msg.FlowStage, "merge"),
 		msg.Text(msg.FlowTitle, "Слияние"),
 		msg.Text(msg.FlowExecutor, "operator"),
+		msg.Text(msg.FlowAgents, noValue),
 		msg.Text(msg.FlowExit, "ветка задачи влита в main"),
 		msg.Text(msg.FlowParts, noValue),
 		msg.Text(msg.FlowScenarios, "bug, feature"),
@@ -370,7 +407,7 @@ func TestFlowApplyText(t *testing.T) {
 		msg.Text(msg.FlowProject, "shop"),
 		msg.Text(msg.FlowAppliedAt, "2026-10-09 12:30"),
 		"",
-		"Изменения общих субагентов касаются других проектов:",
+		"Изменения общих субагентов затрагивают другие проекты:",
 		"  blog",
 		"  crm",
 		"",

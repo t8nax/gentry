@@ -56,6 +56,7 @@ func TestStageFeature(t *testing.T) {
 		msg.Text(msg.FlowStage, testkit.Round("Ветка", "branch", 1)),
 		msg.Text(msg.StageTask, "SHOP-1"),
 		msg.Text(msg.FlowExecutor, "orchestrator"),
+		msg.Text(msg.FlowAgents, testkit.None),
 		msg.Text(msg.FlowExit, "создана ветка задачи"),
 		msg.Text(msg.FlowParts, testkit.None),
 		"",
@@ -68,7 +69,7 @@ func TestStageFeature(t *testing.T) {
 		"  Создать ветку задачи от main.",
 	), "", "task", "stage", "show")
 	out := testkit.WantJSON(t, contract.ExitOK, "schemas/task-stage-show.json", "task", "stage", "show")
-	if !strings.Contains(out, `"transitions":[{"stage":"plan-feature","title":"План фичи","to":"plan"}]`) {
+	if !strings.Contains(out, `"transitions":[{"stage":"plan-feature","title":"План фичи","to":"plan"}]`) || !strings.Contains(out, `"stage":{"agents":[],`) {
 		t.Errorf("task stage show --json: %s", out)
 	}
 

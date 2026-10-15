@@ -282,6 +282,7 @@ func (d diffView) writeStage(b *strings.Builder, c flow.Change) {
 			{msg.ReportFieldTitle, oneLine(old.Title), oneLine(cur.Title)},
 			{msg.ReportFieldExit, oneLine(old.Exit), oneLine(cur.Exit)},
 			{msg.ReportFieldExecutor, old.Executor, cur.Executor},
+			{msg.ReportFieldAgents, joined(old.Agents), joined(cur.Agents)},
 			{msg.ReportFieldParts, joined(old.Include), joined(cur.Include)},
 			{msg.ReportFieldCheckTimeout, checkTimeout(old), checkTimeout(cur)},
 			{msg.ReportFieldChecks, checkCommands(old), checkCommands(cur)},
@@ -296,6 +297,7 @@ func writeStageFields(b *strings.Builder, st flow.Stage, fl *flow.Flow) {
 	lines := []string{
 		msg.Text(msg.FlowExit, orNone(oneLine(st.Exit))),
 		msg.Text(msg.FlowExecutor, orNone(st.Executor)),
+		msg.Text(msg.FlowAgents, joined(st.Agents)),
 		msg.Text(msg.FlowParts, joined(st.Include)),
 		msg.Text(msg.FlowScenarios, joined(fl.ScenariosOf(st.ID))),
 	}

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/internal/agenttext"
+	"github.com/t8nax/gentry/internal/process"
 )
 
 // guideExamples returns the examples of files in the guide to the format of
@@ -45,7 +46,7 @@ func guideExamples(t *testing.T) map[string]string {
 // passes the checks, once the stages and the part they name are there.
 func TestGuideExamples(t *testing.T) {
 	files := guideExamples(t)
-	for _, want := range []string{"scenarios/feature.yaml", "stages/review.yaml", "stages/review.md", "agents/reviewer.yaml", "stages/implementation.yaml"} {
+	for _, want := range []string{"scenarios/feature.yaml", "stages/review.yaml", "stages/plan.yaml", "stages/review.md", "agents/reviewer.yaml", "stages/implementation.yaml"} {
 		if files[want] == "" {
 			t.Fatalf("the guide has no example of %s: %v", want, files)
 		}
@@ -54,13 +55,16 @@ func TestGuideExamples(t *testing.T) {
 	files["agents/coder.yaml"] = "purpose: код и тесты\ncapabilities: [read, edit, run]\n"
 	files["agents/coder.md"] = "Написать код и тесты.\n"
 	files["parts/review-checklist.md"] = "Поведение, тесты, тексты.\n"
+	// The stage plan runs the shared subagent scout.
+	files["stages/plan.md"] = "Составить план.\n"
+	shared := process.Files{"scout.yaml": "purpose: разведка кода\ncapabilities: [read, search]\n", "scout.md": "Найти места изменения.\n"}
 	for _, st := range []string{"branch", "plan-feature", "implementation", "merge"} {
 		if files["stages/"+st+".yaml"] == "" {
 			files["stages/"+st+".yaml"] = "title: " + st + "\nexit: этап пройден\nexecutor: orchestrator\n"
 		}
 		files["stages/"+st+".md"] = "Пройти этап.\n"
 	}
-	res, err := Read(files, nil)
+	res, err := Read(files, shared)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +79,7 @@ func TestGuideExamples(t *testing.T) {
 func TestGuideFields(t *testing.T) {
 	guide := agenttext.FlowGuide()
 	words := []string{
-		"title", "start", "nodes", "stage", "next", "to", "if", "max_rounds", "exit", "executor", "include", "checks", "timeout",
+		"title", "start", "nodes", "stage", "next", "to", "if", "max_rounds", "exit", "executor", "include", "agents", "checks", "timeout",
 		"purpose", "capabilities", "model", Finish, Orchestrator, Operator, commonFile,
 		scenariosDir + "/", stagesDir + "/", partsDir + "/", agentsDir + "/",
 	}

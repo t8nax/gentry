@@ -108,7 +108,7 @@ func TestLoadShop(t *testing.T) {
 	}
 	review, _ := f.Stage("review")
 	if want := (Stage{ID: "review", Title: "Ревью", Exit: "замечания ревью записаны и разобраны", Executor: "reviewer",
-		Include: []string{"review-checklist"}, Instruction: "Проверить изменения задачи по списку.\n"}); !reflect.DeepEqual(review, want) {
+		Include: []string{"review-checklist"}, Agents: []string{}, Instruction: "Проверить изменения задачи по списку.\n"}); !reflect.DeepEqual(review, want) {
 		t.Errorf("review: %+v, want %+v", review, want)
 	}
 	if merge, _ := f.Stage("merge"); merge.Executor != Operator || merge.Include == nil {
@@ -410,6 +410,43 @@ func TestFileProblems(t *testing.T) {
 			{contract.ProblemUnknownStage, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemUnknownStage, msg.Text(msg.FlowObjNode, "bug", "plan"), "plan-bugg")},
 			{contract.ProblemUnknownPart, "stages/plan-bug.yaml", 4, msg.Text(msg.ProblemUnknownPart, msg.Text(msg.FlowObjStage, "plan-bug"), "plan-formt")},
 			{contract.ProblemUnknownExecutor, "stages/review.yaml", 3, msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "review"), "reviewr")},
+		}},
+		// The field agents is a list of identifiers without repeats, at a
+		// stage the main session or the operator carries out; the subagents
+		// of a field that is not allowed are not looked up.
+		{"agents", map[string]string{
+			"stages/branch.yaml":       stage("agents: [Reviewer]\n"),
+			"stages/plan-bug.yaml":     stage("agents: reviewer\n"),
+			"stages/plan-feature.yaml": stage("agents: [reviewer, reviewer]\n"),
+			"stages/review.yaml":       "title: Ревью\nexit: x\nexecutor: reviewer\nagents: [auditor]\n",
+		}, []Problem{
+			{contract.ProblemInvalidValue, "stages/branch.yaml", 4, msg.Text(msg.ProblemAgents, msg.Text(msg.FlowObjStage, "branch"))},
+			{contract.ProblemInvalidValue, "stages/plan-bug.yaml", 4, msg.Text(msg.ProblemAgents, msg.Text(msg.FlowObjStage, "plan-bug"))},
+			{contract.ProblemInvalidValue, "stages/plan-feature.yaml", 4, msg.Text(msg.ProblemAgents, msg.Text(msg.FlowObjStage, "plan-feature"))},
+			{contract.ProblemAgentsNotAllowed, "stages/review.yaml", 4, msg.Text(msg.ProblemAgentsNotAllowed, msg.Text(msg.FlowObjStage, "review"))},
+		}},
+		// At a stage a subagent carries out any value of agents but an empty
+		// one is the one problem that the field is not allowed, a value that
+		// is not a list of identifiers too.
+		{"agents not allowed, not a list", map[string]string{
+			"stages/review.yaml": "title: Ревью\nexit: x\nexecutor: reviewer\nagents: scout\n",
+		}, []Problem{
+			{contract.ProblemAgentsNotAllowed, "stages/review.yaml", 4, msg.Text(msg.ProblemAgentsNotAllowed, msg.Text(msg.FlowObjStage, "review"))},
+		}},
+		{"agents not allowed, repeated", map[string]string{
+			"stages/review.yaml": "title: Ревью\nexit: x\nexecutor: reviewer\nagents: [scout, scout]\n",
+		}, []Problem{
+			{contract.ProblemAgentsNotAllowed, "stages/review.yaml", 4, msg.Text(msg.ProblemAgentsNotAllowed, msg.Text(msg.FlowObjStage, "review"))},
+		}},
+		// A subagent of agents that does not exist is told in the words of
+		// the executor, on its own line; the main session and the operator
+		// are not subagents.
+		{"unknown agents", map[string]string{
+			"stages/merge.yaml": "title: Слияние\nexit: x\nexecutor: operator\nagents:\n  - revewer\n  - orchestrator\n  - operator\n  - reviewer\n",
+		}, []Problem{
+			{contract.ProblemUnknownAgent, "stages/merge.yaml", 5, msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "merge"), "revewer")},
+			{contract.ProblemUnknownAgent, "stages/merge.yaml", 6, msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "merge"), "orchestrator")},
+			{contract.ProblemUnknownAgent, "stages/merge.yaml", 7, msg.Text(msg.ProblemUnknownExecutor, msg.Text(msg.FlowObjStage, "merge"), "operator")},
 		}},
 	}
 	for _, tt := range tests {

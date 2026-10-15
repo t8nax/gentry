@@ -80,6 +80,7 @@ func TestFlowShow(t *testing.T) {
 			msg.Text(msg.FlowStage, "review"),
 			msg.Text(msg.FlowTitle, "Ревью"),
 			msg.Text(msg.FlowExecutor, "reviewer"),
+			msg.Text(msg.FlowAgents, testkit.None),
 			msg.Text(msg.FlowExit, "замечания ревью записаны и разобраны"),
 			msg.Text(msg.FlowParts, "review-checklist"),
 			msg.Text(msg.FlowScenarios, "bug, feature"),
@@ -91,6 +92,7 @@ func TestFlowShow(t *testing.T) {
 			msg.Text(msg.FlowStage, "merge"),
 			msg.Text(msg.FlowTitle, "Слияние"),
 			msg.Text(msg.FlowExecutor, "operator"),
+			msg.Text(msg.FlowAgents, testkit.None),
 			msg.Text(msg.FlowExit, "ветка задачи влита в main"),
 			msg.Text(msg.FlowParts, testkit.None),
 			msg.Text(msg.FlowScenarios, "bug, feature"),
@@ -346,7 +348,7 @@ func TestFlowJSON(t *testing.T) {
 	}
 	for _, part := range []string{
 		`{"id":"review","next":[{"if":"ревью выявило существенные замечания","max_rounds":3,"return":true,"to":"implementation"},{"to":"merge"}],"stage":"review"},`,
-		`{"executor":"operator","exit":"ветка задачи влита в main","id":"merge","include":[],"instruction":"Влить ветку задачи в main.\n","title":"Слияние"}`,
+		`{"agents":[],"executor":"operator","exit":"ветка задачи влита в main","id":"merge","include":[],"instruction":"Влить ветку задачи в main.\n","title":"Слияние"}`,
 		`"parts":[{"id":"plan-format","text":`,
 		`"agents":[{"capabilities":["read","search"],"id":"reviewer","instruction":"Проверить изменения задачи: поведение, тесты и тексты для оператора.\n","purpose":"ревью изменений задачи — поведение и текст","source":"shared"}]`,
 		`"draft":{}`,
@@ -412,7 +414,7 @@ func TestFlowJSON(t *testing.T) {
 	})
 	for stage, want := range map[string]string{
 		"implementation": `"checks":["go vet ./...","go test ./..."],"executor":"orchestrator",`,
-		"merge":          `[{"executor":"operator",`,
+		"merge":          `[{"agents":[],"executor":"operator",`,
 	} {
 		code, stdout, _ = testkit.Run("flow", "show", "--draft", "--stage", stage, "--json")
 		if code != contract.ExitOK {
@@ -423,6 +425,26 @@ func TestFlowJSON(t *testing.T) {
 			stage == "implementation" && !strings.Contains(stdout, `"timeout":"10m","title":"Реализация"`) {
 			t.Errorf("show --draft --stage %s: %s", stage, stdout)
 		}
+	}
+
+	// The subagents a stage runs pass the contract in the order of the
+	// stage file, and the flow of the stage has them.
+	testkit.WriteDraft(t, p, map[string]string{
+		"stages/plan-feature.yaml": "title: План фичи\nexit: план согласован с оператором\nexecutor: orchestrator\n" +
+			"include: [plan-format]\nagents: [reviewer, auditor]\n",
+	})
+	code, stdout, _ = testkit.Run("flow", "show", "--draft", "--stage", "plan-feature", "--json")
+	if code != contract.ExitOK {
+		t.Fatalf("show --draft --stage plan-feature: exit code %d: %s", code, stdout)
+	}
+	testkit.Validate(t, "schemas/flow-show.json", stdout)
+	out = contract.FlowShowOutput{}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Stages) != 1 || !slices.Equal(out.Stages[0].Agents, []string{"reviewer", "auditor"}) || len(out.Agents) != 2 ||
+		out.Agents[0].Id != "auditor" || out.Agents[1].Id != "reviewer" {
+		t.Errorf("show --draft --stage plan-feature: %s", stdout)
 	}
 
 	_, stdout, _ = testkit.Run("flow", "discard", "--json")

@@ -442,9 +442,10 @@ func flowShowText(p *page, out contract.FlowShowOutput, x flowShowExtra) {
 		b.WriteString("\n")
 		rows = [][]string{{msg.Text(msg.ColAgent), msg.Text(msg.ColSource), msg.Text(msg.ColStages)}}
 		for _, a := range out.Agents {
+			// The stages it carries out and those that run it, in one list.
 			var stages []string
 			for _, st := range out.Stages {
-				if st.Executor == a.Id {
+				if st.Executor == a.Id || slices.Contains(st.Agents, a.Id) {
 					stages = append(stages, st.Id)
 				}
 			}
@@ -487,6 +488,7 @@ func writeFlowObject(b *strings.Builder, out contract.FlowShowOutput, x flowShow
 		fmt.Fprintln(b, msg.Text(msg.FlowStage, st.Id))
 		fmt.Fprintln(b, msg.Text(msg.FlowTitle, oneLine(st.Title)))
 		fmt.Fprintln(b, msg.Text(msg.FlowExecutor, st.Executor))
+		fmt.Fprintln(b, msg.Text(msg.FlowAgents, joined(st.Agents)))
 		fmt.Fprintln(b, msg.Text(msg.FlowExit, oneLine(st.Exit)))
 		fmt.Fprintln(b, msg.Text(msg.FlowParts, joined(st.Include)))
 		fmt.Fprintln(b, msg.Text(msg.FlowScenarios, joined(x.uses)))
@@ -698,7 +700,7 @@ func flowJSON(out contract.FlowShowOutput, fl *flow.Flow) contract.FlowShowOutpu
 	for _, st := range fl.Stages {
 		cs := contract.FlowStage{
 			Id: st.ID, Title: st.Title, Exit: st.Exit, Executor: st.Executor,
-			Include: append([]string{}, st.Include...), Instruction: st.Instruction,
+			Include: append([]string{}, st.Include...), Agents: append([]string{}, st.Agents...), Instruction: st.Instruction,
 		}
 		cs.Checks, cs.Timeout = checksJSON(st)
 		out.Stages = append(out.Stages, cs)
@@ -809,7 +811,7 @@ func runFlowApply(args []string, env Env) int {
 		return fail(env, flowFailure(err, places))
 	}
 	// The free worktrees of the project and of the other projects the
-	// shared subagents concern get the flow applied.
+	// shared subagents affect get the flow applied.
 	projects := map[string]bool{places.Project: true}
 	for _, id := range applied.Projects {
 		projects[id] = true
@@ -829,7 +831,7 @@ func runFlowApply(args []string, env Env) int {
 }
 
 // flowApplyText prints the flow applied, the other projects its changes of
-// the shared subagents concern and the layout of the free worktrees.
+// the shared subagents affect and the layout of the free worktrees.
 func flowApplyText(p *page, out contract.FlowApplyOutput) {
 	fmt.Fprintln(p, msg.Text(msg.FlowApplied))
 	fmt.Fprintln(p, msg.Text(msg.FlowProject, out.Project))

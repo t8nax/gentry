@@ -22,6 +22,8 @@ func TestProblemText(t *testing.T) {
 		{msg.FlowObjPart, []any{"plan-format"}, "Фрагмент plan-format"},
 		{msg.FlowObjScenario, []any{"bug"}, "Сценарий bug"},
 		{msg.FlowObjStage, []any{"review"}, "Этап review"},
+		{msg.ProblemAgents, []any{"Этап plan-feature"}, "Этап plan-feature: значение поля «agents» должно быть списком идентификаторов субагентов без повторов."},
+		{msg.ProblemAgentsNotAllowed, []any{"Этап review"}, "Этап review: поле «agents» допустимо только у этапа с исполнителем orchestrator или operator."},
 		{msg.ProblemCapabilities, []any{"Субагент auditor", "read, search, edit, run, web, task, progress"}, "Субагент auditor: значение поля «capabilities» должно быть списком из read, search, edit, run, web, task, progress."},
 		{msg.ProblemCheckQuote, []any{"Этап work", `go test -run "TestTotal ./...`}, `Этап work: в команде проверки не закрыта кавычка: go test -run "TestTotal ./...`},
 		{msg.ProblemChecks, []any{"Этап work"}, "Этап work: значение поля «checks» должно быть списком команд."},

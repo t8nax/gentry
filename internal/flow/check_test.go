@@ -57,6 +57,16 @@ func TestGraphProblems(t *testing.T) {
 				"  cleanup: { stage: merge, next: finish }\n"), []Problem{
 			{contract.ProblemUnreachable, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemUnreachable, msg.Text(msg.FlowObjScenario, "bug"), "cleanup")},
 		}},
+		// Only the nodes the walk from the start reaches get the returns of
+		// the operator; the loop of an unreachable one is no problem of its
+		// own, as it would lead away from the real cause.
+		{"unreachable return of the operator", bug("branch",
+			"  branch: { stage: branch, next: finish }\n"+
+				"  implementation: { stage: implementation, next: merge }\n"+
+				"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n"), []Problem{
+			{contract.ProblemUnreachable, "scenarios/bug.yaml", 5, msg.Text(msg.ProblemUnreachable, msg.Text(msg.FlowObjScenario, "bug"), "implementation")},
+			{contract.ProblemUnreachable, "scenarios/bug.yaml", 6, msg.Text(msg.ProblemUnreachable, msg.Text(msg.FlowObjScenario, "bug"), "merge")},
+		}},
 		{"dead end", bug("branch",
 			"  branch: { stage: branch, next: implementation }\n"+
 				"  implementation: { stage: implementation, next: review }\n"+

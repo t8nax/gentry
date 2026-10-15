@@ -252,10 +252,13 @@ func (l *loader) checkGraph(s *scenario) {
 
 	// A loop without a limit is a cycle of transitions that are no returns.
 	// Each such group of nodes is reported once, by the shortest cycle
-	// through its first node in the order of the file.
+	// through its first node in the order of the file. As with dead ends,
+	// only the nodes reachable from the start are checked: the returns of the
+	// operator are marked only there, and an unreachable node is a problem of
+	// its own.
 	covered := map[string]bool{}
 	for _, n := range s.nodes {
-		if covered[n.id] {
+		if covered[n.id] || !reaches[s.start][n.id] {
 			continue
 		}
 		cycle := shortestCycle(n.id, edges)

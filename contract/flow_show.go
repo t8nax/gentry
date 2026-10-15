@@ -601,8 +601,8 @@ type FlowTransition struct {
 	// closes no loop or is a return without a limit.
 	MaxRounds *int `json:"max_rounds,omitempty,omitzero"`
 
-	// Always true: the transition is a return, it closes a loop, with a limit or
-	// without one; absent when the transition closes no loop.
+	// Always true: the transition is a return, with a limit of rounds or without one;
+	// absent on a transition forward, though it lies on the loop of another return.
 	Return *bool `json:"return,omitempty,omitzero"`
 
 	// Identifier of the target node, or finish for the end of the scenario.

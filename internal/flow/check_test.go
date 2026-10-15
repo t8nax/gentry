@@ -118,20 +118,10 @@ func TestGraphProblems(t *testing.T) {
 	}
 }
 
-// TestOperatorReturns checks the returns the operator decides: a transition
-// with a condition from a node of a stage of the operator to a node passed
-// before it is a return without a limit, and its loop needs no other; a
-// transition forward with a condition stays one, though it lies on the loop
-// of another return.
-func TestOperatorReturns(t *testing.T) {
-	f := load(t, shop(t, bug("branch",
-		"  branch: { stage: branch, next: implementation }\n"+
-			"  implementation: { stage: implementation, next: review }\n"+
-			"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n        max_rounds: 3\n      - to: merge\n"+
-			"  merge:\n    stage: merge\n    next:\n      - to: release\n        if: нужен выпуск\n      - to: finish\n"+
-			"  release:\n    stage: merge\n    next:\n      - to: implementation\n        if: выпуск не прошёл\n      - to: finish\n")))
-	s, _ := f.Scenario("bug")
-	returns := map[[2]string]bool{} // unlimited, by return
+// returnsOf returns the returns of scenario s: whether each is without a
+// limit, by its nodes.
+func returnsOf(s Scenario) map[[2]string]bool {
+	returns := map[[2]string]bool{}
 	for _, n := range s.Nodes {
 		for _, tr := range n.Next {
 			if tr.Return() {
@@ -139,10 +129,73 @@ func TestOperatorReturns(t *testing.T) {
 			}
 		}
 	}
-	want := map[[2]string]bool{{"review", "implementation"}: false, {"release", "implementation"}: true}
-	if !reflect.DeepEqual(returns, want) {
-		t.Errorf("returns %v, want %v", returns, want)
+	return returns
+}
+
+// TestOperatorReturns checks the returns the operator decides: a step back
+// along the course of the scenario. The scenario is walked from the start, at
+// each node by default first; a transition with a condition from a node of a
+// stage of the operator to a node on the current way of the walk is a return
+// without a limit, and its loop needs no other. Any other transition leads
+// forward: though it lies on the loop of another return, or leads to a node
+// the walk has passed by another way.
+func TestOperatorReturns(t *testing.T) {
+	// The plan of a bug is the operator's: plan → review leads around the
+	// implementation.
+	planOfOperator := "title: План бага\nexit: план исправления согласован\nexecutor: operator\n"
+	tests := []struct {
+		name    string
+		changes map[string]string
+		want    map[[2]string]bool // unlimited, by return
+	}{
+		{"a transition forward on the loop of another return", bug("branch",
+			"  branch: { stage: branch, next: implementation }\n"+
+				"  implementation: { stage: implementation, next: review }\n"+
+				"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n        max_rounds: 3\n      - to: merge\n"+
+				"  merge:\n    stage: merge\n    next:\n      - to: release\n        if: нужен выпуск\n      - to: finish\n"+
+				"  release:\n    stage: merge\n    next:\n      - to: implementation\n        if: выпуск не прошёл\n      - to: finish\n"),
+			map[[2]string]bool{{"review", "implementation"}: false, {"release", "implementation"}: true}},
+		{"a way around the node of the return", map[string]string{
+			"stages/plan-bug.yaml": planOfOperator,
+			"scenarios/bug.yaml": "title: Баг\nstart: branch\nnodes:\n" +
+				"  branch: { stage: branch, next: plan }\n" +
+				"  plan:\n    stage: plan-bug\n    next:\n      - to: implementation\n      - to: review\n        if: правка только в документации\n" +
+				"  implementation: { stage: implementation, next: review }\n" +
+				"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n        max_rounds: 3\n      - to: merge\n" +
+				"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n",
+		}, map[[2]string]bool{{"review", "implementation"}: false, {"merge", "implementation"}: true}},
+		// Taken in the order of the file, plan → review would come first, and
+		// merge → implementation would lead to a node not yet passed.
+		{"by default first", map[string]string{
+			"stages/plan-bug.yaml": planOfOperator,
+			"scenarios/bug.yaml": "title: Баг\nstart: branch\nnodes:\n" +
+				"  branch: { stage: branch, next: plan }\n" +
+				"  plan:\n    stage: plan-bug\n    next:\n      - to: review\n        if: правка только в документации\n      - to: implementation\n" +
+				"  implementation: { stage: implementation, next: review }\n" +
+				"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n        max_rounds: 3\n      - to: merge\n" +
+				"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n",
+		}, map[[2]string]bool{{"review", "implementation"}: false, {"merge", "implementation"}: true}},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, _ := load(t, shop(t, tt.changes)).Scenario("bug")
+			if got := returnsOf(s); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("returns %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestOperatorReturnLoops checks the loops of a return without a limit and a
+// return with one within it.
+func TestOperatorReturnLoops(t *testing.T) {
+	f := load(t, shop(t, bug("branch",
+		"  branch: { stage: branch, next: implementation }\n"+
+			"  implementation: { stage: implementation, next: review }\n"+
+			"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n        max_rounds: 3\n      - to: merge\n"+
+			"  merge:\n    stage: merge\n    next:\n      - to: release\n        if: нужен выпуск\n      - to: finish\n"+
+			"  release:\n    stage: merge\n    next:\n      - to: implementation\n        if: выпуск не прошёл\n      - to: finish\n")))
+	s, _ := f.Scenario("bug")
 	loops := s.Loops()
 	if len(loops) != 2 || loops[1].From != "release" || loops[1].Max != 0 || len(loops[1].Nodes) != 4 || !loops[0].Within(loops[1]) {
 		t.Errorf("loops %+v", loops)

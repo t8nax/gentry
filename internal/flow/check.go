@@ -74,54 +74,63 @@ func (l *loader) checkAgents() {
 }
 
 // markReturns marks the returns of scenario s: the transitions with a limit
-// of rounds, and the returns the operator decides. Such a return has a
-// condition and no limit, leaves a node whose stage the operator does and
-// leads to a node passed before it: one every way from the start to the node
-// passes. A transition forward stays one, though it lies on the loop of
-// another return.
+// of rounds, and the returns the operator decides. A return the operator
+// decides is a step back along the course of the scenario, which the path by
+// default sets. The scenario is walked from the start depth first, at each
+// node by its transition by default first, then by those with a condition in
+// the order of the file; a transition with a condition from a node whose
+// stage the operator does to a node on the current way of the walk is such a
+// return. Any other transition leads forward: though it lies on the loop of
+// another return, or leads to a node the walk has passed by another way. The
+// returns of the operator are marked only on the nodes the walk reaches.
 func (l *loader) markReturns(s *scenario) {
 	byID := map[string]*node{}
 	for _, n := range s.nodes {
 		byID[n.id] = n
-	}
-	// reach returns the nodes reachable from the start without passing node
-	// skip.
-	reach := func(skip string) map[string]bool {
-		seen := map[string]bool{}
-		if byID[s.start] == nil || s.start == skip {
-			return seen
+		for _, t := range n.next {
+			t.ret = t.max > 0
 		}
-		seen[s.start] = true
-		queue := []string{s.start}
-		for len(queue) > 0 {
-			n := byID[queue[0]]
-			queue = queue[1:]
-			if n == nil {
-				continue
-			}
-			for _, t := range n.next {
-				if t.to != skip && !seen[t.to] {
-					seen[t.to] = true
-					queue = append(queue, t.to)
-				}
-			}
-		}
-		return seen
 	}
-	all := reach("")
-	for _, n := range s.nodes {
+	passed := map[string]bool{}
+	onWay := map[string]bool{}
+	var walk func(n *node)
+	walk = func(n *node) {
+		passed[n.id], onWay[n.id] = true, true
 		operator := false
 		if st := l.stages[n.stage]; st != nil {
 			operator = st.executor == Operator
 		}
-		for _, t := range n.next {
-			t.ret = t.max > 0
-			if t.ret || !operator || t.cond == "" || byID[t.to] == nil || !all[n.id] {
-				continue
+		for _, t := range byCourse(n.next) {
+			if operator && t.cond != "" && onWay[t.to] {
+				t.ret = true
 			}
-			t.ret = t.to == n.id || !reach(t.to)[n.id]
+			if next := byID[t.to]; next != nil && !passed[t.to] {
+				walk(next)
+			}
+		}
+		onWay[n.id] = false
+	}
+	if n := byID[s.start]; n != nil {
+		walk(n)
+	}
+}
+
+// byCourse returns transitions next in the order the course of a scenario
+// takes them: the ones by default first, then the ones with a condition, each
+// in the order of the file.
+func byCourse(next []*transition) []*transition {
+	out := make([]*transition, 0, len(next))
+	for _, t := range next {
+		if t.cond == "" {
+			out = append(out, t)
 		}
 	}
+	for _, t := range next {
+		if t.cond != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // checkGraph checks the graph of scenario s by the rules of section 7.1: the

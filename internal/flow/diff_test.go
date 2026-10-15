@@ -90,6 +90,15 @@ func TestClosesLoop(t *testing.T) {
 	if !closesLoop(s, "review", s.Nodes[1].Next[0]) || closesLoop(s, "plan", s.Nodes[0].Next[0]) {
 		t.Error("closesLoop")
 	}
+	// A transition forward on the loop of a marked return is no return.
+	s = graph(
+		Node{ID: "implementation", Stage: "implementation", Next: []Transition{to("merge")}},
+		Node{ID: "merge", Stage: "merge", Next: []Transition{{To: "release", If: "нужен выпуск"}, to(Finish)}},
+		Node{ID: "release", Stage: "merge", Next: []Transition{{To: "implementation", If: "выпуск не прошёл", UnlimitedReturn: true}, to(Finish)}},
+	)
+	if closesLoop(s, "merge", s.Nodes[1].Next[0]) || !closesLoop(s, "release", s.Nodes[2].Next[0]) {
+		t.Error("closesLoop forward")
+	}
 }
 
 func TestUsers(t *testing.T) {

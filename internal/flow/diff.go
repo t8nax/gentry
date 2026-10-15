@@ -105,10 +105,14 @@ func transitionTo(n Node, to string) (Transition, bool) {
 	return Transition{}, false
 }
 
-// closesLoop reports whether transition t of node from leads back: the node
-// is reachable from its target by transitions that are no returns, as Loops
-// counts it. A valid flow marks such a transition as a return; a draft with
-// problems may lack the mark.
+// closesLoop reports whether transition t of node from leads back. A return
+// the loader marked is one: the mark is the same the checks of the graph, the
+// course of a task and its progress go by. Otherwise a transition with a
+// condition leads back when its node is reachable from its target by
+// transitions that are no returns, as Loops counts it. In a valid flow no
+// such transition is left unmarked: with it the loop would have no return. A
+// draft with problems may have one, such as a loop of an agent without a
+// limit, and it is shown as a return all the same.
 func closesLoop(s *Scenario, from string, t Transition) bool {
 	switch {
 	case t.Return():

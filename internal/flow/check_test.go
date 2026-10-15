@@ -101,6 +101,14 @@ func TestGraphProblems(t *testing.T) {
 		}, []Problem{
 			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 4, msg.Text(msg.ProblemUnlimitedLoop, msg.Text(msg.FlowObjScenario, "bug"), "implementation → merge → implementation")},
 		}},
+		{"an unlimited return of a subagent", map[string]string{
+			"scenarios/bug.yaml": "title: Баг\nstart: implementation\nnodes:\n" +
+				"  implementation: { stage: implementation, next: merge }\n" +
+				"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: не так\n      - to: finish\n",
+			"stages/merge.yaml": "title: Слияние\nexit: ветка задачи влита в main\nexecutor: reviewer\n",
+		}, []Problem{
+			{contract.ProblemUnlimitedLoop, "scenarios/bug.yaml", 4, msg.Text(msg.ProblemUnlimitedLoop, msg.Text(msg.FlowObjScenario, "bug"), "implementation → merge → implementation")},
+		}},
 		{"limits", bug("plan",
 			"  plan:\n    stage: plan-bug\n    next:\n      - to: review\n        if: план готов\n        max_rounds: 2\n"+
 				"  review:\n    stage: review\n    next:\n      - to: review\n        max_rounds: 3\n      - to: finish\n        if: замечаний нет\n"), []Problem{
@@ -185,6 +193,11 @@ func TestOperatorReturns(t *testing.T) {
 				"  review:\n    stage: review\n    next:\n      - to: implementation\n        if: есть замечания\n        max_rounds: 3\n      - to: merge\n" +
 				"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n",
 		}, map[[2]string]bool{{"review", "implementation"}: false, {"merge", "implementation"}: true}},
+		// The node of the operator is on the way of the walk itself.
+		{"a return of the operator to its own node", bug("branch",
+			"  branch: { stage: branch, next: merge }\n"+
+				"  merge:\n    stage: merge\n    next:\n      - to: merge\n        if: оператор просит ещё круг\n      - to: finish\n"),
+			map[[2]string]bool{{"merge", "merge"}: true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

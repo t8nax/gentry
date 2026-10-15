@@ -425,6 +425,19 @@ func TestFileProblems(t *testing.T) {
 			{contract.ProblemInvalidValue, "stages/plan-feature.yaml", 4, msg.Text(msg.ProblemAgents, msg.Text(msg.FlowObjStage, "plan-feature"))},
 			{contract.ProblemAgentsNotAllowed, "stages/review.yaml", 4, msg.Text(msg.ProblemAgentsNotAllowed, msg.Text(msg.FlowObjStage, "review"))},
 		}},
+		// At a stage a subagent carries out any value of agents but an empty
+		// one is the one problem that the field is not allowed, a value that
+		// is not a list of identifiers too.
+		{"agents not allowed, not a list", map[string]string{
+			"stages/review.yaml": "title: Ревью\nexit: x\nexecutor: reviewer\nagents: scout\n",
+		}, []Problem{
+			{contract.ProblemAgentsNotAllowed, "stages/review.yaml", 4, msg.Text(msg.ProblemAgentsNotAllowed, msg.Text(msg.FlowObjStage, "review"))},
+		}},
+		{"agents not allowed, repeated", map[string]string{
+			"stages/review.yaml": "title: Ревью\nexit: x\nexecutor: reviewer\nagents: [scout, scout]\n",
+		}, []Problem{
+			{contract.ProblemAgentsNotAllowed, "stages/review.yaml", 4, msg.Text(msg.ProblemAgentsNotAllowed, msg.Text(msg.FlowObjStage, "review"))},
+		}},
 		// A subagent of agents that does not exist is told in the words of
 		// the executor, on its own line; the main session and the operator
 		// are not subagents.

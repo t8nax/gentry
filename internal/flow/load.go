@@ -719,11 +719,18 @@ func (l *loader) include(o object, m map[string]field, st *stage) {
 // stageAgents reads field agents of stage st from its fields m: a list of
 // identifiers of subagents without repeats. An absent or null field and an
 // empty list are no field. A stage whose executor is a subagent may not have
-// the field: a subagent does not run other subagents. Whether the subagents
-// exist is checked with the references.
+// the field: a subagent does not run other subagents. There any other value
+// is the one problem that the field is not allowed, and its subagents are
+// neither checked nor looked up. Whether the subagents exist is checked with
+// the references.
 func (l *loader) stageAgents(o object, m map[string]field, st *stage) {
 	f, present := m["agents"]
 	if !present || f.value.kind == null || f.value.kind == sequence && len(f.value.items) == 0 {
+		return
+	}
+	if st.executor != "" && st.executor != Orchestrator && st.executor != Operator {
+		// The field is not allowed whatever its value: it is the one problem.
+		l.report(contract.ProblemAgentsNotAllowed, o.file, f.line, msg.ProblemAgentsNotAllowed, o.name)
 		return
 	}
 	valid := f.value.kind == sequence
@@ -733,12 +740,8 @@ func (l *loader) stageAgents(o object, m map[string]field, st *stage) {
 		valid = valid && item.kind == scalar && ok && ValidID(s) && !seen[s]
 		seen[s] = true
 	}
-	switch {
-	case !valid:
+	if !valid {
 		l.report(contract.ProblemInvalidValue, o.file, f.line, msg.ProblemAgents, o.name)
-		return
-	case st.executor != "" && st.executor != Orchestrator && st.executor != Operator:
-		l.report(contract.ProblemAgentsNotAllowed, o.file, f.line, msg.ProblemAgentsNotAllowed, o.name)
 		return
 	}
 	for _, item := range f.value.items {

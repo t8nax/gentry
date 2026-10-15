@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -153,6 +154,7 @@ func TestFlowOperatorReturn(t *testing.T) {
 	}
 	unlimited := strings.Replace(string(feature), "  merge:           { stage: merge, next: finish }\n",
 		"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n", 1)
+	active := showJSON(t, "--scenario", "feature")
 	testkit.WriteDraft(t, p, map[string]string{
 		"scenarios/feature.yaml": unlimited,
 		"stages/merge.yaml":      "title: Слияние\nexit: ветка задачи влита в main\nexecutor: orchestrator\n",
@@ -161,9 +163,20 @@ func TestFlowOperatorReturn(t *testing.T) {
 	if code != contract.ExitError || !strings.Contains(stdout, `"code":"flow_draft_invalid"`) || !strings.Contains(stdout, `"code":"unlimited_loop"`) {
 		t.Errorf("apply of a return of the orchestrator without a limit: exit code %d, %s", code, stdout)
 	}
+	// The active flow is as it was; only the draft is new.
+	after := showJSON(t, "--scenario", "feature")
+	if after.Draft == nil {
+		t.Errorf("flow show --scenario feature --json after the refusal has no draft")
+	}
+	after.Draft = nil
+	if !reflect.DeepEqual(after, active) {
+		t.Errorf("flow show --scenario feature --json after the refusal:\n%+v\nwant:\n%+v", after, active)
+	}
 
 	testkit.WriteDraft(t, p, map[string]string{"stages/merge.yaml": "title: Слияние\nexit: ветка задачи влита в main\nexecutor: operator\n"})
-	testkit.MustRun(t, "flow", "apply")
+	if _, stdout, _ := testkit.Run("flow", "apply"); !strings.HasPrefix(stdout, msg.Text(msg.FlowApplied)+"\n") {
+		t.Errorf("apply of a return of the operator without a limit:\n%s", stdout)
+	}
 	_, stdout, _ = testkit.Run("flow", "show", "--scenario", "feature")
 	if want := "  " + msg.Text(msg.FlowTransition, "merge", "implementation", "оператор назвал, что не так") + "\n"; !strings.Contains(stdout, want) {
 		t.Errorf("flow show --scenario feature:\n%s\nwant within:\n%s", stdout, want)

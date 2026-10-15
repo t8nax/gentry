@@ -557,7 +557,7 @@ func (g schema) mermaid() string {
 	type edge struct {
 		from, to string
 		t        flow.Transition
-		was      int // the limit before, if it changed
+		was      int // the limit before, if it changed or was removed
 		change   string
 	}
 	var edges []edge
@@ -605,11 +605,14 @@ func (g schema) mermaid() string {
 			fmt.Fprintf(&b, "    %s --> %s\n", from, to)
 		} else {
 			label := mermaidText(oneLine(e.t.If))
-			if e.t.MaxRounds > 0 {
+			switch {
+			case e.t.MaxRounds > 0:
 				label += "<br/>" + mermaidText(msg.Count(msg.DiffRounds, e.t.MaxRounds))
 				if e.was > 0 {
 					label += " " + mermaidText(msg.Text(msg.SchemaWas, e.was))
 				}
+			case e.was > 0:
+				label += "<br/>" + mermaidText(msg.Text(msg.DiffLimitRemoved, e.was))
 			}
 			fmt.Fprintf(&b, "    %s -.->|\"%s\"| %s\n", from, label, to)
 		}

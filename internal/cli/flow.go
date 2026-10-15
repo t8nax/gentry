@@ -608,6 +608,7 @@ func scenarioOf(s contract.FlowScenario) flow.Scenario {
 			if t.MaxRounds != nil {
 				tr.MaxRounds = *t.MaxRounds
 			}
+			tr.UnlimitedReturn = t.Return != nil && *t.Return && tr.MaxRounds == 0
 			node.Next = append(node.Next, tr)
 		}
 		out.Nodes = append(out.Nodes, node)
@@ -685,6 +686,10 @@ func flowJSON(out contract.FlowShowOutput, fl *flow.Flow) contract.FlowShowOutpu
 				if t.MaxRounds > 0 {
 					rounds := t.MaxRounds
 					ct.MaxRounds = &rounds
+				}
+				if t.Return() {
+					ret := true
+					ct.Return = &ret
 				}
 				cn.Next = append(cn.Next, ct)
 			}

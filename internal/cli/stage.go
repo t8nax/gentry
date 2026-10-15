@@ -73,9 +73,13 @@ func runStageShow(args []string, env Env) int {
 			cond := t.If
 			ct.If = &cond
 		}
-		if t.Return {
-			limit, returns, allowed := t.Limit, t.Returns, t.Allowed
-			ct.MaxReturns, ct.Returns, ct.AllowedReturns = &limit, &returns, &allowed
+		if t.Return() {
+			returns := t.Returns
+			ct.Returns = &returns
+		}
+		if t.Limit > 0 {
+			limit, allowed := t.Limit, t.Allowed
+			ct.MaxReturns, ct.AllowedReturns = &limit, &allowed
 		}
 		out.Transitions = append(out.Transitions, ct)
 	}
@@ -108,8 +112,12 @@ func stageShowText(p *page, out contract.TaskStageShowOutput, include []string) 
 		if t.If != nil {
 			cond = *t.If
 		}
-		if t.MaxReturns != nil {
+		switch {
+		case t.MaxReturns != nil:
 			returns = msg.Text(msg.StageReturns, *t.Returns, *t.MaxReturns)
+		case t.Returns != nil:
+			// A return without a limit shows only the returns made.
+			returns = fmt.Sprint(*t.Returns)
 		}
 		rows = append(rows, []string{t.To, title, orNone(oneLine(cond)), returns})
 	}

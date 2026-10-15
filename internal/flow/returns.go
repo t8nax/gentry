@@ -1,13 +1,14 @@
 package flow
 
 // Loop is the loop a return closes. A return is a transition with a limit of
-// returns: the checks of a flow allow a limit only on a transition that
-// closes a loop, and every loop has one.
+// returns or a return without one, which the operator decides: the checks of
+// a flow allow a limit only on a transition that closes a loop, and every
+// loop has a return.
 type Loop struct {
 	From, To string // the return: from the node back to an earlier one
-	Max      int    // the limit of returns
+	Max      int    // the limit of returns; 0 for a return without one
 	// Nodes are the nodes from the target of the return to its node by
-	// transitions without a limit, both included.
+	// transitions that are no returns, both included.
 	Nodes map[string]bool
 }
 
@@ -27,15 +28,15 @@ func (l Loop) Within(o Loop) bool {
 }
 
 // Loops returns the loops of the returns of s, in the order of the nodes and
-// their transitions. Transitions with a limit are left out of the graph of a
-// loop: through another return every node of a loop would reach every other,
-// and nested loops could not be told apart.
+// their transitions. Returns are left out of the graph of a loop: through
+// another return every node of a loop would reach every other, and nested
+// loops could not be told apart.
 func (s Scenario) Loops() []Loop {
 	forward := map[string][]string{}
 	back := map[string][]string{}
 	for _, n := range s.Nodes {
 		for _, t := range n.Next {
-			if t.MaxRounds == 0 {
+			if !t.Return() {
 				forward[n.ID] = append(forward[n.ID], t.To)
 				back[t.To] = append(back[t.To], n.ID)
 			}
@@ -44,7 +45,7 @@ func (s Scenario) Loops() []Loop {
 	var loops []Loop
 	for _, n := range s.Nodes {
 		for _, t := range n.Next {
-			if t.MaxRounds == 0 {
+			if !t.Return() {
 				continue
 			}
 			from := reachable(t.To, forward)

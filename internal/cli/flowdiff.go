@@ -272,7 +272,7 @@ func addedTransitions(s *flow.Scenario) []flow.TransitionDiff {
 	var out []flow.TransitionDiff
 	for _, n := range s.Nodes {
 		for _, t := range n.Next {
-			out = append(out, flow.TransitionDiff{From: n.ID, To: t.To, Change: flow.Added, New: t, Return: t.MaxRounds > 0})
+			out = append(out, flow.TransitionDiff{From: n.ID, To: t.To, Change: flow.Added, New: t, Return: t.Return()})
 		}
 	}
 	return out
@@ -322,18 +322,20 @@ func conditionDetails(t flow.Transition) []string {
 }
 
 // transitionChange tells what changed in a transition with a condition
-// before and after: the condition, the limit. ok is false if the change is
-// of neither.
+// before and after: the condition, the limit, set, changed or removed. ok is
+// false if the change is of neither.
 func transitionChange(old, cur flow.Transition) (details []string, ok bool) {
 	if old.If != cur.If {
 		details = append(details, msg.Text(msg.DiffCondition, oneLine(cur.If)))
 	}
-	if old.MaxRounds != cur.MaxRounds && cur.MaxRounds > 0 {
-		rounds := msg.Count(msg.DiffRounds, cur.MaxRounds)
-		if old.MaxRounds > 0 {
-			rounds = msg.Text(msg.DiffInstead, rounds, old.MaxRounds)
-		}
-		details = append(details, rounds)
+	switch {
+	case old.MaxRounds == cur.MaxRounds:
+	case cur.MaxRounds == 0:
+		details = append(details, msg.Text(msg.DiffLimitRemoved, old.MaxRounds))
+	case old.MaxRounds > 0:
+		details = append(details, msg.Text(msg.DiffInstead, msg.Count(msg.DiffRounds, cur.MaxRounds), old.MaxRounds))
+	default:
+		details = append(details, msg.Count(msg.DiffRounds, cur.MaxRounds))
 	}
 	return details, len(details) > 0
 }

@@ -58,7 +58,8 @@ const (
 	CodeScenarioFinished       = "scenario_finished"         // the scenario of the task is passed: no stage to show, close or add steps to; details: task
 	CodeTransitionNotFound     = "transition_not_found"      // the node has no transition to the node named; details: node, to, transitions
 	CodeReturnLimit            = "return_limit"              // the limit of returns by the transition is reached; details: node, to, limit (with the returns the operator allowed), allowed
-	CodeReturnNotFound         = "return_not_found"          // the current stage has no return to the node named: no transition to it, or one forward; details: node, to, returns (the nodes it has returns to)
+	CodeReturnNotFound         = "return_not_found"          // the current stage has no return to the node named: no transition to it, or one forward; details: node, to, returns (the nodes it has returns with a limit to)
+	CodeReturnUnlimited        = "return_unlimited"          // the return to the node named has no limit: there is nothing to allow; details: node (the current one), to
 	CodeStepsEmpty             = "steps_empty"               // the stage has no steps to close it by an exit; details: node, stage
 	CodeStepsOpen              = "steps_open"                // the stage has steps neither done nor dropped; details: node, steps (numbers)
 	CodeStepNotFound           = "step_not_found"            // the current stage has no step of that number; details: step

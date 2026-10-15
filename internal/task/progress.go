@@ -29,7 +29,7 @@ func progressOf(sc flow.Scenario, passes []state.Pass, node string) Progress {
 	next := map[string][]string{}
 	for _, n := range sc.Nodes {
 		for _, t := range n.Next {
-			if t.MaxRounds == 0 {
+			if !t.Return() {
 				next[n.ID] = append(next[n.ID], t.To)
 			}
 		}

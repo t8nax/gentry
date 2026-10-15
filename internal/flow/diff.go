@@ -60,7 +60,9 @@ func DiffScenario(old, cur *Scenario, stages map[string]string) ScenarioDiff {
 			switch {
 			case !ok:
 				td.Change = Added
-			case ot != t:
+			case ot.If != t.If || ot.MaxRounds != t.MaxRounds:
+				// Only what the file writes: whether a transition is a
+				// return follows from the graph and its stages.
 				td.Change, td.Old = Modified, ot
 			default:
 				continue
@@ -103,13 +105,17 @@ func transitionTo(n Node, to string) (Transition, bool) {
 	return Transition{}, false
 }
 
-// closesLoop reports whether transition t of node from leads back: the node
-// is reachable from its target by transitions without a limit, as Loops
-// counts it. A limit marks such a transition in a valid flow; a draft with
-// problems may lack it.
+// closesLoop reports whether transition t of node from leads back. A return
+// the loader marked is one: the mark is the same the checks of the graph, the
+// course of a task and its progress go by. Otherwise a transition with a
+// condition leads back when its node is reachable from its target by
+// transitions that are no returns, as Loops counts it. In a valid flow no
+// such transition is left unmarked: with it the loop would have no return. A
+// draft with problems may have one, such as a loop of an agent without a
+// limit, and it is shown as a return all the same.
 func closesLoop(s *Scenario, from string, t Transition) bool {
 	switch {
-	case t.MaxRounds > 0:
+	case t.Return():
 		return true
 	case t.If == "":
 		// A return has a condition: the path by default leads forward.
@@ -118,7 +124,7 @@ func closesLoop(s *Scenario, from string, t Transition) bool {
 	next := map[string][]string{}
 	for _, n := range s.Nodes {
 		for _, nt := range n.Next {
-			if nt.MaxRounds == 0 {
+			if !nt.Return() {
 				next[n.ID] = append(next[n.ID], nt.To)
 			}
 		}

@@ -37,6 +37,15 @@ func TestStageShowText(t *testing.T) {
 			{To: "merge", Stage: ptr("merge"), Title: ptr("Слияние")},
 		},
 	}
+	merge := contract.TaskStageShowOutput{
+		Task: "SHOP-1", Node: "merge", Round: 2,
+		Stage: contract.TaskStageShowStage{Id: "merge", Title: "Слияние", Executor: "operator", Exit: "ветка задачи влита в main",
+			Instruction: "Влить ветку задачи в main.", Parts: []contract.TaskStageShowPart{}},
+		Transitions: []contract.TaskStageShowTransition{
+			{To: "implementation", Stage: ptr("implementation"), Title: ptr("Реализация"), If: ptr("оператор назвал, что не так"), Returns: ptr(1)},
+			{To: "finish"},
+		},
+	}
 	header := []string{msg.Text(msg.ColTransition), msg.Text(msg.ColStage), msg.Text(msg.ColCondition), msg.Text(msg.ColReturns)}
 	checked := branch
 	checked.Stage.Checks, checked.Stage.Timeout = []string{"go vet ./...", `go test -run "Total|Sum" ./...`}, ptr("10m")
@@ -110,6 +119,23 @@ func TestStageShowText(t *testing.T) {
 			"",
 			msg.Text(msg.FlowInstruction),
 			"  Провести ревью.",
+		), ""},
+		// A return without a limit shows only the returns made.
+		{"return without a limit", merge, lines(
+			msg.Text(msg.FlowStage, round("Слияние", "merge", 2)),
+			"Задача: SHOP-1",
+			msg.Text(msg.FlowExecutor, "operator"),
+			msg.Text(msg.FlowAgents, noValue),
+			msg.Text(msg.FlowExit, "ветка задачи влита в main"),
+			msg.Text(msg.FlowParts, noValue),
+			"",
+		) + table(header,
+			[]string{"implementation", "Реализация", "оператор назвал, что не так", "1"},
+			[]string{"finish", msg.Text(msg.FlowEnd), noValue, noValue},
+		) + lines(
+			"",
+			msg.Text(msg.FlowInstruction),
+			"  Влить ветку задачи в main.",
 		), ""},
 	}
 	for _, tt := range tests {
@@ -527,6 +553,10 @@ func TestWayFailureText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintStageTransitions, "task_stage_show"),
 		)},
+		// Nothing is to be done: the refusal has no hint.
+		{"return without a limit", "task decision add", &task.ReturnUnlimitedError{Node: "merge", To: "implementation"}, true,
+			"У возврата к узлу implementation нет предела, разрешение не нужно.\n",
+			"У возврата к узлу implementation нет предела, разрешение не нужно.\n"},
 		{"no steps", "task stage exit", &task.StepsEmptyError{Node: "branch", Stage: flow.Stage{ID: "branch", Title: "Ветка"}}, true, lines(
 			"У этапа «Ветка» нет шагов.",
 		), lines(

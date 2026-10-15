@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -141,6 +142,50 @@ func TestFlowShowConditional(t *testing.T) {
 		"  "+msg.Text(msg.FlowTransition, "triage", msg.Text(msg.FlowEnd), "не воспроизводится на main"), "")
 	if !strings.Contains(stdout, want) {
 		t.Errorf("stderr %q, output:\n%s\nwant within:\n%s", stderr, stdout, want)
+	}
+}
+
+// TestFlowOperatorReturn applies a return without a limit from the merge,
+// a stage of the operator, and refuses it once the stage is the
+// orchestrator's.
+func TestFlowOperatorReturn(t *testing.T) {
+	p := testkit.ShopFlow(t)
+	feature, err := os.ReadFile(filepath.Join(p.Dir, "scenarios", "feature.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlimited := strings.Replace(string(feature), "  merge:           { stage: merge, next: finish }\n",
+		"  merge:\n    stage: merge\n    next:\n      - to: implementation\n        if: оператор назвал, что не так\n      - to: finish\n", 1)
+	active := showJSON(t, "--scenario", "feature")
+	testkit.WriteDraft(t, p, map[string]string{
+		"scenarios/feature.yaml": unlimited,
+		"stages/merge.yaml":      "title: Слияние\nexit: ветка задачи влита в main\nexecutor: orchestrator\n",
+	})
+	code, stdout, _ := testkit.Run("flow", "apply", "--json")
+	if code != contract.ExitError || !strings.Contains(stdout, `"code":"flow_draft_invalid"`) || !strings.Contains(stdout, `"code":"unlimited_loop"`) {
+		t.Errorf("apply of a return of the orchestrator without a limit: exit code %d, %s", code, stdout)
+	}
+	// The active flow is as it was; only the draft is new.
+	after := showJSON(t, "--scenario", "feature")
+	if after.Draft == nil {
+		t.Errorf("flow show --scenario feature --json after the refusal has no draft")
+	}
+	after.Draft = nil
+	if !reflect.DeepEqual(after, active) {
+		t.Errorf("flow show --scenario feature --json after the refusal:\n%+v\nwant:\n%+v", after, active)
+	}
+
+	testkit.WriteDraft(t, p, map[string]string{"stages/merge.yaml": "title: Слияние\nexit: ветка задачи влита в main\nexecutor: operator\n"})
+	if _, stdout, _ := testkit.Run("flow", "apply"); !strings.HasPrefix(stdout, msg.Text(msg.FlowApplied)+"\n") {
+		t.Errorf("apply of a return of the operator without a limit:\n%s", stdout)
+	}
+	_, stdout, _ = testkit.Run("flow", "show", "--scenario", "feature")
+	if want := "  " + msg.Text(msg.FlowTransition, "merge", "implementation", "оператор назвал, что не так") + "\n"; !strings.Contains(stdout, want) {
+		t.Errorf("flow show --scenario feature:\n%s\nwant within:\n%s", stdout, want)
+	}
+	stdout = testkit.WantJSON(t, contract.ExitOK, "schemas/flow-show.json", "flow", "show", "--scenario", "feature")
+	if want := `{"id":"merge","next":[{"if":"оператор назвал, что не так","return":true,"to":"implementation"},{"to":"finish"}],"stage":"merge"}`; !strings.Contains(stdout, want) {
+		t.Errorf("flow show --scenario feature --json:\n%s\nwant within:\n%s", stdout, want)
 	}
 }
 
@@ -302,7 +347,7 @@ func TestFlowJSON(t *testing.T) {
 		t.Errorf("show: %s", stdout)
 	}
 	for _, part := range []string{
-		`{"id":"review","next":[{"if":"ревью выявило существенные замечания","max_rounds":3,"to":"implementation"},{"to":"merge"}],"stage":"review"},`,
+		`{"id":"review","next":[{"if":"ревью выявило существенные замечания","max_rounds":3,"return":true,"to":"implementation"},{"to":"merge"}],"stage":"review"},`,
 		`{"agents":[],"executor":"operator","exit":"ветка задачи влита в main","id":"merge","include":[],"instruction":"Влить ветку задачи в main.\n","title":"Слияние"}`,
 		`"parts":[{"id":"plan-format","text":`,
 		`"agents":[{"capabilities":["read","search"],"id":"reviewer","instruction":"Проверить изменения задачи: поведение, тесты и тексты для оператора.\n","purpose":"ревью изменений задачи — поведение и текст","source":"shared"}]`,

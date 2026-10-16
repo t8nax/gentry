@@ -12,8 +12,8 @@
 //	                                 of installation
 //
 // A refusal exits with code 1 and its text on the standard error; a wrong
-// command line exits with code 2. The program is not part of gentry: its
-// texts are its own, not of the catalog of gentry.
+// command line exits with code 2. The texts of the refusals are in the catalog
+// of messages of Gentry, internal/msg, as the texts of gentry are.
 package main
 
 import (
@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 const usage = `usage:
@@ -49,17 +51,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if err != nil {
-		for _, l := range refusal(err) {
-			fmt.Fprintln(stderr, l)
-		}
+		fmt.Fprintln(stderr, refusal(err))
 		return 1
 	}
 	return 0
 }
 
-// refusal returns the lines that tell the operator of the error: a refusal
-// in the words of the button, any other error as it is.
-func refusal(err error) []string {
+// refusal returns the text that tells the operator of the error: a refusal
+// in the words of the button from the catalog of messages, any other error
+// as it is.
+func refusal(err error) string {
 	var (
 		format     *versionFormatError
 		notMain    *notMainError
@@ -71,22 +72,19 @@ func refusal(err error) []string {
 	)
 	switch {
 	case errors.As(err, &format):
-		return []string{"Версия указана неверно.", "Версия: " + format.value}
+		return msg.Text(msg.ReleaseVersionInvalid, format.value)
 	case errors.As(err, &notMain):
-		return []string{"Выпуск делается только из main.", "Ветка: " + notMain.branch}
+		return msg.Text(msg.ReleaseNotMain, notMain.branch)
 	case errors.As(err, &released):
-		return []string{"Выпуск с этой версией уже есть.", "Версия: " + released.version.String()}
+		return msg.Text(msg.ReleaseExists, released.version)
 	case errors.As(err, &notGreater):
-		return []string{"Версия должна быть больше версии последнего выпуска.",
-			"Версия: " + notGreater.version.String(), "Последний выпуск: " + notGreater.latest.String()}
+		return msg.Text(msg.ReleaseNotGreater, notGreater.version, notGreater.latest)
 	case errors.As(err, &noChanges):
-		return []string{"После последнего выпуска в main нет изменений, кроме журнала изменений.",
-			"Последний выпуск: " + noChanges.latest.String()}
+		return msg.Text(msg.ReleaseNoChanges, noChanges.latest)
 	case errors.As(err, &noSection):
-		return []string{"В журнале изменений нет раздела этой версии.", "Версия: " + noSection.version.String()}
+		return msg.Text(msg.ReleaseNoSection, noSection.version)
 	case errors.As(err, &mismatch):
-		return []string{"Собранная программа называет другую версию.",
-			"Ожидалась: " + mismatch.want.String(), "Получена: " + mismatch.got}
+		return msg.Text(msg.ReleaseVersionMismatch, mismatch.want, mismatch.got)
 	}
-	return []string{err.Error()}
+	return err.Error()
 }

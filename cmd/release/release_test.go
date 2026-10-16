@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"slices"
 	"testing"
 )
 
@@ -101,10 +100,10 @@ func TestChecksums(t *testing.T) {
 // acceptance tests of tests/acceptance/release.
 func TestRefusal(t *testing.T) {
 	refused := &notMainError{branch: "feat/cart"}
-	if got, want := refusal(fmt.Errorf("check: %w", refused)), refusal(refused); !slices.Equal(got, want) {
+	if got, want := refusal(fmt.Errorf("check: %w", refused)), refusal(refused); got != want {
 		t.Errorf("a wrapped refusal: %q, want %q", got, want)
 	}
-	if got := refusal(errors.New("git: not found")); !slices.Equal(got, []string{"git: not found"}) {
+	if got := refusal(errors.New("git: not found")); got != "git: not found" {
 		t.Errorf("another error: %q, want it as it is", got)
 	}
 }

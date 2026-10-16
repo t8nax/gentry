@@ -826,3 +826,15 @@ const (
 	FlowAgents              Key = "flow.agents"
 	ReportFieldAgents       Key = "report.field_agents"
 )
+
+// Texts of the program of release, cmd/release, which the button Release
+// runs: the refusals of its checks and of its build (GEN-5).
+const (
+	ReleaseVersionInvalid  Key = "release.version_invalid"
+	ReleaseNotMain         Key = "release.not_main"
+	ReleaseExists          Key = "release.exists"
+	ReleaseNotGreater      Key = "release.not_greater"
+	ReleaseNoChanges       Key = "release.no_changes"
+	ReleaseNoSection       Key = "release.no_section"
+	ReleaseVersionMismatch Key = "release.version_mismatch"
+)

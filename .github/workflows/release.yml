@@ -22,8 +22,9 @@ on:
 permissions:
   contents: read
 
-# One release at a time: a second one waits for the first, then its checks
-# see the tag of the first.
+# One release at a time: a run started during another waits for it and then
+# its checks see the tag of the first. GitHub keeps only one waiting run: a
+# third run started meanwhile cancels the waiting second one.
 concurrency:
   group: release
   cancel-in-progress: false

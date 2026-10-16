@@ -79,6 +79,8 @@ WriteFailed=Не удалось записать программу.
 Unsupported=Платформа не поддерживается.
 Platform=Платформа: {0}
 Supported=Поддерживаемые платформы:
+NotWindows=На Linux и macOS Gentry ставится скриптом install.sh.
+InstallSh=Установить Gentry в терминале: curl -fsSL {0}/latest/download/install.sh | sh
 '@
     $want = -join @([char]0x0410, [char]0x0418, [char]0x041D, [char]0x041F, [char]0x0401, [char]0x0451)
     $probe = ($catalog -split "`r?`n")[0].Substring('Probe='.Length)
@@ -328,6 +330,12 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, UIntPtr wP
     try {
         if ($Version -and -not (Test-Version $Version)) {
             Refuse @($texts.VersionInvalid, ($texts.VersionLine -f $Version))
+        }
+        # PowerShell 7 runs on Linux and macOS too, where Gentry is installed
+        # by install.sh: this script would install the program of Windows.
+        # Windows PowerShell runs only on Windows and has no $IsWindows.
+        if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+            Refuse @($texts.NotWindows, '', ($texts.InstallSh -f $githubReleases))
         }
         $platform = Get-Platform
         if ($platforms -notcontains $platform) {

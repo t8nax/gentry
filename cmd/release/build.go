@@ -88,7 +88,7 @@ func build(dir, value, out string) (err error) {
 		}
 	}()
 	sums := map[string]string{} // by the name of the program
-	program := func(p platform) error {
+	buildProgram := func(p platform) error {
 		file := filepath.Join(out, p.program())
 		if err := goBuild(dir, p, file); err != nil {
 			return err
@@ -97,7 +97,7 @@ func build(dir, value, out string) (err error) {
 		sums[p.program()] = sum
 		return err
 	}
-	if err := program(host); err != nil {
+	if err := buildProgram(host); err != nil {
 		return err
 	}
 	got, err := programVersion(filepath.Join(out, host.program()))
@@ -111,7 +111,7 @@ func build(dir, value, out string) (err error) {
 		if p == host {
 			continue
 		}
-		if err := program(p); err != nil {
+		if err := buildProgram(p); err != nil {
 			return err
 		}
 	}

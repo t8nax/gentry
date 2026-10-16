@@ -3,12 +3,17 @@ name: CI
 on:
   push:
   workflow_dispatch:
+  # The button Release runs the same tests on the commit of a release.
+  workflow_call:
 
 permissions:
   contents: read
 
+# Called by Release, the workflow has the context github of the caller: the
+# name of the workflow keeps its run apart from the run of CI on the same
+# branch, so neither cancels the other.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

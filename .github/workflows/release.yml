@@ -1,0 +1,108 @@
+# The button Release: publishes the head of main as a release of Gentry on
+# GitHub, by hand, with the version as its only field.
+#
+#   gh workflow run release.yml --ref main -f version=0.2.0
+#
+# The checks and the build are made by the program of release of the
+# repository, ./cmd/release; the workflow runs it and the tests of CI and
+# publishes what it builds. The tag and the release are created only after
+# the checks and the tests have passed: the job that publishes needs both,
+# with no condition that runs it when one fails. The text of the release is
+# the section of the version in CHANGELOG.md, which the checks print.
+name: Выпуск
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Версия выпуска вида X.Y.Z, например 0.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One release at a time: a second one waits for the first, then its checks
+# see the tag of the first.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags are the releases the checks compare with
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      # The version comes through the environment, not into the script: it
+      # is typed by hand. A refusal goes to the log and to the annotations of
+      # the run.
+      - name: release check
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! go run ./cmd/release check "$VERSION" > "$RUNNER_TEMP/notes.md" 2> "$RUNNER_TEMP/refusal.txt"; then
+            cat "$RUNNER_TEMP/refusal.txt" >&2
+            message=$(sed -e 's/%/%25/g' -e 's/\r/%0D/g' "$RUNNER_TEMP/refusal.txt" | awk 'NR > 1 { printf "%%0A" } { printf "%s", $0 }')
+            echo "::error::$message"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/notes.md"
+
+  # The tests of CI on the commit of the release: the same workflow, called.
+  tests:
+    name: tests
+    needs: check
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: publish
+    needs: [check, tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags are the releases the checks compare with
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      # The checks again, on the commit to publish: they give the text of
+      # the release.
+      - name: release check
+        run: go run ./cmd/release check "$VERSION" > "$RUNNER_TEMP/notes.md"
+
+      # Go stamps the version into the programs from the tag of the commit:
+      # the tag is made here for the build only, and the build checks that
+      # the program names the version. GitHub creates the tag with the
+      # release.
+      - name: release build
+        run: |
+          git tag "v$VERSION"
+          go run ./cmd/release build "$VERSION" "$RUNNER_TEMP/dist"
+          git tag --delete "v$VERSION"
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" "$RUNNER_TEMP"/dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Gentry $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md"

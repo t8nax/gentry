@@ -304,6 +304,7 @@ put_program() {
   if ! out=$(mv -f "$staged" "$program" 2>&1); then
     write_failed "$out"
   fi
+  staged=''
 }
 
 # add_line adds the comment of Gentry and the line $2 to the end of the
@@ -407,7 +408,6 @@ main() {
   locate
   # The program is downloaded into a temporary folder first: one that could
   # not be made is a program that could not be written.
-  staged=
   if ! tmp=$(mktemp -d 2>/dev/null) && ! tmp=$(mktemp -d -t gentry 2>&1); then
     error=$tmp
     tmp=''
@@ -422,9 +422,21 @@ main() {
   report
 }
 
+# clean_up removes the temporary folder and the copy of the program next to
+# its place that an interrupted installation has not renamed over it.
+clean_up() {
+  if [ -n "$staged" ]; then
+    rm -f "$staged"
+  fi
+  if [ -n "$tmp" ]; then
+    rm -rf "$tmp"
+  fi
+}
+
 # The traps are set here, not in main: zsh runs a trap EXIT set in a function
 # when the function returns.
 tmp=''
-trap 'rm -rf "$tmp"' EXIT
+staged=''
+trap clean_up EXIT
 trap 'exit 1' HUP INT TERM
 main "$@"

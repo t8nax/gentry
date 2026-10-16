@@ -335,6 +335,24 @@ add_line() {
   fi
 }
 
+# sh_quoted prints the path $1 for the inside of double quotes of sh: the
+# signs ", $, ` and \ escaped by a backslash, the rest as it is.
+sh_quoted() {
+  printf '%s\n' "$1" | sed 's/[\\"$`]/\\&/g'
+}
+
+# fish_quoted prints the path $1 for a line of fish: as it is when it has
+# only letters, digits and the signs / . _ + : , @ = -, else in single quotes
+# with \ and ' escaped by a backslash, as fish reads them there.
+fish_quoted() {
+  case $1 in
+    *[!A-Za-z0-9/._+:,@=-]*)
+      printf "'%s'\n" "$(printf '%s\n' "$1" | sed "s/[\\\\']/\\\\&/g")"
+      ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
 # modify_profiles adds the folder of the program to PATH in the profiles of
 # the shells: ~/.profile, ~/.bashrc and ~/.zshrc if they are there, and
 # config.fish of fish if it is there. On macOS, where the login shell is
@@ -342,7 +360,7 @@ add_line() {
 modify_profiles() {
   added=''
   failed=''
-  line="export PATH=\"$bin:\$PATH\""
+  line="export PATH=\"$(sh_quoted "$bin"):\$PATH\""
   add_line "$HOME/.profile" "$line"
   if [ -e "$HOME/.bashrc" ]; then
     add_line "$HOME/.bashrc" "$line"
@@ -352,7 +370,7 @@ modify_profiles() {
     add_line "$HOME/.zshrc" "$line"
   fi
   if [ -e "$HOME/.config/fish/config.fish" ]; then
-    add_line "$HOME/.config/fish/config.fish" "fish_add_path $bin"
+    add_line "$HOME/.config/fish/config.fish" "fish_add_path $(fish_quoted "$bin")"
   fi
 }
 

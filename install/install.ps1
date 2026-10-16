@@ -18,6 +18,10 @@
 # and only then puts it in its place, so an error at any step leaves the
 # installed program as it was.
 
+# CmdletBinding makes PowerShell refuse an unknown parameter, such as a typo
+# of -Version, before the script runs: without it the script would take the
+# rest of the arguments silently and install the latest release.
+[CmdletBinding()]
 param(
     [string]$Version = '',
     [switch]$NoModifyPath

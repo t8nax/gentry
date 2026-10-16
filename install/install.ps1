@@ -194,10 +194,36 @@ Supported=Поддерживаемые платформы:
         return $texts.PreviousUnknown
     }
 
+    # Move-Over renames the file From to To over the file To in one step of
+    # the file system: To is either the old file or the new one, never none.
+    # It fails, changing nothing, when a running process holds To.
+    function Move-Over([string]$From, [string]$To) {
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            [IO.File]::Move($From, $To, $true) # MoveFileEx with MOVEFILE_REPLACE_EXISTING
+            return
+        }
+        # Windows PowerShell has no such overload of Move: MoveFileEx is
+        # called itself.
+        if (-not ('GentryInstall.Kernel32' -as [type])) {
+            Add-Type -Namespace GentryInstall -Name Kernel32 -MemberDefinition @'
+[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
+'@
+        }
+        # MOVEFILE_REPLACE_EXISTING
+        if (-not [GentryInstall.Kernel32]::MoveFileEx($From, $To, 1)) {
+            throw [ComponentModel.Win32Exception]::new([Runtime.InteropServices.Marshal]::GetLastWin32Error())
+        }
+    }
+
     # Install-Program puts the downloaded program in its place and returns
     # whether a running process held the program before, which is renamed to
     # gentry.exe.old then. A gentry.exe.old left from an earlier installation
-    # is removed, unless a process still holds it.
+    # is removed, unless a process still holds it. No step leaves the folder
+    # without gentry.exe: the new program comes next to the old one as
+    # gentry.exe.new and takes its place by a rename over it, and a running
+    # program, which cannot be replaced, is renamed away only to be replaced
+    # at once, its name given back if that fails.
     function Install-Program([string]$Downloaded, [string]$Bin, [string]$Program) {
         $old = $Program + '.old'
         $staged = $Program + '.new'
@@ -211,12 +237,13 @@ Supported=Поддерживаемые платформы:
                 [IO.File]::Move($staged, $Program)
                 return $false
             }
-            if (Test-Path -LiteralPath $old) {
-                # A process holds gentry.exe.old: gentry.exe is replaced in
-                # place, which works when no process holds it.
-                [IO.File]::Delete($Program)
-                [IO.File]::Move($staged, $Program)
+            try {
+                Move-Over $staged $Program
                 return $false
+            } catch {
+                # A running process holds the program, or a gentry.exe.old a
+                # process still holds is in the way of the rename below.
+                if (Test-Path -LiteralPath $old) { throw }
             }
             # A running program cannot be removed or overwritten but can be
             # renamed: the program goes to gentry.exe.old, the new one takes

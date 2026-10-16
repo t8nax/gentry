@@ -27,7 +27,9 @@ var taskEntries = []string{
 // versionHeading is the heading of the section of a version.
 var versionHeading = regexp.MustCompile(`^## \d+\.\d+\.\d+ — \d{4}-\d{2}-\d{2}$`)
 
-// Кейс: начальный журнал.
+// TestChangelog checks the journal of changes of the module: its heading,
+// no paragraph before the sections, «Не выпущено» first, and the entries of
+// the task of release and installation in order under «Новое».
 //
 // The test stays true as the journal grows: the entries of the task stay in
 // «Не выпущено» until the first release and are in its section 0.1.0 after.

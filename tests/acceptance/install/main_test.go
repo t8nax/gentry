@@ -19,10 +19,11 @@ func TestMain(m *testing.M) {
 	if err := testkit.KeepGo(); err != nil {
 		panic(err)
 	}
-	// The profile of the operator, before Main moves it: the tests check
-	// that a script run on the stand has not touched the program installed
-	// there.
-	realProfile = os.Getenv("USERPROFILE")
+	// The real home, before Main moves it: the tests check after each run of
+	// a script that it has not touched it.
+	if err := guardRealHome(); err != nil {
+		panic(err)
+	}
 	code := testkit.Main(m)
 	removeFakes()
 	os.Exit(code)

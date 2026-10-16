@@ -2,11 +2,13 @@ package install_test
 
 import (
 	"os"
-	"strings"
 	"testing"
+
+	"github.com/t8nax/gentry/tests/testkit"
 )
 
-// Кейс: обновление до новой версии.
+// TestReinstallNewer checks that the script installs the latest release over
+// an older one and names the version before.
 func TestReinstallNewer(t *testing.T) {
 	eachShell(t, allShells, func(t *testing.T, s *stand) {
 		s.installed(older)
@@ -17,7 +19,8 @@ func TestReinstallNewer(t *testing.T) {
 	})
 }
 
-// Кейс: та же версия заново.
+// TestReinstallSame checks that the script installs again over a program
+// that names no version, and says the version before is not known.
 func TestReinstallSame(t *testing.T) {
 	eachShell(t, shOnly, func(t *testing.T, s *stand) {
 		s.installed(latest)
@@ -31,7 +34,9 @@ func TestReinstallSame(t *testing.T) {
 	})
 }
 
-// Кейс: установка при открытой сессии.
+// TestReinstallBusy checks that install.ps1 renames a program a running
+// process holds to gentry.exe.old, puts the new one in its place, says so,
+// and the running process goes on.
 func TestReinstallBusy(t *testing.T) {
 	eachShell(t, ps1Only, func(t *testing.T, s *stand) {
 		s.installed(older)
@@ -53,7 +58,8 @@ func TestReinstallBusy(t *testing.T) {
 	})
 }
 
-// Кейс: .old свободен.
+// TestOldFree checks that install.ps1 removes a gentry.exe.old no process
+// holds.
 func TestOldFree(t *testing.T) {
 	eachShell(t, ps1Only, func(t *testing.T, s *stand) {
 		s.installed(older)
@@ -65,7 +71,8 @@ func TestOldFree(t *testing.T) {
 	})
 }
 
-// Кейс: .old занят.
+// TestOldBusy checks that install.ps1 leaves a gentry.exe.old a running
+// process holds, succeeds and says nothing of it.
 func TestOldBusy(t *testing.T) {
 	eachShell(t, ps1Only, func(t *testing.T, s *stand) {
 		s.installed(older)
@@ -77,8 +84,19 @@ func TestOldBusy(t *testing.T) {
 		if _, err := os.Stat(old); err != nil {
 			t.Error(err)
 		}
-		if strings.Contains(r.stdout+r.stderr, "gentry.exe.old") {
-			t.Errorf("the output names gentry.exe.old:\n%s", r)
+		// The output of an installation over 0.1.0 with -NoModifyPath, and
+		// nothing more.
+		want := testkit.Lines(
+			"Gentry 0.2.0 установлен.",
+			"Программа: "+s.program(),
+			"Прежняя версия: 0.1.0",
+			"PATH не изменён.",
+			"",
+			"Добавить папку в PATH: "+s.bin(),
+			"Подключить ИИ-инструмент: "+s.program()+" setup <ИИ-инструмент>",
+			"Посмотреть доступные ИИ-инструменты: "+s.program()+" setup --help")
+		if r.stdout != want || r.stderr != "" {
+			t.Errorf("%s\nwant stdout:\n%s\nand no stderr", r, want)
 		}
 	})
 }

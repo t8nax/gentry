@@ -15,7 +15,8 @@ import (
 	"github.com/t8nax/gentry/tests/testkit"
 )
 
-// Кейс: версия неверного вида.
+// TestReleaseVersionFormat checks that the button refuses a version that is
+// not three numbers apart by dots and creates no tag.
 func TestReleaseVersionFormat(t *testing.T) {
 	r := newRepo(t)
 	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)})
@@ -27,7 +28,8 @@ func TestReleaseVersionFormat(t *testing.T) {
 	r.wantTags()
 }
 
-// Кейс: запуск из другой ветки.
+// TestReleaseFromOtherBranch checks that the button refuses to release from
+// a branch other than main and names the branch.
 func TestReleaseFromOtherBranch(t *testing.T) {
 	r := released(t, "0.2.0", section020, section030)
 	r.branch("feat/cart")
@@ -35,14 +37,16 @@ func TestReleaseFromOtherBranch(t *testing.T) {
 	r.wantTags("v0.2.0")
 }
 
-// Кейс: версия уже выпущена.
+// TestReleaseVersionExists checks that the button refuses a version that
+// has its tag already.
 func TestReleaseVersionExists(t *testing.T) {
 	r := released(t, "0.2.0", section020, section030)
 	wantRefusal(t, r.check("0.2.0"), "Выпуск с этой версией уже есть.", "Версия: 0.2.0")
 	r.wantTags("v0.2.0")
 }
 
-// Кейс: версия меньше последней.
+// TestReleaseVersionLower checks that the button refuses a version lower
+// than the latest release and names both.
 func TestReleaseVersionLower(t *testing.T) {
 	r := newRepo(t)
 	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)})
@@ -54,7 +58,8 @@ func TestReleaseVersionLower(t *testing.T) {
 	r.wantTags("v0.1.0", "v0.2.0")
 }
 
-// Кейс: первый выпуск.
+// TestReleaseFirst checks that the checks pass the first release, with no
+// tag v* before it.
 func TestReleaseFirst(t *testing.T) {
 	r := newRepo(t)
 	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)})
@@ -63,7 +68,8 @@ func TestReleaseFirst(t *testing.T) {
 	}
 }
 
-// Кейс: нет изменений после выпуска.
+// TestReleaseNoChanges checks that the button refuses a release when the
+// latest one is on the head of main.
 func TestReleaseNoChanges(t *testing.T) {
 	r := newRepo(t)
 	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section021, section020)})
@@ -72,7 +78,8 @@ func TestReleaseNoChanges(t *testing.T) {
 	r.wantTags("v0.2.0")
 }
 
-// Кейс: после выпуска изменён только журнал.
+// TestReleaseOnlyChangelogChanged checks that the button refuses a release
+// when main has changed only the journal since the latest one.
 func TestReleaseOnlyChangelogChanged(t *testing.T) {
 	r := newRepo(t)
 	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section020)})
@@ -101,7 +108,9 @@ var programs = releaseFiles[1:7]
 // checksumLine is a line of checksums.txt as sha256sum prints it.
 var checksumLine = regexp.MustCompile(`^([0-9a-f]{64})  (\S+)$`)
 
-// Кейс: состав собранного выпуска.
+// TestReleaseFiles checks that the build puts exactly the nine files of a
+// release into the folder, checksums.txt has a right sum for each program,
+// and the scripts are those of the repository.
 func TestReleaseFiles(t *testing.T) {
 	r := moduleCopy(t, "0.1.0")
 	dir, res := r.build("0.1.0")
@@ -159,7 +168,8 @@ func TestReleaseFiles(t *testing.T) {
 // hostProgram is the program of a release for the platform of the stand.
 var hostProgram = "gentry-" + runtime.GOOS + "-" + runtime.GOARCH + exe
 
-// Кейс: версия собранной программы.
+// TestReleaseBuiltVersion checks that the program of the release for the
+// platform of the stand names the version of the release.
 func TestReleaseBuiltVersion(t *testing.T) {
 	r := moduleCopy(t, "0.1.0")
 	dir, res := r.build("0.1.0")
@@ -172,7 +182,9 @@ func TestReleaseBuiltVersion(t *testing.T) {
 	}
 }
 
-// Кейс: собранная программа называет другую версию.
+// TestReleaseBuiltVersionMismatch checks that the build refuses when the
+// program it built names another version, such as that of a changed work
+// tree, and leaves no file of the release.
 func TestReleaseBuiltVersionMismatch(t *testing.T) {
 	r := moduleCopy(t, "0.1.0")
 	main := filepath.Join(r.dir, "cmd", "gentry", "main.go")
@@ -195,7 +207,8 @@ func TestReleaseBuiltVersionMismatch(t *testing.T) {
 	}
 }
 
-// Кейс: текст из раздела версии.
+// TestReleaseNotes checks that the text of the release is the section of
+// its version in the journal, without its heading and the other sections.
 func TestReleaseNotes(t *testing.T) {
 	r := released(t, "0.2.0", section020, section030)
 	res := r.check("0.3.0")
@@ -205,14 +218,16 @@ func TestReleaseNotes(t *testing.T) {
 	}
 }
 
-// Кейс: в журнале нет раздела версии.
+// TestReleaseNoSection checks that the button refuses a version with no
+// section in the journal.
 func TestReleaseNoSection(t *testing.T) {
 	r := released(t, "0.2.0", section020, "")
 	wantRefusal(t, r.check("0.3.0"), "В журнале изменений нет раздела этой версии.", "Версия: 0.3.0")
 	r.wantTags("v0.2.0")
 }
 
-// Кейс: заголовок раздела без даты.
+// TestReleaseSectionWithoutDate checks that a heading of the version with no
+// date is no section of the version.
 func TestReleaseSectionWithoutDate(t *testing.T) {
 	undated := strings.Replace(section030, "## 0.3.0 — 2026-11-02", "## 0.3.0", 1)
 	r := released(t, "0.2.0", section020, undated)
@@ -220,7 +235,8 @@ func TestReleaseSectionWithoutDate(t *testing.T) {
 	r.wantTags("v0.2.0")
 }
 
-// Кейс: текст первого выпуска.
+// TestReleaseFirstNotes checks the text of the first release, with no tag v*
+// before it.
 func TestReleaseFirstNotes(t *testing.T) {
 	r := newRepo(t)
 	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog("## 0.1.0 — 2026-10-17\n\nПервый выпуск магазина.\n")})

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,8 +56,21 @@ func assetOf(platform string) string {
 	return name
 }
 
-// hostAsset is the program of the platform of the stand.
-var hostAsset = assetOf(runtime.GOOS + "/" + runtime.GOARCH)
+// hostAsset is the program of the platform of the stand, as the script takes
+// it: under Rosetta on macOS, that of arm64.
+var hostAsset = assetOf(runtime.GOOS + "/" + hostArch())
+
+// hostArch returns the architecture of the machine of the stand: a test built
+// for amd64 runs under Rosetta on a Mac with arm64.
+func hostArch() string {
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
+		out, err := exec.Command("sysctl", "-n", "sysctl.proc_translated").Output()
+		if err == nil && strings.TrimSpace(string(out)) == "1" {
+			return "arm64"
+		}
+	}
+	return runtime.GOARCH
+}
 
 // exe is the suffix of a program on the platform of the stand.
 var exe = map[bool]string{true: ".exe", false: ""}[runtime.GOOS == "windows"]
@@ -106,9 +118,9 @@ func removeFakes() {
 
 // A mock is the mock release: a local HTTP server with the files of the
 // releases 0.1.0 and 0.2.0 at the paths of GitHub. As on GitHub,
-// /releases/latest/download/<file> redirects to the download of the latest
-// release, and a download redirects to the storage of the file, which serves
-// it with no charset.
+// /releases/latest redirects to the page of the latest release,
+// /releases/latest/download/<file> to its download, and a download to the
+// storage of the file, which serves it with no charset.
 type mock struct {
 	srv *httptest.Server
 
@@ -154,6 +166,16 @@ func newMock(t *testing.T) *mock {
 func (m *mock) serve(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Path
 	switch {
+	case p == "/releases/latest":
+		http.Redirect(w, r, "/releases/tag/v"+latest, http.StatusFound)
+	case strings.HasPrefix(p, "/releases/tag/v"):
+		v := strings.TrimPrefix(p, "/releases/tag/v")
+		if _, ok := m.file(v + "/checksums.txt"); !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, "<!DOCTYPE html>\n<title>Release Gentry %s</title>\n", v)
 	case strings.HasPrefix(p, "/releases/latest/download/"):
 		http.Redirect(w, r, "/releases/download/v"+latest+"/"+strings.TrimPrefix(p, "/releases/latest/download/"), http.StatusFound)
 	case strings.HasPrefix(p, "/releases/download/v"):
@@ -255,6 +277,7 @@ type stand struct {
 	gentryHome string // GENTRY_HOME; "" unset
 	releaseURL string // GENTRY_RELEASES_URL
 	path       string // PATH; "" inherited
+	loginShell string // SHELL
 }
 
 // eachShell runs f in a subtest per shell of names, on a clean machine of
@@ -273,7 +296,7 @@ func eachShell(t *testing.T, names []string, f func(t *testing.T, s *stand)) {
 
 // cleanMachine returns a clean machine: a new home with no data root and
 // GENTRY_HOME unset; on Linux and macOS the home has an empty .profile and
-// .bashrc.
+// .bashrc, and the login shell is /bin/sh.
 func cleanMachine(t *testing.T, shell string) *stand {
 	t.Helper()
 	switch {
@@ -286,7 +309,7 @@ func cleanMachine(t *testing.T, shell string) *stand {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &stand{t: t, shell: shell, home: home, data: filepath.Join(home, ".gentry"), mock: newMock(t)}
+	s := &stand{t: t, shell: shell, home: home, data: filepath.Join(home, ".gentry"), mock: newMock(t), loginShell: "/bin/sh"}
 	s.releaseURL = s.mock.releases()
 	if shell == sh {
 		for _, f := range []string{".profile", ".bashrc"} {
@@ -333,9 +356,10 @@ func (s *stand) keepUserPath() []string {
 }
 
 // environ is the environment of the script: that of the test with the home,
-// the data root and the address of the releases of the stand.
+// the data root, the login shell and the address of the releases of the
+// stand.
 func (s *stand) environ() []string {
-	drop := []string{"HOME", "USERPROFILE", testkit.HomeEnv, releasesEnv, "XDG_CONFIG_HOME", "ZDOTDIR"}
+	drop := []string{"HOME", "USERPROFILE", testkit.HomeEnv, releasesEnv, "XDG_CONFIG_HOME", "ZDOTDIR", "SHELL"}
 	if s.path != "" {
 		drop = append(drop, "PATH")
 	}
@@ -346,7 +370,7 @@ func (s *stand) environ() []string {
 			env = append(env, kv)
 		}
 	}
-	env = append(env, "HOME="+s.home, "USERPROFILE="+s.home, releasesEnv+"="+s.releaseURL)
+	env = append(env, "HOME="+s.home, "USERPROFILE="+s.home, releasesEnv+"="+s.releaseURL, "SHELL="+s.loginShell)
 	if s.gentryHome != "" {
 		env = append(env, testkit.HomeEnv+"="+s.gentryHome)
 	}
@@ -394,33 +418,50 @@ func (s *stand) runSh(stdin io.Reader, args ...string) result {
 	s.t.Helper()
 	cmd := exec.Command("sh", args...)
 	cmd.Stdin = stdin
-	cmd.Env = s.environ()
-	cmd.Dir = s.home
-	return s.run(cmd)
+	return s.runScript(cmd)
 }
 
 // ps1Encoding makes the console write the output of the script in UTF-8:
 // the test reads it from a pipe, a terminal shows it as it is.
 const ps1Encoding = "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; "
 
+// sessionGoesOn is what the command after install.ps1 prints.
+const sessionGoesOn = "gentry-test: the session goes on"
+
+// runPs1 runs install.ps1 in a session of PowerShell as the user does, then a
+// command that prints sessionGoesOn and ends the session with the code in
+// $LASTEXITCODE: the exit code of the script is the code it leaves there,
+// and the window of the user goes on after the script, so the command after
+// it runs. A script that closes the window or stops with an error fails the
+// test.
 func (s *stand) runPs1(args ...string) result {
 	s.t.Helper()
 	s.mock.script(s.t, "install.ps1")
 	url := s.mock.srv.URL + "/releases/latest/download/install.ps1"
-	command := ps1Encoding + "irm '" + url + "' | iex"
+	call := "irm '" + url + "' | iex"
 	if len(args) > 0 {
-		command = ps1Encoding + "& ([scriptblock]::Create((irm '" + url + "'))) " + strings.Join(args, " ")
+		call = "& ([scriptblock]::Create((irm '" + url + "'))) " + strings.Join(args, " ")
 	}
-	cmd := exec.Command(s.shell, "-NoProfile", "-NonInteractive", "-Command", command)
+	command := ps1Encoding + call + "; [Console]::Out.WriteLine('" + sessionGoesOn + "'); exit $LASTEXITCODE"
+	r := s.runScript(exec.Command(s.shell, "-NoProfile", "-NonInteractive", "-Command", command))
+	rest, ok := strings.CutSuffix(r.stdout, sessionGoesOn+"\n")
+	if !ok {
+		s.t.Errorf("the session of PowerShell did not run the command after the script: the script closed the window or stopped with an error; %s", r)
+		return r
+	}
+	r.stdout = rest
+	return r
+}
+
+// runScript runs a script of installation in the environment and the home of
+// the stand, under the guard of the real home.
+func (s *stand) runScript(cmd *exec.Cmd) result {
+	s.t.Helper()
+	stopIfBroken(s.t)
 	cmd.Env = s.environ()
 	cmd.Dir = s.home
-	before := realInstall()
-	checkUserPath := guardUserPath(s.t)
 	r := s.run(cmd)
-	checkUserPath()
-	if after := realInstall(); after != before {
-		s.t.Errorf("the script changed the folder of the program of the real profile %s:\nbefore:\n%s\nafter:\n%s", realProfile, before, after)
-	}
+	checkRealHome(s.t)
 	return r
 }
 
@@ -474,62 +515,11 @@ func (s *stand) version() string {
 
 func versionLine(v string) string { return "Версия Gentry: " + v + "\n" }
 
-// realProfile is the profile of the user who runs the tests, before Main
-// moves it; "" on Linux and macOS.
-var realProfile string
-
-// realInstall describes the folder of the program of the real profile: the
-// name, size and time of change of each file. A script that takes the
-// profile from the system rather than from USERPROFILE would change it.
-func realInstall() string {
-	if realProfile == "" {
-		return ""
-	}
-	entries, err := os.ReadDir(filepath.Join(realProfile, ".gentry", "bin"))
-	if err != nil {
-		return err.Error()
-	}
-	var b strings.Builder
-	for _, e := range entries {
-		if info, err := e.Info(); err == nil {
-			fmt.Fprintf(&b, "%s %d %s\n", e.Name(), info.Size(), info.ModTime())
-		}
-	}
-	return b.String()
-}
-
 // onCIRunner reports whether the tests run on a runner of GitHub Actions
 // hosted by GitHub: a new machine for each job, whose registry the tests may
 // change.
 func onCIRunner() bool {
 	return os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("RUNNER_ENVIRONMENT") == "github-hosted"
-}
-
-// guardUserPath keeps the variable Path of the user of a machine that is not
-// a runner of CI: the returned function restores it and fails the test if a
-// run of the script has changed it.
-func guardUserPath(t *testing.T) func() {
-	t.Helper()
-	if runtime.GOOS != "windows" || onCIRunner() {
-		return func() {}
-	}
-	before, err := readUserPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return func() {
-		t.Helper()
-		after, err := readUserPath()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if after != before {
-			if err := writeUserPath(before); err != nil {
-				t.Errorf("restore the variable Path of the user: %v", err)
-			}
-			t.Errorf("the script changed the variable Path of the user of the machine; restored. Before: %+v, after: %+v", before, after)
-		}
-	}
 }
 
 // ciOnly skips a case about the variable Path of the user anywhere but on a
@@ -606,7 +596,36 @@ printf '%s\n' "${out# }"
 `
 	script = strings.NewReplacer("KERNEL", kernel, "MACHINE", machine, "SYSTEM", system).Replace(script)
 	writeExecutable(s.t, filepath.Join(dir, "uname"), script)
-	s.path = dir + string(os.PathListSeparator) + os.Getenv("PATH")
+	s.prependPath(dir)
+}
+
+// fakeRosetta puts first in PATH a sysctl that tells the script it runs
+// under Rosetta on a Mac with arm64: sysctl.proc_translated and
+// hw.optional.arm64 are 1; it asks the real sysctl for the other names.
+func (s *stand) fakeRosetta() {
+	s.t.Helper()
+	dir := s.t.TempDir()
+	writeExecutable(s.t, filepath.Join(dir, "sysctl"), `#!/bin/sh
+n= name= value=
+for arg do
+  case $arg in
+    -*) case $arg in *n*) n=1 ;; esac ;;
+    sysctl.proc_translated|hw.optional.arm64) name=$arg value=1 ;;
+    *) exec /usr/sbin/sysctl "$@" ;;
+  esac
+done
+if [ -n "$n" ]; then echo "$value"; else echo "$name: $value"; fi
+`)
+	s.prependPath(dir)
+}
+
+// prependPath puts the folder first in the PATH of the script.
+func (s *stand) prependPath(dir string) {
+	path := s.path
+	if path == "" {
+		path = os.Getenv("PATH")
+	}
+	s.path = dir + string(os.PathListSeparator) + path
 }
 
 // pathWithout points PATH at a folder with the programs of the PATH of the
@@ -636,16 +655,40 @@ func (s *stand) pathWithout(names ...string) {
 	s.path = dir
 }
 
-// deadReleases points the scripts at an address where nothing listens.
+// deadReleases points the scripts at an address where nothing listens: port
+// 1 of the loopback, which no server of the tests takes.
 func (s *stand) deadReleases() {
+	s.releaseURL = "http://127.0.0.1:1/releases"
+}
+
+// untouched returns a check that the script has changed no profile of a
+// shell and not the variable Path of the user: on Linux and macOS .profile
+// and .bashrc stay empty and no .zshrc or config.fish appears; on Windows
+// the variable Path of the user is what it is now.
+func (s *stand) untouched() func() {
 	s.t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		s.t.Fatal(err)
+	if s.shell != sh {
+		before, err := readUserPath()
+		if err != nil {
+			s.t.Fatal(err)
+		}
+		return func() {
+			s.t.Helper()
+			if after, err := readUserPath(); err != nil || after != before {
+				s.t.Errorf("the variable Path of the user: %+v (%v), want it unchanged: %+v", after, err, before)
+			}
+		}
 	}
-	addr := l.Addr().String()
-	l.Close()
-	s.releaseURL = "http://" + addr + "/releases"
+	return func() {
+		s.t.Helper()
+		for _, f := range []string{".profile", ".bashrc"} {
+			if got := readFile(s.t, filepath.Join(s.home, f)); got != "" {
+				s.t.Errorf("~/%s: %q, want empty", f, got)
+			}
+		}
+		wantNo(s.t, filepath.Join(s.home, ".zshrc"))
+		wantNo(s.t, filepath.Join(s.home, ".config", "fish"))
+	}
 }
 
 // start runs the installed program, or another file, with mcp, as the tool

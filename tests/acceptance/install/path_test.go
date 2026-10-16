@@ -363,3 +363,38 @@ func TestPathReadOnlyProfile(t *testing.T) {
 			"Посмотреть доступные ИИ-инструменты: "+program+" setup --help")
 	})
 }
+
+// TestPathPartlyWritten checks that when one profile takes the line of PATH
+// and another is closed for writing, install.sh lists the profile written
+// first and then names the one it could not write.
+func TestPathPartlyWritten(t *testing.T) {
+	eachShell(t, shOnly, func(t *testing.T, s *stand) {
+		skipAsRoot(t)
+		profile, bashrc := filepath.Join(s.home, ".profile"), filepath.Join(s.home, ".bashrc")
+		if err := os.Chmod(bashrc, 0o444); err != nil {
+			t.Fatal(err)
+		}
+		r := s.install()
+		wantCode(t, r, 0)
+		wantPathLine(t, profile, exportLine(s.home+"/.gentry/bin"))
+		ls := lines(r.stdout)
+		added := slices.Index(ls, "Папка добавлена в PATH в файлах:")
+		failed := slices.Index(ls, "Не удалось добавить папку в PATH.")
+		if added < 0 || failed < 0 || added > failed {
+			t.Fatalf("want «Папка добавлена в PATH в файлах:», then «Не удалось добавить папку в PATH.»:\n%s", r.stdout)
+		}
+		var listed []string
+		for _, l := range ls[added+1:] {
+			if !strings.HasPrefix(l, "  ") {
+				break
+			}
+			listed = append(listed, l)
+		}
+		if !slices.Contains(listed, "  "+profile) || slices.ContainsFunc(listed, func(l string) bool { return strings.Contains(l, ".bashrc") }) {
+			t.Errorf("the files written are listed as %q, want %s and no .bashrc", listed, profile)
+		}
+		if failed+1 >= len(ls) || ls[failed+1] != "Файл: "+bashrc {
+			t.Errorf("after «Не удалось добавить папку в PATH.» want «Файл: %s»:\n%s", bashrc, r.stdout)
+		}
+	})
+}

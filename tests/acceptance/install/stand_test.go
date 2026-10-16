@@ -278,6 +278,8 @@ type stand struct {
 	releaseURL string // GENTRY_RELEASES_URL
 	path       string // PATH; "" inherited
 	loginShell string // SHELL
+
+	process map[string]string // variables of the process set by the case; "" removed
 }
 
 // eachShell runs f in a subtest per shell of names, on a clean machine of
@@ -357,11 +359,14 @@ func (s *stand) keepUserPath() []string {
 
 // environ is the environment of the script: that of the test with the home,
 // the data root, the login shell and the address of the releases of the
-// stand.
+// stand, and the variables of the process the case sets or removes.
 func (s *stand) environ() []string {
 	drop := []string{"HOME", "USERPROFILE", testkit.HomeEnv, releasesEnv, "XDG_CONFIG_HOME", "ZDOTDIR", "SHELL"}
 	if s.path != "" {
 		drop = append(drop, "PATH")
+	}
+	for name := range s.process {
+		drop = append(drop, name)
 	}
 	var env []string
 	for _, kv := range os.Environ() {
@@ -377,7 +382,21 @@ func (s *stand) environ() []string {
 	if s.path != "" {
 		env = append(env, "PATH="+s.path)
 	}
+	for name, value := range s.process {
+		if value != "" {
+			env = append(env, name+"="+value)
+		}
+	}
 	return env
+}
+
+// setProcess sets a variable of the environment of the process of the
+// script; an empty value removes it.
+func (s *stand) setProcess(name, value string) {
+	if s.process == nil {
+		s.process = map[string]string{}
+	}
+	s.process[name] = value
 }
 
 // sameEnvName reports whether a and b name the same environment variable:

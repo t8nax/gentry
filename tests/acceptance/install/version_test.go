@@ -1,6 +1,10 @@
 package install_test
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 // TestVersionRollback checks that the parameter of the version installs an
 // older release over a newer one and names the version before.
@@ -45,5 +49,41 @@ func TestUnknownParam(t *testing.T) {
 		r := s.install("--verison", "0.1.0")
 		wantCode(t, r, 1)
 		wantStderr(t, r, "Неизвестный параметр.", "Параметр: --verison", "Допустимые параметры:", "  --version <версия>", "  --no-modify-path")
+	})
+}
+
+// TestVersionLeadingZero checks that the script refuses a version with a
+// leading zero in a number, which semver forbids, and makes no data root.
+func TestVersionLeadingZero(t *testing.T) {
+	eachShell(t, allShells, func(t *testing.T, s *stand) {
+		r := s.install(append(s.versionArgs("01.2.3"), s.keepUserPath()...)...)
+		wantCode(t, r, 1)
+		wantStderr(t, r, "Версия указана неверно.", "Версия: 01.2.3")
+		wantNo(t, s.data)
+	})
+}
+
+// TestVersionWithoutValue checks that install.sh refuses --version with no
+// value as a version of a wrong form, the line of the version empty: the
+// text «Версия: <значение>» with no value.
+func TestVersionWithoutValue(t *testing.T) {
+	eachShell(t, shOnly, func(t *testing.T, s *stand) {
+		r := s.install("--version")
+		wantCode(t, r, 1)
+		wantStderr(t, r, "Версия указана неверно.", "Версия: ")
+		wantNo(t, s.data)
+	})
+}
+
+// TestUnknownParamPs1 checks that install.ps1 called with an unknown
+// parameter fails with the error of PowerShell that names it, and makes no
+// data root.
+func TestUnknownParamPs1(t *testing.T) {
+	eachShell(t, ps1Only, func(t *testing.T, s *stand) {
+		r := s.install(append([]string{"-Verison", "0.1.0"}, s.keepUserPath()...)...)
+		if !strings.Contains(r.stderr, "Verison") {
+			t.Errorf("want an error of PowerShell that names the parameter Verison; %s", r)
+		}
+		wantNo(t, filepath.Join(s.home, ".gentry"))
 	})
 }

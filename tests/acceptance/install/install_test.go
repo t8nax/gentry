@@ -231,3 +231,36 @@ func TestInstallNextStep(t *testing.T) {
 		}
 	})
 }
+
+// TestInstallWindows32 checks that install.ps1 refuses on 32-bit Windows, a
+// process with PROCESSOR_ARCHITECTURE x86 and no PROCESSOR_ARCHITEW6432,
+// lists the platforms of a release and makes no data root.
+func TestInstallWindows32(t *testing.T) {
+	eachShell(t, ps1Only, func(t *testing.T, s *stand) {
+		s.setProcess("PROCESSOR_ARCHITECTURE", "x86")
+		s.setProcess("PROCESSOR_ARCHITEW6432", "")
+		r := s.install(s.keepUserPath()...)
+		wantCode(t, r, 1)
+		wantStderr(t, r, "Платформа не поддерживается.", "Платформа: windows/386", "Поддерживаемые платформы:",
+			"  linux/amd64", "  linux/arm64", "  darwin/amd64", "  darwin/arm64", "  windows/amd64", "  windows/arm64")
+		wantNo(t, filepath.Join(s.home, ".gentry"))
+	})
+}
+
+// TestInstallWindows32OnWindows64 checks that install.ps1 in 32-bit
+// PowerShell on 64-bit Windows, a process with PROCESSOR_ARCHITECTURE x86 and
+// PROCESSOR_ARCHITEW6432 naming the architecture of the system, installs the
+// program for the architecture of the system.
+func TestInstallWindows32OnWindows64(t *testing.T) {
+	eachShell(t, ps1Only, func(t *testing.T, s *stand) {
+		s.setProcess("PROCESSOR_ARCHITECTURE", "x86")
+		s.setProcess("PROCESSOR_ARCHITEW6432", map[string]string{"amd64": "AMD64", "arm64": "ARM64"}[runtime.GOARCH])
+		r := s.install(s.keepUserPath()...)
+		wantCode(t, r, 0)
+		want, _ := s.mock.file(latest + "/" + hostAsset)
+		if readFile(t, s.program()) != string(want) {
+			t.Errorf("the installed program is not %s of the release 0.2.0", hostAsset)
+		}
+		s.wantVersion(latest)
+	})
+}

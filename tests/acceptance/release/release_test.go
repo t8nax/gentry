@@ -245,3 +245,12 @@ func TestReleaseFirstNotes(t *testing.T) {
 		t.Errorf("%s\nwant exit code 0 and the text of the release:\n%s", res, want)
 	}
 }
+
+// TestReleaseVersionLeadingZero checks that the button refuses a version
+// with a leading zero in a number, which semver forbids, and creates no tag.
+func TestReleaseVersionLeadingZero(t *testing.T) {
+	r := newRepo(t)
+	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)})
+	wantRefusal(t, r.check("01.2.3"), "Версия указана неверно.", "Версия: 01.2.3")
+	r.wantTags()
+}

@@ -44,18 +44,14 @@ jobs:
           cache-dependency-path: go.mod
 
       # The version comes through the environment, not into the script: it
-      # is typed by hand. A refusal goes to the log and to the annotations of
-      # the run.
+      # is typed by hand. Each call of the program of release goes through
+      # .github/release.sh: a refusal goes to the log of the run as an error.
       - name: release check
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          if ! go run ./cmd/release check "$VERSION" > "$RUNNER_TEMP/notes.md" 2> "$RUNNER_TEMP/refusal.txt"; then
-            cat "$RUNNER_TEMP/refusal.txt" >&2
-            message=$(sed -e 's/%/%25/g' -e 's/\r/%0D/g' "$RUNNER_TEMP/refusal.txt" | awk 'NR > 1 { printf "%%0A" } { printf "%s", $0 }')
-            echo "::error::$message"
-            exit 1
-          fi
+          . .github/release.sh
+          release check "$VERSION" > "$RUNNER_TEMP/notes.md"
           cat "$RUNNER_TEMP/notes.md"
 
   # The tests of CI on the commit of the release: the same workflow, called.
@@ -86,7 +82,9 @@ jobs:
       # The checks again, on the commit to publish: they give the text of
       # the release.
       - name: release check
-        run: go run ./cmd/release check "$VERSION" > "$RUNNER_TEMP/notes.md"
+        run: |
+          . .github/release.sh
+          release check "$VERSION" > "$RUNNER_TEMP/notes.md"
 
       # Go stamps the version into the programs from the tag of the commit:
       # the tag is made here for the build only, and the build checks that
@@ -94,8 +92,9 @@ jobs:
       # release.
       - name: release build
         run: |
+          . .github/release.sh
           git tag "v$VERSION"
-          go run ./cmd/release build "$VERSION" "$RUNNER_TEMP/dist"
+          release build "$VERSION" "$RUNNER_TEMP/dist"
           git tag --delete "v$VERSION"
 
       - name: publish

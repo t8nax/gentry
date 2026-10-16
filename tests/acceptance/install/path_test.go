@@ -398,3 +398,30 @@ func TestPathPartlyWritten(t *testing.T) {
 		}
 	})
 }
+
+// TestPathSpace checks that install.sh writes the folder of the program to
+// the profiles so that the shells read a path with a space whole: in
+// double quotes for sh, in single quotes for fish; and that a new shell that
+// reads .profile finds gentry.
+func TestPathSpace(t *testing.T) {
+	testkit.SkipOnBinary(t)
+	t.Run(sh, func(t *testing.T) {
+		t.Parallel()
+		if runtime.GOOS == "windows" {
+			t.Skip("install.sh is checked on Linux and macOS")
+		}
+		s := machine(t, sh, "Anna Maria")
+		fish := filepath.Join(s.home, ".config", "fish", "config.fish")
+		writeFile(t, fish, "")
+		r := s.install()
+		wantCode(t, r, 0)
+		wantPathLine(t, filepath.Join(s.home, ".profile"), exportLine(s.home+"/.gentry/bin"))
+		wantPathLine(t, fish, "fish_add_path '"+s.home+"/.gentry/bin'")
+		cmd := exec.Command("sh", "-c", ". ~/.profile; gentry version")
+		cmd.Env = []string{"HOME=" + s.home, "PATH=/usr/bin:/bin"}
+		out, err := cmd.Output()
+		if err != nil || string(out) != versionLine(latest) {
+			t.Errorf("sh -c '. ~/.profile; gentry version': %v, printed %q, want %q", err, out, versionLine(latest))
+		}
+	})
+}

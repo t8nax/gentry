@@ -307,13 +307,24 @@ func cleanMachine(t *testing.T, shell string) *stand {
 	case shell != sh && runtime.GOOS != "windows":
 		t.Skip("install.ps1 is checked on Windows")
 	}
-	home, err := filepath.EvalSymlinks(t.TempDir())
+	return machine(t, shell, "")
+}
+
+// machine returns a clean machine whatever the system, its home the path sub
+// inside a new temporary folder, or the folder itself for "".
+func machine(t *testing.T, shell, sub string) *stand {
+	t.Helper()
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(tmp, sub)
+	if err := os.MkdirAll(home, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	s := &stand{t: t, shell: shell, home: home, data: filepath.Join(home, ".gentry"), mock: newMock(t), loginShell: "/bin/sh"}
 	s.releaseURL = s.mock.releases()
-	if shell == sh {
+	if runtime.GOOS != "windows" {
 		for _, f := range []string{".profile", ".bashrc"} {
 			writeFile(t, filepath.Join(home, f), "")
 		}

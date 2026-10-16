@@ -2,11 +2,14 @@ package install_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/t8nax/gentry/tests/testkit"
 )
 
 // TestInstallSh checks that install.sh on a clean machine installs the
@@ -262,5 +265,27 @@ func TestInstallWindows32OnWindows64(t *testing.T) {
 			t.Errorf("the installed program is not %s of the release 0.2.0", hostAsset)
 		}
 		s.wantVersion(latest)
+	})
+}
+
+// TestInstallPs1OnLinux checks that install.ps1 run in PowerShell on Linux or
+// macOS refuses, names the command of installation in the terminal and
+// makes no data root.
+func TestInstallPs1OnLinux(t *testing.T) {
+	testkit.SkipOnBinary(t)
+	t.Run(pwsh, func(t *testing.T) {
+		t.Parallel()
+		if runtime.GOOS == "windows" {
+			t.Skip("install.ps1 outside Windows is checked on Linux and macOS")
+		}
+		if _, err := exec.LookPath(pwsh); err != nil {
+			t.Skip("this machine has no pwsh")
+		}
+		s := machine(t, pwsh, "")
+		r := s.install()
+		wantCode(t, r, 1)
+		wantStderr(t, r, "На Linux и macOS Gentry ставится скриптом install.sh.", "",
+			"Установить Gentry в терминале: curl -fsSL https://github.com/t8nax/gentry/releases/latest/download/install.sh | sh")
+		wantNo(t, filepath.Join(s.home, ".gentry"))
 	})
 }

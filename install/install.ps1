@@ -13,8 +13,10 @@
 # The script runs in Windows PowerShell 5.1 and in PowerShell 7, in the
 # session of the user: it never closes the window. A refusal writes its lines
 # to the error stream, leaves 1 in $LASTEXITCODE and returns; a success leaves
-# 0 there. Its work runs in a script block of its own, so nothing of it stays
-# in the session. It downloads and checks the program in a temporary folder
+# 0 there. Its work runs in a script block of its own, so its variables,
+# functions and preferences stay out of the session; only the block param
+# below runs in the scope of the session under irm | iex and sets $Version and
+# $NoModifyPath there. It downloads and checks the program in a temporary folder
 # and only then puts it in its place, so an error at any step leaves the
 # installed program as it was.
 
@@ -27,6 +29,7 @@ param(
     [switch]$NoModifyPath
 )
 
+# The work, in a scope of its own; the parameters come as arguments.
 & {
     param([string]$Version, [bool]$NoModifyPath)
 

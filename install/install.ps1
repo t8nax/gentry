@@ -15,10 +15,12 @@
 # to the error stream, leaves 1 in $LASTEXITCODE and returns; a success leaves
 # 0 there. Its work runs in a script block of its own, so its variables,
 # functions and preferences stay out of the session; only the block param
-# below runs in the scope of the session under irm | iex and sets $Version and
-# $NoModifyPath there. It downloads and checks the program in a temporary folder
-# and only then puts it in its place, so an error at any step leaves the
-# installed program as it was.
+# below runs in the scope of the session under irm | iex: a variable $Version
+# or $NoModifyPath the session has gets the value of the parameter there (''
+# and False with no parameters), and none appears where the session has none.
+# It downloads and checks the program in a temporary folder and only then puts
+# it in its place, so an error at any step leaves the installed program as it
+# was.
 
 # CmdletBinding makes PowerShell refuse an unknown parameter, such as a typo
 # of -Version, before the script runs: without it the script would take the

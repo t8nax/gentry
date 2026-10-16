@@ -74,6 +74,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # the tags are the releases the checks compare with
+          # The token of this job may write to the repository: it is given to
+          # gh by GH_TOKEN, not left in .git/config for the steps that build
+          # and run the code of the commit.
+          persist-credentials: false
 
       - uses: actions/setup-go@v7
         with:

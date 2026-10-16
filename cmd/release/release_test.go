@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 )
@@ -94,27 +95,17 @@ func TestChecksums(t *testing.T) {
 	}
 }
 
-// TestRefusal checks that each refusal turns into its lines and any other
-// error into its text.
+// TestRefusal checks what the acceptance tests of the release do not: a
+// refusal wrapped in another error is told in its own words, and any other
+// error is printed as it is. The words of each refusal are stated by the
+// acceptance tests of tests/acceptance/release.
 func TestRefusal(t *testing.T) {
-	v := version{0, 3, 0}
-	latest := version{0, 2, 0}
-	for _, tc := range []struct {
-		err  error
-		want []string
-	}{
-		{&versionFormatError{value: "0.1"}, []string{"Версия указана неверно.", "Версия: 0.1"}},
-		{&notMainError{branch: "feat/cart"}, []string{"Выпуск делается только из main.", "Ветка: feat/cart"}},
-		{&releasedError{version: latest}, []string{"Выпуск с этой версией уже есть.", "Версия: 0.2.0"}},
-		{&notGreaterError{version: version{0, 1, 5}, latest: latest}, []string{"Версия должна быть больше версии последнего выпуска.", "Версия: 0.1.5", "Последний выпуск: 0.2.0"}},
-		{&noChangesError{latest: latest}, []string{"После последнего выпуска в main нет изменений, кроме журнала изменений.", "Последний выпуск: 0.2.0"}},
-		{&noSectionError{version: v}, []string{"В журнале изменений нет раздела этой версии.", "Версия: 0.3.0"}},
-		{&versionMismatchError{want: v, got: "0.3.0+dirty"}, []string{"Собранная программа называет другую версию.", "Ожидалась: 0.3.0", "Получена: 0.3.0+dirty"}},
-		{errors.New("git: not found"), []string{"git: not found"}},
-	} {
-		if got := refusal(tc.err); !slices.Equal(got, tc.want) {
-			t.Errorf("refusal(%v) = %q, want %q", tc.err, got, tc.want)
-		}
+	refused := &notMainError{branch: "feat/cart"}
+	if got, want := refusal(fmt.Errorf("check: %w", refused)), refusal(refused); !slices.Equal(got, want) {
+		t.Errorf("a wrapped refusal: %q, want %q", got, want)
+	}
+	if got := refusal(errors.New("git: not found")); !slices.Equal(got, []string{"git: not found"}) {
+		t.Errorf("another error: %q, want it as it is", got)
 	}
 }
 

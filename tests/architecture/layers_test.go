@@ -42,7 +42,7 @@ type exception struct {
 // table holds the layers from the top down. A package may import packages
 // of its own layer and of the layers below it.
 var table = []layer{
-	{"entry", []string{"cmd/gentry", "internal/cli"}},
+	{"entry", []string{"cmd/gentry", "internal/cli", "cmd/release"}},
 	{"adapters", []string{"internal/adapter/claude", "internal/integration", "internal/hook", "internal/agenttext", "internal/mcp"}},
 	{"scenarios", []string{"internal/task", "internal/project", "internal/flow", "internal/agents"}},
 	{"storage", []string{"internal/state", "internal/process", "internal/git", "internal/paths", "internal/filelock", "internal/home", "internal/caller", "internal/buildinfo", "internal/checks"}},

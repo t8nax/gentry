@@ -805,6 +805,13 @@ var ru = catalog{
 		ProblemAgentsNotAllowed:   "%s: поле «agents» допустимо только у этапа с исполнителем orchestrator или operator.",
 		FlowAgents:                "Субагенты: %s",
 		ReportFieldAgents:         "Субагенты",
+		ReleaseVersionInvalid:     "Версия указана неверно.\nВерсия: %s",
+		ReleaseNotMain:            "Выпуск делается только из main.\nВетка: %s",
+		ReleaseExists:             "Выпуск с этой версией уже есть.\nВерсия: %s",
+		ReleaseNotGreater:         "Версия должна быть больше версии последнего выпуска.\nВерсия: %s\nПоследний выпуск: %s",
+		ReleaseNoChanges:          "После последнего выпуска в main нет изменений, кроме журнала изменений.\nПоследний выпуск: %s",
+		ReleaseNoSection:          "В журнале изменений нет раздела этой версии.\nВерсия: %s",
+		ReleaseVersionMismatch:    "Собранная программа называет другую версию.\nОжидалась: %s\nПолучена: %s",
 	},
 	plurals: map[Key][]string{
 		FlowRounds: {"не более %d возврата", "не более %d возвратов", "не более %d возвратов"},

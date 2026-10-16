@@ -3,12 +3,17 @@ name: CI
 on:
   push:
   workflow_dispatch:
+  # The button Release runs the same tests on the commit of a release.
+  workflow_call:
 
 permissions:
   contents: read
 
+# Called by Release, the workflow has the context github of the caller: the
+# name of the workflow keeps its run apart from the run of CI on the same
+# branch, so neither cancels the other.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -62,9 +67,19 @@ jobs:
           go vet -tags acceptance ./cmd/gentry
 
       # The fast suite: short mode skips tests/e2e whole, before it builds
-      # gentry, so the binary tests run in the next step only.
+      # gentry, so the binary tests run in the next step only. The acceptance
+      # tests of the release run on Linux only, where the button Release
+      # runs: on Windows and macOS they add nothing, and their builds of the
+      # six platforms take most of the time of the job.
       - name: go test
-        run: go test -short ./...
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            go test -short ./...
+          else
+            packages=$(go list ./... | grep -v '/tests/acceptance/release$')
+            # shellcheck disable=SC2086 # a word per package
+            go test -short $packages
+          fi
 
       # Runs the tests of tests/e2e in full (concurrent processes, the MCP
       # server, the hooks and their budget, startup time, the end of the

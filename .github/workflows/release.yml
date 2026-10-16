@@ -1,0 +1,112 @@
+# The button Release: publishes the head of main as a release of Gentry on
+# GitHub, by hand, with the version as its only field.
+#
+#   gh workflow run release.yml --ref main -f version=0.2.0
+#
+# The checks and the build are made by the program of release of the
+# repository, ./cmd/release; the workflow runs it and the tests of CI and
+# publishes what it builds. The tag and the release are created only after
+# the checks and the tests have passed: the job that publishes needs both,
+# with no condition that runs it when one fails. The text of the release is
+# the section of the version in CHANGELOG.md, which the checks print.
+name: Выпуск
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Версия выпуска вида X.Y.Z, например 0.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One release at a time: a run started during another waits for it and then
+# its checks see the tag of the first. GitHub keeps only one waiting run: a
+# third run started meanwhile cancels the waiting second one.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags are the releases the checks compare with
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      # The version comes through the environment, not into the script: it
+      # is typed by hand. Each call of the program of release goes through
+      # .github/release.sh: a refusal goes to the log of the run as an error.
+      - name: release check
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          . .github/release.sh
+          release check "$VERSION" > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+  # The tests of CI on the commit of the release: the same workflow, called.
+  tests:
+    name: tests
+    needs: check
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: publish
+    needs: [check, tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags are the releases the checks compare with
+          # The token of this job may write to the repository: it is given to
+          # gh by GH_TOKEN, not left in .git/config for the steps that build
+          # and run the code of the commit.
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      # The checks again, on the commit to publish: they give the text of
+      # the release.
+      - name: release check
+        run: |
+          . .github/release.sh
+          release check "$VERSION" > "$RUNNER_TEMP/notes.md"
+
+      # Go stamps the version into the programs from the tag of the commit:
+      # the tag is made here for the build only, and the build checks that
+      # the program names the version. GitHub creates the tag with the
+      # release.
+      - name: release build
+        run: |
+          . .github/release.sh
+          git tag "v$VERSION"
+          release build "$VERSION" "$RUNNER_TEMP/dist"
+          git tag --delete "v$VERSION"
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" "$RUNNER_TEMP"/dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Gentry $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md"

@@ -64,13 +64,19 @@ func (e *versionMismatchError) Error() string {
 // repository dir into the folder out: the programs of the platforms, the
 // sums of the programs in checksums.txt and the scripts of installation. Go
 // stamps the version into the programs from the tag of the commit, so the
-// commit must have the tag v<version> and the work tree no change: build
-// checks that the program of the platform it runs on names the version. On
-// an error it leaves no file in out.
+// commit must have the tag v<version> and the work tree no change. build
+// makes the program of the platform it runs on first and checks that it
+// names the version, so a wrong version is refused after one build, not
+// six; the programs of the other platforms come after. On an error it
+// leaves no file in out.
 func build(dir, value, out string) (err error) {
 	v, ok := parseVersion(value)
 	if !ok {
 		return &versionFormatError{value: value}
+	}
+	host := platform{runtime.GOOS, runtime.GOARCH}
+	if !slices.Contains(platforms, host) {
+		return fmt.Errorf("the release has no program of %s/%s, where the build runs, to check its version", host.os, host.arch)
 	}
 	made, err := makeFolder(out)
 	if err != nil {
@@ -82,12 +88,30 @@ func build(dir, value, out string) (err error) {
 		}
 	}()
 	sums := map[string]string{} // by the name of the program
-	for _, p := range platforms {
+	program := func(p platform) error {
 		file := filepath.Join(out, p.program())
 		if err := goBuild(dir, p, file); err != nil {
 			return err
 		}
-		if sums[p.program()], err = fileSum(file); err != nil {
+		sum, err := fileSum(file)
+		sums[p.program()] = sum
+		return err
+	}
+	if err := program(host); err != nil {
+		return err
+	}
+	got, err := programVersion(filepath.Join(out, host.program()))
+	if err != nil {
+		return err
+	}
+	if got != v.String() {
+		return &versionMismatchError{want: v, got: got}
+	}
+	for _, p := range platforms {
+		if p == host {
+			continue
+		}
+		if err := program(p); err != nil {
 			return err
 		}
 	}
@@ -102,17 +126,6 @@ func build(dir, value, out string) (err error) {
 		if err := os.WriteFile(filepath.Join(out, s), b, 0o644); err != nil {
 			return err
 		}
-	}
-	host := platform{runtime.GOOS, runtime.GOARCH}
-	if !slices.Contains(platforms, host) {
-		return fmt.Errorf("the release has no program of %s/%s, where the build runs, to check its version", host.os, host.arch)
-	}
-	got, err := programVersion(filepath.Join(out, host.program()))
-	if err != nil {
-		return err
-	}
-	if got != v.String() {
-		return &versionMismatchError{want: v, got: got}
 	}
 	return nil
 }

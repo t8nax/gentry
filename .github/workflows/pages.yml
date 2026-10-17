@@ -1,0 +1,69 @@
+# The button Publish pages: builds the site of the pages of the releases
+# from the head of main and publishes it on GitHub Pages, by hand, with no
+# field. It publishes a change of the content of the page of a past
+# release, releases/<version>.md, with no new release.
+#
+#   gh workflow run pages.yml --ref main
+#
+# The site is built whole by the program of release of the repository,
+# ./cmd/release, as the workflow Release builds it after a release: the
+# page of each released version, a tag v<version>, and the list of the
+# releases. The program refuses a run from another branch than main and a
+# run when there is no release yet.
+name: Страницы выпусков
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The build of the site: it builds and runs the code of the commit, so it
+  # may not write to Pages.
+  build:
+    name: pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags are the released versions
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      # Each call of the program of release goes through .github/release.sh:
+      # a refusal goes to the log of the run as an error.
+      - name: release pages
+        run: |
+          . .github/release.sh
+          release pages "$RUNNER_TEMP/site"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+
+  # The publication of the site: the only job that may write to Pages, with
+  # no checkout of the code. One publication at a time, here and in the
+  # workflow Release alike: the same group of this job, which waits for the
+  # publication in progress.
+  deploy:
+    name: deploy pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

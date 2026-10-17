@@ -8,7 +8,15 @@
 # publishes what it builds. The tag and the release are created only after
 # the checks and the tests have passed: the job that publishes needs both,
 # with no condition that runs it when one fails. The text of the release is
-# the section of the version in CHANGELOG.md, which the checks print.
+# the section of the version in CHANGELOG.md and the line with the address
+# of the page of the release, which the checks print. The checks build the
+# site of the pages of the releases too, with the page of the new version:
+# a content of a page written wrong is refused before the tests.
+#
+# After the release the workflow builds the site of the pages of all the
+# releases and publishes it on GitHub Pages, as the button Publish pages,
+# pages.yml, does: the release comes first, and a failure of the pages
+# leaves it.
 name: Выпуск
 
 on:
@@ -110,3 +118,59 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Gentry $VERSION" \
             --notes-file "$RUNNER_TEMP/notes.md"
+
+  # The site of the pages of the releases, built whole from the commit of
+  # the release after the release is created: the tag of the release, which
+  # the checkout fetches, makes the new version a released one. A failure
+  # here leaves the release as it is. The job builds and runs the code of the
+  # commit, so it may not write to Pages: the next job publishes the site.
+  pages:
+    name: pages
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags are the released versions, the new one too
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      - name: release pages
+        run: |
+          . .github/release.sh
+          release pages "$RUNNER_TEMP/site"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+
+  # The publication of the site on GitHub Pages: the only job that may write
+  # to Pages, with no checkout of the code. Its failure, such as Pages not
+  # turned on, leaves the release; «Re-run failed jobs» publishes the site
+  # built, as the button Publish pages does from the head of main.
+  #
+  # One publication at a time, in the button Release and in the button
+  # Publish pages alike: a publication started during another waits for it.
+  # The group is of this job, apart from the group of the workflow: a
+  # publication waits for a publication only, not for a release.
+  deploy:
+    name: deploy pages
+    needs: pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

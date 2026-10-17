@@ -8,18 +8,28 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
-// TestRussianDate checks the date of each month in the genitive, the day
-// with no leading zero, and a date that is no date as it is. The words are
-// stated by the acceptance tests of tests/acceptance/release.
+// TestRussianDate states the date of a page: the day with no leading zero,
+// the month in the genitive and the year, for each month; a date that is no
+// date is shown as it is.
 func TestRussianDate(t *testing.T) {
-	for m, key := range months {
-		date := "2026-" + []string{"01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"}[m] + "-05"
-		if got, want := russianDate(date), msg.Text(msg.ReleasePageDate, 5, msg.Text(key), 2026); got != want {
-			t.Errorf("russianDate(%q) = %q, want %q", date, got, want)
+	for _, tc := range []struct{ date, want string }{
+		{"2026-01-05", "5 января 2026"},
+		{"2026-02-05", "5 февраля 2026"},
+		{"2026-03-05", "5 марта 2026"},
+		{"2026-04-05", "5 апреля 2026"},
+		{"2026-05-05", "5 мая 2026"},
+		{"2026-06-05", "5 июня 2026"},
+		{"2026-07-05", "5 июля 2026"},
+		{"2026-08-05", "5 августа 2026"},
+		{"2026-09-05", "5 сентября 2026"},
+		{"2026-10-15", "15 октября 2026"},
+		{"2026-11-30", "30 ноября 2026"},
+		{"2027-12-31", "31 декабря 2027"},
+		{"2026-13-45", "2026-13-45"},
+	} {
+		if got := russianDate(tc.date); got != tc.want {
+			t.Errorf("russianDate(%q) = %q, want %q", tc.date, got, tc.want)
 		}
-	}
-	if got := russianDate("2026-13-45"); got != "2026-13-45" {
-		t.Errorf("russianDate of no date = %q, want it as it is", got)
 	}
 }
 

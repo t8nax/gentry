@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -406,31 +407,43 @@ func TestPageUpdate(t *testing.T) {
 }
 
 // wantSelfContained checks that the page is one file with no scripts and no
-// resources outside it: no script, no handlers on…=, no style sheet or
-// other file linked, src and url( only of data inside the page.
+// resources outside it: no script, no handlers on…=, no elements link,
+// object, embed and iframe, no address javascript:, and src, srcset, poster
+// and url( of the styles only of data inside the page. A relative address
+// is a file outside the page too; links <a href> may lead anywhere but to
+// javascript:.
 func wantSelfContained(t *testing.T, p *page) {
 	t.Helper()
 	if strings.Contains(strings.ToLower(p.raw), "<script") {
 		t.Errorf("%s has <script", p.name)
 	}
+	var css strings.Builder
 	for _, n := range p.all {
+		switch n.tag {
+		case "script", "link", "object", "embed", "iframe":
+			t.Errorf("%s has the element <%s> %v", p.name, n.tag, n.attrs)
+		case "style":
+			css.WriteString(n.rawText() + "\n")
+		}
 		for name, value := range n.attrs {
+			v := strings.ToLower(strings.TrimSpace(value))
 			switch {
 			case strings.HasPrefix(name, "on"):
 				t.Errorf("%s: <%s> has the handler %s=%q", p.name, n.tag, name, value)
-			case name == "src" && !strings.HasPrefix(strings.TrimSpace(value), "data:"):
-				t.Errorf("%s: <%s> loads %q", p.name, n.tag, value)
+			case strings.HasPrefix(v, "javascript:"):
+				t.Errorf("%s: <%s> has the address %s=%q", p.name, n.tag, name, value)
+			case (name == "src" || name == "srcset" || name == "poster") && !strings.HasPrefix(v, "data:"):
+				t.Errorf("%s: <%s> loads %s=%q", p.name, n.tag, name, value)
+			case name == "style":
+				css.WriteString(value + "\n")
 			}
 		}
-		if n.tag == "link" && strings.Contains(strings.ToLower(n.attrs["rel"]), "stylesheet") {
-			t.Errorf("%s links the style sheet %q", p.name, n.attrs["href"])
-		}
 	}
-	lower := strings.ToLower(p.raw)
-	if strings.Contains(lower, "@import") {
+	styles := strings.ToLower(css.String())
+	if strings.Contains(styles, "@import") {
 		t.Errorf("%s imports a style sheet: @import", p.name)
 	}
-	for rest := lower; ; {
+	for rest := styles; ; {
 		i := strings.Index(rest, "url(")
 		if i < 0 {
 			break
@@ -753,4 +766,141 @@ func TestPagesNoReleases(t *testing.T) {
 	r := shopRepo(t, shopFiles(nil))
 	_, res := r.pages()
 	wantRefusal(t, res, "Выпусков ещё нет.")
+}
+
+// TestPageSecurity checks the section «Безопасность»: after «Исправлено»,
+// the entries of the journal as a list in its order.
+func TestPageSecurity(t *testing.T) {
+	section021 := "## 0.2.1 — 2026-10-15\n\n" + shop021Phrase + "\n\n" +
+		"### Исправлено\n* " + shop040Fixed + "\n\n" +
+		"### Безопасность\n* Пароль покупателя больше не попадает в журнал сервера.\n* Ссылка сброса пароля действует один час.\n"
+	p := shopPage(t, map[string]string{changelogFile: changelog(shop040, shop030, section021)}, "0.2.1", "0.2.1")
+	fixed, security := p.heading("Исправлено"), p.heading("Безопасность")
+	if fixed == nil || security == nil || security.start < fixed.start {
+		t.Fatalf("%s has no section «Безопасность» after «Исправлено»: %q", p.name, p.headingTexts())
+	}
+	lo, hi := p.part(security)
+	want := []string{"Пароль покупателя больше не попадает в журнал сервера.", "Ссылка сброса пароля действует один час."}
+	if got := p.texts(p.within(lo, hi, byTag("li"))); !slices.Equal(got, want) {
+		t.Errorf("the list «Безопасность» of %s is %q, want %q", p.name, got, want)
+	}
+}
+
+// cssComment is a comment of a style sheet.
+var cssComment = regexp.MustCompile(`(?s)/\*.*?\*/`)
+
+// reducedMotion matches the condition of a media rule for the reduced
+// motion of the system.
+var reducedMotion = regexp.MustCompile(`prefers-reduced-motion\s*:\s*reduce`)
+
+// noAnimation matches a declaration that turns an animation off.
+var noAnimation = regexp.MustCompile(`(?i)(^|[;\s])animation(-name)?\s*:\s*none\b`)
+
+// mediaBlocks returns the contents of the media rules of the style sheet
+// whose condition matches.
+func mediaBlocks(css string, cond *regexp.Regexp) []string {
+	var out []string
+	for rest := css; ; {
+		i := strings.Index(rest, "@media")
+		if i < 0 {
+			return out
+		}
+		rest = rest[i+len("@media"):]
+		open := strings.IndexByte(rest, '{')
+		if open < 0 {
+			return out
+		}
+		condition := rest[:open]
+		depth, end := 0, len(rest)
+		for j := open; j < len(rest); j++ {
+			if rest[j] == '{' {
+				depth++
+			} else if rest[j] == '}' {
+				depth--
+				if depth == 0 {
+					end = j
+					break
+				}
+			}
+		}
+		if cond.MatchString(condition) {
+			out = append(out, rest[open+1:min(end, len(rest))])
+		}
+		rest = rest[min(end, len(rest)):]
+	}
+}
+
+// TestPageReducedMotion checks that the styles of the page have a rule for
+// the reduced motion of the system that turns the animation of the lines of
+// the output off.
+func TestPageReducedMotion(t *testing.T) {
+	p := shopPage(t, nil, "0.4.0", "0.4.0")
+	var css strings.Builder
+	for _, n := range p.within(p.root.start, p.root.end, byTag("style")) {
+		css.WriteString(n.rawText() + "\n")
+	}
+	blocks := mediaBlocks(cssComment.ReplaceAllString(css.String(), ""), reducedMotion)
+	if len(blocks) == 0 {
+		t.Fatalf("the styles of %s have no rule @media (prefers-reduced-motion: reduce)", p.name)
+	}
+	for _, b := range blocks {
+		for _, rule := range strings.Split(b, "}") {
+			selector, decls, ok := strings.Cut(rule, "{")
+			if ok && strings.Contains(selector, ".line") && noAnimation.MatchString(decls) {
+				return
+			}
+		}
+	}
+	t.Errorf("the rules @media (prefers-reduced-motion: reduce) of %s do not turn the animation of the lines .line off (animation: none):\n%s", p.name, strings.Join(blocks, "\n"))
+}
+
+// TestPageBeforeUpdateParagraphs checks the paragraphs and the list of the
+// text of «Перед обновлением» of the content.
+func TestPageBeforeUpdateParagraphs(t *testing.T) {
+	text := strings.Replace(content040, "Что сделать: заменить старые команды в своих скриптах.\n",
+		"Скидки переносятся вручную.\n\nЧто сделать:\n* заменить команды в скриптах;\n* задать акции заново.\n", 1)
+	p := shopPage(t, map[string]string{contentDir + "0.4.0.md": text}, "0.4.0", "0.4.0")
+	lo, hi := p.section(t, "Перед обновлением")
+	tables := p.within(lo, hi, byTag("table"))
+	if len(tables) != 1 {
+		t.Fatalf("the block «Перед обновлением» of %s has %d tables, want one", p.name, len(tables))
+	}
+	after := tables[0].end
+	inItem := func(n *node) bool {
+		for a := n.parent; a != nil; a = a.parent {
+			if a.tag == "li" {
+				return true
+			}
+		}
+		return false
+	}
+	paras := p.within(after, hi, func(n *node) bool { return n.tag == "p" && !inItem(n) })
+	items := p.within(after, hi, byTag("li"))
+	if got, want := p.texts(paras), []string{"Скидки переносятся вручную.", "Что сделать:"}; !slices.Equal(got, want) {
+		t.Errorf("the paragraphs <p> of «Перед обновлением» of %s after the table are %q, want %q", p.name, got, want)
+	}
+	if got, want := p.texts(items), []string{"заменить команды в скриптах;", "задать акции заново."}; !slices.Equal(got, want) {
+		t.Errorf("the items of the list of «Перед обновлением» of %s are %q, want %q", p.name, got, want)
+	}
+	if len(paras) == 2 && len(items) > 0 && items[0].start < paras[1].end {
+		t.Errorf("the list of «Перед обновлением» of %s is not after the paragraph «Что сделать:»", p.name)
+	}
+	wantNoText(t, "«Перед обновлением» of "+p.name, p.textIn(after, hi), "*")
+}
+
+// TestPagesPastInvalid checks that the build refuses when the content of the
+// page of a past release is written wrong.
+func TestPagesPastInvalid(t *testing.T) {
+	r := shopRepo(t, shopFiles(map[string]string{contentDir + "0.3.0.md": brokenContent()}), "0.3.0", "0.4.0")
+	_, res := r.pages()
+	wantRefusal(t, res, badContent, "Файл: releases/0.3.0.md", "Строка: 1",
+		"Ошибка: неизвестный раздел «Скидки»", "Допустимые разделы:", "  Перед обновлением", "  Новое")
+}
+
+// TestPagesPastMissing checks that the build refuses when a past release
+// with «Новое» has no content of its page.
+func TestPagesPastMissing(t *testing.T) {
+	r := shopRepo(t, shopFiles(map[string]string{contentDir + "0.3.0.md": ""}), "0.3.0", "0.4.0")
+	_, res := r.pages()
+	wantRefusal(t, res, noContent, "Версия: 0.3.0", "Файл: releases/0.3.0.md")
 }

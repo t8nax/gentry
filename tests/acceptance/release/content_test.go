@@ -260,9 +260,30 @@ func TestContentInvalid(t *testing.T) {
 // version is right.
 func TestContentPastRelease(t *testing.T) {
 	r := shopRepo(t, shopFiles(nil), "0.3.0")
-	broken := file(cat([]string{"# Скидки", "", "Скидки задаются в разделе «Акции».", "", "# Новое", ""}, cardLines("Оплата заказа частями", "shop checkout --installments 3", 1))...)
-	r.commit(map[string]string{contentDir + "0.3.0.md": broken})
+	r.commit(map[string]string{contentDir + "0.3.0.md": brokenContent()})
 	wantRefusal(t, r.check("0.4.0"), badContent, "Файл: releases/0.3.0.md", "Строка: 1",
 		"Ошибка: неизвестный раздел «Скидки»", "Допустимые разделы:", "  Перед обновлением", "  Новое")
 	r.wantTags("v0.3.0")
+}
+
+// brokenContent returns a content of a page with the unknown section
+// «# Скидки» in its line 1.
+func brokenContent() string {
+	return file(cat([]string{"# Скидки", "", "Скидки задаются в разделе «Акции».", "", "# Новое", ""}, cardLines("Оплата заказа частями", "shop checkout --installments 3", 1))...)
+}
+
+// TestContentPastMissing checks that the button refuses when a past release
+// with «Новое» has no content of its page, and names its file.
+func TestContentPastMissing(t *testing.T) {
+	r, res := checkShop(t, map[string]string{contentDir + "0.3.0.md": ""})
+	wantRefusal(t, res, noContent, "Версия: 0.3.0", "Файл: releases/0.3.0.md")
+	r.wantTags("v0.3.0")
+}
+
+// TestReleaseTagNoSection checks that the button refuses when a tagged
+// version has no section in the journal, and names the version.
+func TestReleaseTagNoSection(t *testing.T) {
+	r := shopRepo(t, shopFiles(map[string]string{changelogFile: changelog(shop040, shop030)}), "0.2.1", "0.3.0")
+	wantRefusal(t, r.check("0.4.0"), "В журнале изменений нет раздела этой версии.", "Версия: 0.2.1")
+	r.wantTags("v0.2.1", "v0.3.0")
 }

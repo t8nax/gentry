@@ -20,7 +20,11 @@ import (
 //   - a job builds or runs the code of the commit when it gets it: a step of
 //     actions/checkout, or a local action or workflow ./…;
 //   - the right to write to Pages is pages: write or id-token: write, which
-//     the deployment needs, or write-all.
+//     the deployment needs, or write-all; a job has its permissions, or
+//     those of the workflow when it has none, and with none of either it
+//     may write to Pages, as GitHub gives the rights by default;
+//   - the group of concurrency of the job that publishes the pages is its
+//     own, at the level of the job.
 
 // deployJobs returns the jobs of the workflow that publish the pages.
 func deployJobs(w workflow) []string {
@@ -63,6 +67,21 @@ func writesPages(perms any) bool {
 	return false
 }
 
+// jobPermissions returns the permissions of the job: its own, or those of
+// the workflow when it has none; byDefault is true when neither has any.
+func jobPermissions(w workflow, j job) (perms any, byDefault bool) {
+	if j.Permissions != nil {
+		return j.Permissions, false
+	}
+	return w.Permissions, w.Permissions == nil
+}
+
+// mayWritePages reports whether the job may write to Pages.
+func mayWritePages(w workflow, j job) bool {
+	perms, byDefault := jobPermissions(w, j)
+	return byDefault || writesPages(perms)
+}
+
 // runsCode reports whether the job builds or runs the code of the commit.
 func runsCode(j job) bool {
 	if strings.HasPrefix(j.Uses, "./") {
@@ -73,14 +92,9 @@ func runsCode(j job) bool {
 	})
 }
 
-// queue returns the group of the concurrency of the job and whether it
-// cancels the run in progress: those of the job, or of the workflow when
-// the job has none.
-func queue(w workflow, j job) (group string, cancel any) {
-	c := j.Concurrency
-	if c == nil {
-		c = w.Concurrency
-	}
+// queue returns the group of a concurrency of a job or of a workflow and
+// whether it cancels the run in progress.
+func queue(c any) (group string, cancel any) {
 	switch v := c.(type) {
 	case string:
 		return v, nil
@@ -174,34 +188,38 @@ func TestPagesAfterRelease(t *testing.T) {
 
 // TestPagesPermissions checks that in both workflows only the jobs that
 // publish the pages may write to Pages and that they neither build nor run
-// the code of the commit.
+// the code of the commit; a job with no permissions has those of the
+// workflow, and with none of either it may write to Pages.
 func TestPagesPermissions(t *testing.T) {
 	testkit.SkipOnBinary(t)
 	t.Parallel()
 	for _, name := range []string{releaseWorkflow, pagesWorkflow} {
 		t.Run(strings.TrimSuffix(name[strings.LastIndex(name, "/")+1:], ".yml"), func(t *testing.T) {
 			w := readWorkflow(t, name)
-			if writesPages(w.Permissions) {
-				t.Errorf("%s gives all its jobs the right to write to Pages: permissions: %v", name, w.Permissions)
-			}
 			deploys := deployJobs(w)
 			if len(deploys) == 0 {
 				t.Errorf("%s has no job that publishes the pages: actions/deploy-pages", name)
 			}
 			for _, d := range deploys {
-				if p, ok := w.Jobs[d].Permissions.(map[string]any); !ok || fmt.Sprint(p["pages"]) != "write" {
-					t.Errorf("%s: the job %s, which publishes the pages, has no pages: write: permissions: %v", name, d, w.Jobs[d].Permissions)
+				perms, _ := jobPermissions(w, w.Jobs[d])
+				if p, ok := perms.(map[string]any); !ok || fmt.Sprint(p["pages"]) != "write" {
+					t.Errorf("%s: the job %s, which publishes the pages, has no pages: write: permissions: %v", name, d, perms)
 				}
 			}
 			for jn, j := range w.Jobs {
-				if !writesPages(j.Permissions) {
+				if !mayWritePages(w, j) {
 					continue
 				}
+				perms, byDefault := jobPermissions(w, j)
+				given := fmt.Sprintf("permissions: %v", perms)
+				if byDefault {
+					given = "no permissions in the job and in the workflow, the rights by default"
+				}
 				if !slices.Contains(deploys, jn) {
-					t.Errorf("%s: the job %s may write to Pages and does not publish the pages: permissions: %v", name, jn, j.Permissions)
+					t.Errorf("%s: the job %s may write to Pages and does not publish the pages: %s", name, jn, given)
 				}
 				if runsCode(j) {
-					t.Errorf("%s: the job %s may write to Pages and builds or runs the code of the commit", name, jn)
+					t.Errorf("%s: the job %s may write to Pages and builds or runs the code of the commit: %s", name, jn, given)
 				}
 			}
 		})
@@ -209,37 +227,45 @@ func TestPagesPermissions(t *testing.T) {
 }
 
 // TestPagesConcurrency checks that the jobs that publish the pages in both
-// workflows are in one group of concurrency that does not cancel the
-// publication in progress.
+// workflows are in their own group of concurrency at the level of the job,
+// one and the same, that does not cancel the publication in progress and
+// is not the group of either workflow as a whole.
 func TestPagesConcurrency(t *testing.T) {
 	testkit.SkipOnBinary(t)
 	t.Parallel()
 	groups := map[string]string{}
+	var whole []string
 	for _, name := range []string{releaseWorkflow, pagesWorkflow} {
 		w := readWorkflow(t, name)
+		if g, _ := queue(w.Concurrency); g != "" {
+			whole = append(whole, g)
+		}
 		deploys := deployJobs(w)
 		if len(deploys) == 0 {
 			t.Errorf("%s has no job that publishes the pages: actions/deploy-pages", name)
 		}
 		for _, d := range deploys {
-			group, cancel := queue(w, w.Jobs[d])
-			where := name + ": " + d
+			group, cancel := queue(w.Jobs[d].Concurrency)
 			switch {
 			case group == "":
-				t.Errorf("%s: the job %s, which publishes the pages, is in no group of concurrency", name, d)
+				t.Errorf("%s: the job %s, which publishes the pages, has no group of concurrency of its own: concurrency of the job", name, d)
+				continue
 			case strings.Contains(group, "${{"):
 				t.Errorf("%s: the group of concurrency of the job %s is an expression %q, not one name for both workflows", name, d, group)
 			}
 			if truthy(cancel) {
 				t.Errorf("%s: the group of concurrency of the job %s cancels the publication in progress: cancel-in-progress: %v", name, d, cancel)
 			}
-			groups[where] = group
+			groups[name+": "+d] = group
 		}
 	}
 	var names []string
-	for _, g := range groups {
+	for where, g := range groups {
 		if !slices.Contains(names, g) {
 			names = append(names, g)
+		}
+		if slices.Contains(whole, g) {
+			t.Errorf("%s: the group of concurrency %q of the job that publishes the pages is that of a workflow as a whole: %q", where, g, whole)
 		}
 	}
 	if len(names) > 1 {

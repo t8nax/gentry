@@ -119,11 +119,14 @@ jobs:
             --title "Gentry $VERSION" \
             --notes-file "$RUNNER_TEMP/notes.md"
 
-  # The site of the pages of the releases, built whole from the commit of
-  # the release after the release is created: the tag of the release, which
-  # the checkout fetches, makes the new version a released one. A failure
-  # here leaves the release as it is. The job builds and runs the code of the
-  # commit, so it may not write to Pages: the next job publishes the site.
+  # The site of the pages of the releases, built whole after the release is
+  # created from the head of main at the time of the build, not from the
+  # commit of the release: a change of releases/<version>.md merged during
+  # the release is not undone by its publication. The tag of the release,
+  # which the checkout fetches, makes the new version a released one. A
+  # failure here leaves the release as it is. The job builds and runs the
+  # code of main, as the button Publish pages does, so it may not write to
+  # Pages: the next job publishes the site.
   pages:
     name: pages
     needs: publish
@@ -132,6 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: main
           fetch-depth: 0  # the tags are the released versions, the new one too
 
       - uses: actions/setup-go@v7

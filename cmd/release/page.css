@@ -1,0 +1,83 @@
+:root {
+  --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+  --border: #e3e2dd; --accent: #2f6f5e; --accent-soft: #e4f0ec;
+  --warn: #9a5b00; --warn-soft: #fbf0dc; --warn-border: #ecd3a6;
+  --term-bg: #1e1f22; --term-text: #e6e6e3; --term-muted: #8d8f94;
+  --term-ok: #7fc8a9; --term-err: #f0a08a; --term-cmd: #f2d68a;
+  --old: #b44a3a; --new: #2f6f5e;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+a { color: var(--accent); }
+h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: -0.01em; }
+header h1 { margin: 0; }
+header .date { color: var(--muted); margin: 4px 0 14px; }
+header .lead { font-size: 19px; margin: 0 0 16px; }
+.badge { display: inline-block; font-size: 13px; padding: 3px 10px; border-radius: 999px;
+  background: var(--warn-soft); color: var(--warn); }
+h2 { font-size: 22px; margin: 40px 0 12px; }
+.callout { background: var(--warn-soft); border: 1px solid var(--warn-border);
+  border-radius: 12px; padding: 18px 20px; margin-top: 28px; }
+.callout h2 { margin-top: 0; color: var(--warn); }
+.callout p { margin: 0 0 12px; }
+.callout ul { margin: 0 0 12px; padding-left: 20px; }
+.table-wrap { overflow-x: auto; }
+table.renames { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0 12px; }
+table.renames th { text-align: left; font-weight: 600; color: var(--muted);
+  font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; }
+table.renames td { padding: 6px 8px; border-top: 1px solid var(--warn-border); vertical-align: top; }
+table.renames td:first-child code { color: var(--old); text-decoration: line-through; text-decoration-thickness: 1px; }
+table.renames td:last-child code { color: var(--new); }
+.card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+.card h3 { margin: 0 0 6px; font-size: 18px; }
+.card p { margin: 0 0 12px; }
+.card ul { margin: 0 0 12px; padding-left: 20px; }
+.card > .term, .card > .example, .card > .beforeafter, .callout > .term { margin-bottom: 12px; }
+.tabs { display: flex; gap: 4px; margin-bottom: -1px; flex-wrap: wrap; }
+.tab { border: 1px solid var(--border); border-bottom: none; background: transparent;
+  color: var(--muted); font-size: 13px; padding: 4px 12px;
+  border-radius: 8px 8px 0 0; cursor: pointer; }
+.term { background: var(--term-bg); color: var(--term-text); border-radius: 0 8px 8px 8px;
+  padding: 14px 16px; overflow-x: auto; font: 13.5px/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.term.solo { border-radius: 8px; }
+.term .line { white-space: pre; min-height: 1.6em; }
+.term .cmd { color: var(--term-cmd); }
+.term .ok { color: var(--term-ok); }
+.term .err { color: var(--term-err); }
+.term .dim { color: var(--term-muted); }
+/* Tabs without JavaScript: a hidden radio per tab, the checked one shows its panel. */
+.example { position: relative; }
+.example > input { position: absolute; opacity: 0; pointer-events: none; }
+.example .panel { display: none; }
+.example > input:focus-visible ~ .tabs { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+/* Output with a command plays line by line each time it is shown: display:none restarts the animation. */
+.term.play .line { opacity: 0; animation: reveal .25s ease-out forwards; }
+@keyframes reveal { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+/* With the reduced motion of the system the output is shown at once. The rules
+   of the delays of the lines, after this sheet, set only the delay. */
+@media (prefers-reduced-motion: reduce) { .term.play .line { animation: none; opacity: 1; } }
+.hint { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.beforeafter { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.beforeafter > div { min-width: 0; }
+.beforeafter .label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 4px; }
+@media (max-width: 640px) { .beforeafter { grid-template-columns: 1fr; } }
+ul.lines { padding-left: 20px; margin: 0; }
+ul.lines li { margin-bottom: 6px; }
+footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
+footer .term, .install .term { margin: 8px 0 14px; }
+footer .links { margin-top: 18px; display: flex; gap: 18px; flex-wrap: wrap; }
+.install { color: var(--muted); font-size: 14px; }
+.install h2 { color: var(--text); margin-top: 32px; }
+.releases { list-style: none; padding: 0; margin: 32px 0 0; }
+.release { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 20px; margin-bottom: 10px; }
+.release .top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.release .version { font-size: 20px; font-weight: 600; text-decoration: none; }
+.release .version:hover { text-decoration: underline; }
+.release .date { color: var(--muted); }
+.release p { margin: 4px 0 0; }
+code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; }
+p code, li code, footer div > code, .install div > code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }

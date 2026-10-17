@@ -1,0 +1,111 @@
+{{/* The page of a release and the list of the releases, by the mockup
+docs/GEN-5/release-page-example.html. Each is one file: the styles are in it,
+there is no script and no resource outside it. */}}
+{{define "head"}}<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<style>
+{{.Style}}
+</style>
+</head>
+{{end}}
+
+{{define "commands"}}  <div>{{.Unix}}</div>
+  <div class="term solo"><div class="line cmd">{{.InstallSh}}</div></div>
+  <div>{{.Windows}}</div>
+  <div class="term solo"><div class="line cmd">{{.InstallPs1}}</div></div>
+{{end}}
+
+{{define "term"}}<div class="{{.Class}}">{{range .Lines}}<div class="{{.Class}}">{{.Text}}</div>{{end}}</div>{{end}}
+
+{{define "block"}}{{if eq .Kind "p"}}  <p>{{.HTML}}</p>
+{{else if eq .Kind "ul"}}  <ul>
+{{range .Items}}    <li>{{.}}</li>
+{{end}}  </ul>
+{{else if eq .Kind "table"}}  <div class="table-wrap">
+  <table class="renames">
+    <thead><tr>{{range .Head}}<th>{{.}}</th>{{end}}</tr></thead>
+    <tbody>
+{{range .Rows}}      <tr>{{range .}}<td>{{.}}</td>{{end}}</tr>
+{{end}}    </tbody>
+  </table>
+  </div>
+{{else if eq .Kind "term"}}  {{template "term" index .Windows 0}}
+{{else if eq .Kind "tabs"}}  <div class="example">
+{{range .Windows}}    <input type="radio" name="{{$.Group}}" id="{{.ID}}"{{if .First}} checked{{end}}>
+{{end}}    <div class="tabs">
+{{range .Windows}}      <label class="tab" for="{{.ID}}">{{.Name}}</label>
+{{end}}    </div>
+    <div class="panels">
+{{range .Windows}}      <div class="panel">{{template "term" .}}</div>
+{{end}}    </div>
+{{if .Hint}}    <div class="hint">{{.Hint}}</div>
+{{end}}  </div>
+{{else if eq .Kind "pair"}}  <div class="beforeafter">
+{{range .Windows}}    <div><div class="label">{{.Name}}</div>{{template "term" .}}</div>
+{{end}}  </div>
+{{end}}{{end}}
+
+{{define "page"}}{{template "head" .}}<body>
+<main>
+
+<header>
+  <h1>{{.Title}}</h1>
+  <div class="date">{{.Date}}</div>
+{{if .Phrase}}  <p class="lead">{{.Phrase}}</p>
+{{end}}{{if .Before}}  <span class="badge">{{.Words.Badge}}</span>
+{{end}}</header>
+{{with .Before}}
+<section class="callout">
+  <h2>{{$.Words.Before}}</h2>
+{{range .Entries}}  <p>{{.}}</p>
+{{end}}{{range .Blocks}}{{template "block" .}}{{end}}</section>
+{{end}}{{if .Cards}}
+<h2>{{.Words.New}}</h2>
+{{range .Cards}}
+<article class="card">
+  <h3>{{.Title}}</h3>
+{{range .Blocks}}{{template "block" .}}{{end}}</article>
+{{end}}{{end}}{{range .Lists}}
+<h2>{{.Heading}}</h2>
+<ul class="lines">
+{{range .Items}}  <li>{{.}}</li>
+{{end}}</ul>
+{{end}}
+<footer>
+  <h2>{{.Words.Update}}</h2>
+{{template "commands" .Words}}  <div>{{.Words.NextStep}}</div>
+  <div class="links">
+    <a href="{{.AllURL}}">{{.Words.All}}</a>
+    <a href="{{.FilesURL}}">{{.Words.Files}}</a>
+    <a href="{{.ChangelogURL}}">{{.Words.Changelog}}</a>
+  </div>
+</footer>
+</main>
+</body>
+</html>
+{{end}}
+
+{{define "list"}}{{template "head" .}}<body>
+<main>
+
+<h1>{{.Title}}</h1>
+
+<section class="install">
+  <h2>{{.Words.Install}}</h2>
+{{template "commands" .Words}}  <div>{{.Words.ListNextStep}}</div>
+</section>
+
+<ul class="releases">
+{{range .Releases}}  <li class="release">
+    <div class="top"><a class="version" href="{{.Href}}">{{.Version}}</a><span class="date">{{.Date}}</span>{{if .Badge}}<span class="badge">{{$.Words.Badge}}</span>{{end}}</div>
+{{if .Phrase}}    <p>{{.Phrase}}</p>
+{{end}}  </li>
+{{end}}</ul>
+</main>
+</body>
+</html>
+{{end}}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -181,24 +182,76 @@ func section(version, date, phrase string, entries ...string) string {
 	return s
 }
 
+// fixes returns the section of a version with only the section
+// «Исправлено»: such a release needs no content of its page.
+func fixes(version, date, phrase string, entries ...string) string {
+	s := "## " + version + " — " + date + "\n\n" + phrase + "\n\n### Исправлено\n"
+	for _, e := range entries {
+		s += "* " + e + "\n"
+	}
+	return s
+}
+
 // The sections of the versions of the shop.
 var (
 	section010 = section("0.1.0", "2026-10-17", "Первый выпуск магазина.", "Добавлен каталог.")
 	section015 = section("0.1.5", "2026-10-21", "Каталог открывается быстрее.", "Добавлен поиск по каталогу.")
 	section020 = section("0.2.0", "2026-10-20", "Корзина появилась.", "Добавлена корзина.")
-	section021 = section("0.2.1", "2026-10-22", "Корзина считает скидку.", "Добавлена скидка в корзине.")
+	section021 = fixes("0.2.1", "2026-10-22", "Корзина считает скидку.", "Исправлена скидка в корзине.")
 	section030 = section("0.3.0", "2026-11-02", "Корзина сохраняется после входа.", "Добавлен список желаний.")
 )
 
+// contentDir is the folder of the contents of the pages of the releases,
+// in the root of the repository: releases/<version>.md.
+const contentDir = "releases/"
+
+// content is a right content of the page of a release: the section «Новое»
+// with one card of one example.
+const content = "# Новое\n\n## Каталог\n\nКаталог открывается быстрее.\n\n```\n$ shop catalog\n+ Товаров: 120\n```\n"
+
+// sectionVersion matches the heading of the section of a version in the
+// journal and gives the version.
+var sectionVersion = regexp.MustCompile(`(?m)^## (\d+\.\d+\.\d+) — \d{4}-\d{2}-\d{2}$`)
+
+// withContents adds to the files a right content of the page of each
+// version whose section in the journal of the files has «Новое» or
+// «Несовместимые изменения» and that the files give no content of. A
+// release needs the content of its page then, and the checks of the button
+// check the pages of all the released versions.
+func withContents(files map[string]string) map[string]string {
+	journal := files[changelogFile]
+	out := map[string]string{}
+	for name, text := range files {
+		out[name] = text
+	}
+	at := sectionVersion.FindAllStringSubmatchIndex(journal, -1)
+	for i, m := range at {
+		end := len(journal)
+		if i+1 < len(at) {
+			end = at[i+1][0]
+		}
+		body := journal[m[1]:end]
+		if !strings.Contains(body, "\n### Новое\n") && !strings.Contains(body, "\n### Несовместимые изменения\n") {
+			continue
+		}
+		name := contentDir + journal[m[2]:m[3]] + ".md"
+		if _, ok := out[name]; !ok {
+			out[name] = content
+		}
+	}
+	return out
+}
+
 // released makes a repository on main with the release last tagged and a
 // change of the code after it; the journal of the work tree has the
-// sections of the versions next and last.
+// sections of the versions next and last, and the versions have the
+// contents of their pages they need.
 func released(t *testing.T, last, lastSection, nextSection string) *repo {
 	t.Helper()
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(lastSection)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(lastSection)}))
 	r.tag(last)
-	r.commit(map[string]string{"cart.go": "package cart\n\nconst Limit = 10\n", changelogFile: changelog(nextSection, lastSection)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n\nconst Limit = 10\n", changelogFile: changelog(nextSection, lastSection)}))
 	return r
 }
 
@@ -257,4 +310,13 @@ func (r *repo) build(version string) (string, result) {
 	r.t.Helper()
 	dir := filepath.Join(r.t.TempDir(), "release")
 	return dir, release(r.t, r.dir, "build", version, dir)
+}
+
+// pages runs the checks of the button Publish pages and the build of the
+// site of the pages from the head of the repository into a new folder, with
+// no publication, and returns the folder.
+func (r *repo) pages() (string, result) {
+	r.t.Helper()
+	dir := filepath.Join(r.t.TempDir(), "site")
+	return dir, release(r.t, r.dir, "pages", dir)
 }

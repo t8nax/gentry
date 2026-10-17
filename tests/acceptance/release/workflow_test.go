@@ -14,17 +14,21 @@ import (
 	"github.com/t8nax/gentry/tests/testkit"
 )
 
-// The workflows of the module: the button Release, and CI, whose tests the
-// button runs as a reusable workflow.
+// The workflows of the module: the button Release, CI, whose tests the
+// button runs as a reusable workflow, and the button Publish pages.
 const (
 	releaseWorkflow = ".github/workflows/release.yml"
 	ciWorkflow      = ".github/workflows/ci.yml"
+	pagesWorkflow   = ".github/workflows/pages.yml"
 )
 
 // A workflow is what the test reads of a workflow of GitHub Actions.
 type workflow struct {
-	On   any            `yaml:"on"`
-	Jobs map[string]job `yaml:"jobs"`
+	Name        string         `yaml:"name"`
+	On          any            `yaml:"on"`
+	Permissions any            `yaml:"permissions"`
+	Concurrency any            `yaml:"concurrency"`
+	Jobs        map[string]job `yaml:"jobs"`
 }
 
 type job struct {
@@ -32,6 +36,8 @@ type job struct {
 	Needs           any    `yaml:"needs"`
 	If              any    `yaml:"if"`
 	ContinueOnError any    `yaml:"continue-on-error"`
+	Permissions     any    `yaml:"permissions"`
+	Concurrency     any    `yaml:"concurrency"`
 	Steps           []step `yaml:"steps"`
 }
 

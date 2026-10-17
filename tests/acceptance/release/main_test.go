@@ -1,7 +1,8 @@
 // Package release_test holds the acceptance tests of the release: the checks
-// of the button Release and the build of a release into a folder, made by
-// the program of release of the module, which the workflow runs, on a
-// temporary git repository, and the journal of changes of the module.
+// of the button Release, the build of a release into a folder and the build
+// of the site of the pages of the releases, made by the program of release
+// of the module, which the workflows run, on a temporary git repository; the
+// build of the workflows; and the journal of changes of the module.
 //
 // The program of release is ./cmd/release of the module, run in the root of
 // the repository of the release:
@@ -10,6 +11,11 @@
 //	                                 and prints the text of the release
 //	release build <version> <folder> builds the files of the release into
 //	                                 the folder
+//	release pages <folder>           checks that the pages can be published
+//	                                 and builds the site of the pages of the
+//	                                 released versions from the head of the
+//	                                 repository into the folder: index.html,
+//	                                 the list, and <version>/index.html
 //
 // A refusal exits with code 1 and its text on the standard error.
 package release_test

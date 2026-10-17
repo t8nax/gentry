@@ -19,7 +19,7 @@ import (
 // not three numbers apart by dots and creates no tag.
 func TestReleaseVersionFormat(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)}))
 	for _, v := range []string{"0.1", "v0.1.0", "0.1.0-rc1"} {
 		t.Run(v, func(t *testing.T) {
 			wantRefusal(t, release(t, r.dir, "check", v), "Версия указана неверно.", "Версия: "+v)
@@ -49,11 +49,11 @@ func TestReleaseVersionExists(t *testing.T) {
 // than the latest release and names both.
 func TestReleaseVersionLower(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)}))
 	r.tag("0.1.0")
-	r.commit(map[string]string{"cart.go": "package cart\n\nconst Limit = 10\n", changelogFile: changelog(section020, section010)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n\nconst Limit = 10\n", changelogFile: changelog(section020, section010)}))
 	r.tag("0.2.0")
-	r.commit(map[string]string{"cart.go": "package cart\n\nconst Limit = 20\n", changelogFile: changelog(section015, section020, section010)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n\nconst Limit = 20\n", changelogFile: changelog(section015, section020, section010)}))
 	wantRefusal(t, r.check("0.1.5"), "Версия должна быть больше версии последнего выпуска.", "Версия: 0.1.5", "Последний выпуск: 0.2.0")
 	r.wantTags("v0.1.0", "v0.2.0")
 }
@@ -62,7 +62,7 @@ func TestReleaseVersionLower(t *testing.T) {
 // tag v* before it.
 func TestReleaseFirst(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)}))
 	if res := r.check("0.1.0"); res.code != 0 {
 		t.Errorf("the checks of the first release failed: %s", res)
 	}
@@ -72,7 +72,7 @@ func TestReleaseFirst(t *testing.T) {
 // latest one is on the head of main.
 func TestReleaseNoChanges(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section021, section020)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section021, section020)}))
 	r.tag("0.2.0")
 	wantRefusal(t, r.check("0.2.1"), "После последнего выпуска в main нет изменений, кроме журнала изменений.", "Последний выпуск: 0.2.0")
 	r.wantTags("v0.2.0")
@@ -82,9 +82,9 @@ func TestReleaseNoChanges(t *testing.T) {
 // when main has changed only the journal since the latest one.
 func TestReleaseOnlyChangelogChanged(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section020)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section020)}))
 	r.tag("0.2.0")
-	r.commit(map[string]string{changelogFile: changelog(section021, section020)})
+	r.commit(withContents(map[string]string{changelogFile: changelog(section021, section020)}))
 	wantRefusal(t, r.check("0.2.1"), "После последнего выпуска в main нет изменений, кроме журнала изменений.", "Последний выпуск: 0.2.0")
 	r.wantTags("v0.2.0")
 }
@@ -208,11 +208,13 @@ func TestReleaseBuiltVersionMismatch(t *testing.T) {
 }
 
 // TestReleaseNotes checks that the text of the release is the section of
-// its version in the journal, without its heading and the other sections.
+// its version in the journal, without its heading and the other sections,
+// then an empty line and the line with the address of the page of the
+// release.
 func TestReleaseNotes(t *testing.T) {
 	r := released(t, "0.2.0", section020, section030)
 	res := r.check("0.3.0")
-	want := testkit.Lines("Корзина сохраняется после входа.", "", "### Новое", "* Добавлен список желаний.")
+	want := testkit.Lines("Корзина сохраняется после входа.", "", "### Новое", "* Добавлен список желаний.", "", "Страница выпуска: https://t8nax.github.io/gentry/0.3.0/")
 	if res.code != 0 || res.stdout != want {
 		t.Errorf("%s\nwant exit code 0 and the text of the release:\n%s", res, want)
 	}
@@ -236,12 +238,14 @@ func TestReleaseSectionWithoutDate(t *testing.T) {
 }
 
 // TestReleaseFirstNotes checks the text of the first release, with no tag v*
-// before it.
+// before it and only fixes in its section, so with no content of its page:
+// the section, then an empty line and the line with the address of the page.
 func TestReleaseFirstNotes(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog("## 0.1.0 — 2026-10-17\n\nПервый выпуск магазина.\n")})
+	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(fixes("0.1.0", "2026-10-17", "Первый выпуск магазина.", "Исправлен поиск по каталогу."))})
 	res := r.check("0.1.0")
-	if want := "Первый выпуск магазина.\n"; res.code != 0 || res.stdout != want {
+	want := testkit.Lines("Первый выпуск магазина.", "", "### Исправлено", "* Исправлен поиск по каталогу.", "", "Страница выпуска: https://t8nax.github.io/gentry/0.1.0/")
+	if res.code != 0 || res.stdout != want {
 		t.Errorf("%s\nwant exit code 0 and the text of the release:\n%s", res, want)
 	}
 }
@@ -250,7 +254,7 @@ func TestReleaseFirstNotes(t *testing.T) {
 // with a leading zero in a number, which semver forbids, and creates no tag.
 func TestReleaseVersionLeadingZero(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section010)}))
 	wantRefusal(t, r.check("01.2.3"), "Версия указана неверно.", "Версия: 01.2.3")
 	r.wantTags()
 }

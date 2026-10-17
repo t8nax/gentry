@@ -144,14 +144,18 @@ jobs:
           . .github/release.sh
           release pages "$RUNNER_TEMP/site"
 
+      # The site is kept 7 days for the job deploy: a rerun of its failure
+      # publishes it within them.
       - uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/site
+          retention-days: 7
 
   # The publication of the site on GitHub Pages: the only job that may write
   # to Pages, with no checkout of the code. Its failure, such as Pages not
   # turned on, leaves the release; «Re-run failed jobs» publishes the site
-  # built, as the button Publish pages does from the head of main.
+  # built within the 7 days it is kept. Later the button Publish pages
+  # publishes the pages: it builds the site again.
   #
   # One publication at a time, in the button Release and in the button
   # Publish pages alike: a publication started during another waits for it.

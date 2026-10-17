@@ -820,6 +820,7 @@ var ru = catalog{
 		ReleaseContentSections:       "Допустимые разделы:\n  Перед обновлением\n  Новое",
 		ReleaseContentRepeated:       "раздел «%s» повторяется",
 		ReleaseContentOutside:        "текст вне раздела",
+		ReleaseContentOutsideCard:    "текст вне карточки",
 		ReleaseContentCardOutside:    "карточка вне раздела «Новое»",
 		ReleaseContentNoExplanation:  "у карточки «%s» нет пояснения",
 		ReleaseContentUnknownSub:     "неизвестный подзаголовок «%s»",

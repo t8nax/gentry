@@ -82,7 +82,8 @@ type contentReason int
 const (
 	reasonUnknownSection    contentReason = iota + 1 // a section of the first level other than the two
 	reasonRepeated                                   // a section twice
-	reasonOutside                                    // text outside a section or a card
+	reasonOutside                                    // text before the first section
+	reasonOutsideCard                                // text in «Новое» before its first card
 	reasonCardOutside                                // a heading of the second level outside «Новое»
 	reasonNoExplanation                              // a card with no text before its first example
 	reasonUnknownSubheading                          // a subheading other than the two
@@ -245,6 +246,10 @@ func parseContent(file, text string) (*content, error) {
 			if open != nil {
 				open.items = append(open.items, it)
 			}
+		case open == nil && section == sectionNew:
+			// «Новое» holds cards only: anything before the first card is
+			// to go into one.
+			return nil, invalid(it.line, reasonOutsideCard, "")
 		case open == nil:
 			return nil, invalid(it.line, reasonOutside, "")
 		case open.card && onlyBlank(open.items):

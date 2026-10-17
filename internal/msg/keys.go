@@ -853,6 +853,7 @@ const (
 	ReleaseContentSections       Key = "release.content_sections"
 	ReleaseContentRepeated       Key = "release.content_repeated"
 	ReleaseContentOutside        Key = "release.content_outside"
+	ReleaseContentOutsideCard    Key = "release.content_outside_card"
 	ReleaseContentCardOutside    Key = "release.content_card_outside"
 	ReleaseContentNoExplanation  Key = "release.content_no_explanation"
 	ReleaseContentUnknownSub     Key = "release.content_unknown_subheading"

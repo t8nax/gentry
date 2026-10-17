@@ -144,6 +144,8 @@ func contentRefusal(e *contentInvalidError) string {
 		reason = msg.Text(msg.ReleaseContentRepeated, e.subject)
 	case reasonOutside:
 		reason = msg.Text(msg.ReleaseContentOutside)
+	case reasonOutsideCard:
+		reason = msg.Text(msg.ReleaseContentOutsideCard)
 	case reasonCardOutside:
 		reason = msg.Text(msg.ReleaseContentCardOutside)
 	case reasonNoExplanation:

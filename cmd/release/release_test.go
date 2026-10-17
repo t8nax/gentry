@@ -187,6 +187,9 @@ func TestContentRefusal(t *testing.T) {
 			file, msg.Text(msg.ReleaseContentLine, 14),
 			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentUnknownSub, "Пример")), msg.Text(msg.ReleaseContentSubheadings),
 		}},
+		{contentInvalidError{line: 12, reason: reasonOutsideCard}, []string{
+			file, msg.Text(msg.ReleaseContentLine, 12), msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentOutsideCard)),
+		}},
 		{contentInvalidError{reason: reasonNoNew}, []string{file, msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoNew))}},
 	} {
 		tc.err.file = "releases/0.4.0.md"

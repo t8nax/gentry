@@ -86,7 +86,7 @@ func check(dir, value string) (string, error) {
 			return "", &noChangesError{latest: latest}
 		}
 	}
-	journal, _, err := headFile(dir, changelogFile)
+	journal, err := headFile(dir, changelogFile)
 	if err != nil {
 		return "", err
 	}

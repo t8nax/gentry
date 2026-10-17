@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"maps"
 	"os"
 	"path"
@@ -109,7 +108,7 @@ func site(dir string, versions []version) (map[string][]byte, error) {
 // content is written right. The releases are returned in that order.
 func readReleases(dir string, versions []version) ([]release, error) {
 	versions = slices.SortedFunc(slices.Values(versions), func(a, b version) int { return b.compare(a) })
-	journal, _, err := headFile(dir, changelogFile)
+	journal, err := headFile(dir, changelogFile)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +131,7 @@ func readReleases(dir string, versions []version) ([]release, error) {
 			releases = append(releases, r)
 			continue
 		}
-		text, _, err := headFile(dir, file)
+		text, err := showHead(dir, file)
 		if err != nil {
 			return nil, err
 		}
@@ -148,21 +147,30 @@ func readReleases(dir string, versions []version) ([]release, error) {
 }
 
 // headFile returns the text of the file, a path apart by /, in the commit
-// HEAD of the repository dir; found is false when the commit has no such
-// file, and the text is empty then.
-func headFile(dir, name string) (text string, found bool, err error) {
-	text, err = git.Run(dir, git.Opts{}, "show", "HEAD:"+name)
-	var ce *git.CommandError
-	if errors.As(err, &ce) {
-		return "", false, nil // no such file in the commit
+// HEAD of the repository dir, and an empty text when the commit has no such
+// file. An error of git is returned.
+func headFile(dir, name string) (string, error) {
+	files, err := headFiles(dir, name)
+	if err != nil {
+		return "", err
 	}
-	return text, err == nil, err
+	if !files[name] {
+		return "", nil
+	}
+	return showHead(dir, name)
 }
 
-// headFiles returns the files in the folder, a path apart by /, and in its
-// folders, in the commit HEAD of the repository dir.
-func headFiles(dir, folder string) (map[string]bool, error) {
-	out, err := git.Run(dir, git.Opts{}, "ls-tree", "-r", "--name-only", "-z", "HEAD", "--", folder)
+// showHead returns the text of the file, a path apart by /, in the commit
+// HEAD of the repository dir; the commit has it.
+func showHead(dir, name string) (string, error) {
+	return git.Run(dir, git.Opts{}, "show", "HEAD:"+name)
+}
+
+// headFiles returns the files at the path at, apart by /, in the commit
+// HEAD of the repository dir: the file, or those in the folder and in its
+// folders.
+func headFiles(dir, at string) (map[string]bool, error) {
+	out, err := git.Run(dir, git.Opts{}, "ls-tree", "-r", "--name-only", "-z", "HEAD", "--", at)
 	if err != nil {
 		return nil, err
 	}

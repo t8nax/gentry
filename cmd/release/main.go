@@ -151,7 +151,7 @@ func contentRefusal(e *contentInvalidError) string {
 	case reasonNoExplanation:
 		reason = msg.Text(msg.ReleaseContentNoExplanation, e.subject)
 	case reasonUnknownSubheading:
-		reason, allowed = msg.Text(msg.ReleaseContentUnknownSub, e.subject), msg.Text(msg.ReleaseContentSubheadings)
+		reason, allowed = msg.Text(msg.ReleaseContentUnknownSubheading, e.subject), msg.Text(msg.ReleaseContentSubheadings)
 	case reasonNoExample:
 		reason = msg.Text(msg.ReleaseContentNoExample, e.subject)
 	case reasonNoPair:

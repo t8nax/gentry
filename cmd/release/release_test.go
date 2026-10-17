@@ -185,7 +185,7 @@ func TestContentRefusal(t *testing.T) {
 		}},
 		{contentInvalidError{line: 14, reason: reasonUnknownSubheading, subject: "Пример"}, []string{
 			file, msg.Text(msg.ReleaseContentLine, 14),
-			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentUnknownSub, "Пример")), msg.Text(msg.ReleaseContentSubheadings),
+			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentUnknownSubheading, "Пример")), msg.Text(msg.ReleaseContentSubheadings),
 		}},
 		{contentInvalidError{line: 12, reason: reasonOutsideCard}, []string{
 			file, msg.Text(msg.ReleaseContentLine, 12), msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentOutsideCard)),

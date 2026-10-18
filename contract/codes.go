@@ -82,8 +82,8 @@ const (
 	CodeReleaseNotFound        = "release_not_found"         // there is no release to download: none is the latest, or the release has no checksums.txt; details: version (absent for the latest)
 	CodeDownloadFailed         = "download_failed"           // a file of a release did not download; details: url, error
 	CodeChecksumMismatch       = "checksum_mismatch"         // the program downloaded does not have the sum checksums.txt of the release gives it; details: file, expected, actual
-	CodeIntegrationFailed      = "integration_failed"        // the new program is installed, but an integration with an AI tool could not be built anew; details: integrations (each: tool, error), update (UpdateOutput), and agents if the subagents failed too
-	CodeAgentsFailed           = "agents_failed"             // the subagents of a project could not be laid out after an update; details: agents (each: project, reason), update (UpdateOutput)
+	CodeIntegrationFailed      = "integration_failed"        // the new program is installed, but an integration with an AI tool could not be built anew; details: integrations (each: tool, error, the reason in a line, and code, that of the failure of the integration), update (UpdateOutput), and agents if the subagents failed too
+	CodeAgentsFailed           = "agents_failed"             // the subagents of a project could not be laid out after an update; details: agents (each: project, reason, in a line, and code, that of the failure of the layout), update (UpdateOutput)
 	CodeInternal               = "internal"                  // a failure inside Gentry
 )
 

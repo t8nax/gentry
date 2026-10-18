@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
@@ -304,16 +305,31 @@ func updateOutput(r *update.Result) contract.UpdateOutput {
 	return out
 }
 
-// integrationFailure is an integration that could not be built anew.
+// integrationFailure is an integration that could not be built anew: the
+// reason in a line and the code of the failure.
 type integrationFailure struct {
-	tool   string
-	reason string
+	tool         string
+	reason, code string
 }
 
-// agentsFailure is a project whose subagents could not be laid out.
+// agentsFailure is a project whose subagents could not be laid out: the
+// reason in a line and the code of the failure.
 type agentsFailure struct {
-	project string
-	reason  string
+	project      string
+	reason, code string
+}
+
+// shortReason is the reason of the failure f on the line of a field, such
+// as «Ошибка: <причина>»: the first line of its message. The rest of it and
+// its hints are those of the command that failed; the code of f goes to the
+// details of the failure of the update.
+func shortReason(f failure) string {
+	for _, l := range strings.Split(f.message, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			return l
+		}
+	}
+	return f.code
 }
 
 // updateFailed is what failed after the program was replaced, as one
@@ -324,14 +340,16 @@ func updateFailed(r *update.Result) *failure {
 	if len(r.Tools) > 0 {
 		var fs []integrationFailure
 		for _, t := range r.Tools {
-			fs = append(fs, integrationFailure{tool: t.Tool, reason: failureOf(t.Err).message})
+			f := failureOf(t.Err)
+			fs = append(fs, integrationFailure{tool: t.Tool, reason: shortReason(f), code: f.code})
 		}
 		parts = append(parts, integrationsFailed(fs))
 	}
 	if len(r.Projects) > 0 {
 		var fs []agentsFailure
 		for _, p := range r.Projects {
-			fs = append(fs, agentsFailure{project: p.Project, reason: failureOf(p.Err).message})
+			f := failureOf(p.Err)
+			fs = append(fs, agentsFailure{project: p.Project, reason: shortReason(f), code: f.code})
 		}
 		parts = append(parts, agentsFailed(fs))
 	}
@@ -532,7 +550,7 @@ func integrationsFailed(failures []integrationFailure) failure {
 			f.more += "\n" + text + "\n"
 		}
 		f.hints = append(f.hints, hintOf(msg.HintIntegrationSetup).set("tool", x.tool))
-		items = append(items, map[string]any{"tool": x.tool, "error": x.reason})
+		items = append(items, map[string]any{"tool": x.tool, "error": x.reason, "code": x.code})
 	}
 	f.details = map[string]any{"integrations": items}
 	return f
@@ -549,7 +567,7 @@ func agentsFailed(failures []agentsFailure) failure {
 		}
 		f.more += msg.Text(msg.TaskProject, x.project) + "\n" + msg.Text(msg.AgentsSyncFailedReason, x.reason) + "\n"
 		f.hints = append(f.hints, hintOf(msg.HintAgentsDeployFailed).forProject(x.project))
-		items = append(items, map[string]any{"project": x.project, "reason": x.reason})
+		items = append(items, map[string]any{"project": x.project, "reason": x.reason, "code": x.code})
 	}
 	f.details = map[string]any{"agents": items}
 	return f

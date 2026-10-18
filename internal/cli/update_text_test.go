@@ -240,12 +240,13 @@ func TestUpdateRefusalText(t *testing.T) {
 
 // TestUpdateFailures checks that the failures after the program is
 // replaced are one refusal: of the integrations, with the subagents under
-// it, and the result of the update in its details.
+// it; each failure is told by the first line of its message, with its code
+// in the details, and without its hints.
 func TestUpdateFailures(t *testing.T) {
 	r := &update.Result{
 		Action: update.Updated, Version: "0.3.0", Program: "/home/anna/.gentry/bin/gentry",
-		Tools:    []update.ToolFailure{{Tool: claude.Tool, Err: &failureError{failure{message: "claude отказал"}}}},
-		Projects: []update.ProjectFailure{{Project: "shop", Err: &failureError{failure{message: "git не признаёт копию"}}}},
+		Tools:    []update.ToolFailure{{Tool: claude.Tool, Err: &failureError{failure{code: contract.CodeToolFailed, message: "claude отказал\nподробности claude", hints: []hint{hintOf(msg.HintPluginEnable)}}}}},
+		Projects: []update.ProjectFailure{{Project: "shop", Err: &failureError{failure{code: contract.CodeGitFailed, message: "git не признаёт копию\nfatal: not a git repository"}}}},
 	}
 	f := updateFailed(r)
 	if f == nil || f.code != contract.CodeIntegrationFailed {
@@ -262,8 +263,10 @@ func TestUpdateFailures(t *testing.T) {
 		hintLineOf(msg.HintAgentsDeployFailed, "gentry agents deploy --project shop"),
 	)
 	wantIn(t, "integrations and subagents failed", "command line", failText(cliChannel, *f), want)
-	if f.details["integrations"] == nil || f.details["agents"] == nil {
-		t.Errorf("details %v, want integrations and agents", f.details)
+	tools, _ := f.details["integrations"].([]map[string]any)
+	projects, _ := f.details["agents"].([]map[string]any)
+	if len(tools) != 1 || tools[0]["code"] != contract.CodeToolFailed || len(projects) != 1 || projects[0]["code"] != contract.CodeGitFailed {
+		t.Errorf("details %v, want integrations and agents with the codes of their failures", f.details)
 	}
 	if updateFailed(&update.Result{Action: update.Updated}) != nil {
 		t.Error("an update with nothing failed is a failure")

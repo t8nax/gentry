@@ -23,9 +23,8 @@ jobs:
   # Windows. On macOS they run in the job of the unit tests instead: the plan
   # Free runs at most 5 jobs on macOS at once, and a run with a fifth one
   # there would take them all, so that another run waited for it. The
-  # longest suite, the acceptance tests on Linux with the area release, takes
-  # about 4 minutes; the timeout leaves room for the slower runners of
-  # Windows.
+  # timeout leaves room over the longest suite, the acceptance tests on
+  # Linux with the area release, and for the slower runners of Windows.
   test:
     name: ${{ matrix.os }} / ${{ matrix.title || matrix.suite }}
     strategy:

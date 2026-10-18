@@ -1,358 +1,395 @@
-// Package update installs the latest release of Gentry in place of the
-// program of the data root, as the scripts of installation do: it finds the
-// latest release by the redirect of /releases/latest, downloads the program
-// of the platform and checksums.txt of the release into a temporary folder,
-// checks the SHA-256 of the program and only then puts it in its place. It
-// also reads the journal of changes on the tag of a release and the
-// incompatible changes of the versions an update skips.
+// Package update is the scenario of gentry update: it installs the latest
+// release of Gentry in place of the program of the data root, builds the
+// integrations with the AI tools anew and lays out the subagents of the
+// projects.
 //
-// The package knows nothing of the words for the operator: its errors are
-// types with what the command needs to tell them.
+// Two programs do an update. The program the operator runs checks what it
+// can without the network — where it runs, its version, the tools that
+// serve the plugin of another data root — takes the lock of updates, finds
+// the latest release, downloads it, checks its sum and replaces itself; then
+// it hands the update over to the new program (a Handoff), gentry update
+// with FromEnv set, which builds the integrations anew, lays out the
+// subagents and gives the Result: the plugin, the subagents and the texts
+// are those of the new program. A failure before the program is replaced
+// leaves the installation as it was. With the latest release installed the
+// program itself checks the integrations and builds anew those that do not
+// match it.
+//
+// The scenario prints nothing: the entry turns the Result and the errors,
+// types with what is needed to tell them, into the output, and runs the
+// program of a Handoff. What the update does with an AI tool and with the
+// worktrees of a project the entry gives it as a Tool and as Projects: the
+// adapters of the tools are above the scenarios.
 package update
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
-	"strconv"
-	"strings"
-	"time"
+
+	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/paths"
+	"github.com/t8nax/gentry/internal/releases"
 )
-
-// GitHub is the address of the releases of Gentry. The texts for the operator
-// name it, whatever ReleasesEnv is.
-const GitHub = "https://github.com/t8nax/gentry/releases"
-
-// ReleasesEnv replaces the address the files are downloaded from, as for the
-// scripts of installation: the tests point it at a mock release.
-const ReleasesEnv = "GENTRY_RELEASES_URL"
-
-// Pages is the site of the pages of the releases; the page of a version is
-// Pages + "<version>/".
-const Pages = "https://t8nax.github.io/gentry/"
-
-// The commands of the scripts of installation of the latest release.
-const (
-	InstallSh  = "curl -fsSL " + GitHub + "/latest/download/install.sh | sh"
-	InstallPs1 = "irm " + GitHub + "/latest/download/install.ps1 | iex"
-)
-
-// InstallCommand returns the command of installation of this platform.
-func InstallCommand() string {
-	if runtime.GOOS == "windows" {
-		return InstallPs1
-	}
-	return InstallSh
-}
 
 // FromEnv carries the version an update replaced to the program it
-// installed. The program before the update downloads and replaces; then it
-// runs the new one, gentry update with FromEnv set, which builds the
-// integrations anew, lays out the subagents and tells the result, so that
-// the plugin and the texts are those of the new program. The variable and
-// the command are all the programs of two versions share: they stay as they
-// are from the first release on.
+// installed, which finishes the update. The variable and the command are
+// all the programs of two versions share: they stay as they are from the
+// first release on.
 const FromEnv = "GENTRY_UPDATE_FROM"
 
-// Page returns the address of the page of the release of version v.
-func Page(v string) string { return Pages + v + "/" }
+// The actions of an update.
+const (
+	Updated = "updated" // the program of the latest release took the place of the program
+	Current = "current" // the latest release was installed already
+)
 
-// Releases returns the address of the releases the files are downloaded
-// from: ReleasesEnv, or GitHub.
-func Releases() string {
-	if r := os.Getenv(ReleasesEnv); r != "" {
-		return strings.TrimRight(r, "/")
-	}
-	return GitHub
+// unchanged is the action of setup that changed nothing in the tool.
+const unchanged = "unchanged"
+
+// A Request is an update asked for.
+type Request struct {
+	Root    string // the data root
+	Running string // the path of the running program, its symbolic links resolved
+	Version string // the version of the running program
+	// From is the version FromEnv names: the program of that version has
+	// installed the running one, which finishes the update; "" for none.
+	From string
 }
 
-// Program returns the name of the program of Gentry in the folder bin of the
-// data root on this platform: gentry, or gentry.exe on Windows.
-func Program() string {
-	if runtime.GOOS == "windows" {
-		return "gentry.exe"
-	}
-	return "gentry"
+// A Tool is an AI tool Gentry integrates with, as the update needs it: the
+// entry gives each tool, by the adapter of the tool.
+type Tool struct {
+	Name string
+	Dir  string // the folder of the integration in the data root; the integration is connected if it is there
+	// Elsewhere returns the existing directory of another data root the
+	// tool serves the plugin of Gentry from; "" if it serves none, or that
+	// of Dir. ErrToolNotFound means the program of the tool is not found.
+	Elsewhere func() (string, error)
+	// Current returns the integration if the tool serves the plugin this
+	// program builds from Dir already; nothing is written.
+	Current func() (contract.SetupOutput, bool)
+	// Setup builds the integration anew, as gentry setup does.
+	Setup func() (contract.SetupOutput, error)
 }
 
-// Asset returns the name of the program of the platform goos/goarch in a
-// release: gentry-<os>-<arch>, with .exe on Windows.
-func Asset(goos, goarch string) string {
-	name := "gentry-" + goos + "-" + goarch
-	if goos == "windows" {
-		name += ".exe"
-	}
-	return name
+// ErrToolNotFound means the program of an AI tool is not found.
+var ErrToolNotFound = errors.New("the program of the tool is not found")
+
+// Projects lays out the subagents of the projects for an update.
+type Projects interface {
+	// List returns the projects in the order of gentry project list; none
+	// without a state store, which is not created.
+	List() ([]string, error)
+	// Deploy lays out the subagents in every worktree of the project, as
+	// gentry agents deploy --project does, but a subagent in conflict is
+	// skipped and told.
+	Deploy(project string) (contract.UpdateAgents, error)
 }
 
-// releaseVersion is the version of a release: X.Y.Z, with no leading zeros.
-var releaseVersion = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
-
-// IsRelease reports whether v is the version of a release, X.Y.Z: not a
-// pseudo-version of a build from the sources, 0.0.0-dev or a version with
-// +dirty.
-func IsRelease(v string) bool { return releaseVersion.MatchString(v) }
-
-// Compare compares the versions of releases a and b by semver: -1 if a is
-// less, 0 if equal, +1 if greater.
-func Compare(a, b string) int {
-	pa, pb := parts(a), parts(b)
-	for i := range pa {
-		switch {
-		case pa[i] < pb[i]:
-			return -1
-		case pa[i] > pb[i]:
-			return 1
-		}
-	}
-	return 0
+// Releases are the releases of Gentry, as releases.Client gives them.
+type Releases interface {
+	Latest(ctx context.Context) (string, error)
+	Download(ctx context.Context, v, asset, dir string) (string, error)
+	Changelog(ctx context.Context, v string) (string, error)
 }
 
-func parts(v string) [3]int {
-	var out [3]int
-	for i, s := range strings.SplitN(v, ".", 3) {
-		out[i], _ = strconv.Atoi(s)
-	}
-	return out
+// An Updater updates Gentry with what the entry gives it.
+type Updater struct {
+	Releases Releases
+	Tools    []Tool
+	Projects Projects
+	// VersionOf returns the version a program names, as releases.VersionOf
+	// does.
+	VersionOf func(program string) (string, bool)
 }
 
-// NotFoundError means there is no such release: no latest one, or no
-// checksums.txt of the version. Version is "" for the latest.
-type NotFoundError struct{ Version string }
+// A Result is an update done in this program: after the program was
+// replaced, or with the latest release installed.
+type Result struct {
+	Action   string // Updated or Current
+	Previous string // the version before the update; "" for Current
+	Version  string
+	Program  string // the program of the data root
+	// Connected reports whether an integration is connected, though it
+	// could not be built anew.
+	Connected    bool
+	Integrations []contract.SetupOutput // the integrations connected, built anew or checked
+	// Breaking are the incompatible changes of the versions skipped; only
+	// with Updated, and none if the journal could not be read.
+	Breaking     []Breaking
+	ChangelogErr error // the journal of changes could not be read
+	// Agents are the layouts of the projects; nil unless the subagents were
+	// laid out and there is a project.
+	Agents []contract.UpdateAgents
 
-func (e *NotFoundError) Error() string {
-	if e.Version == "" {
-		return "no latest release"
-	}
-	return "no release " + e.Version
+	// What failed after the program was replaced, or after a plugin was
+	// built anew: the update goes on and fails at the end.
+	Tools    []ToolFailure
+	Projects []ProjectFailure
+	ListErr  error // the projects could not be listed
 }
 
-// DownloadError means a file of the address URL did not download.
-type DownloadError struct {
-	URL string
-	Err error
+// Failed reports whether a step after the replacement failed.
+func (r *Result) Failed() bool {
+	return len(r.Tools) > 0 || len(r.Projects) > 0 || r.ListErr != nil
 }
 
-func (e *DownloadError) Error() string { return e.URL + ": " + e.Err.Error() }
-func (e *DownloadError) Unwrap() error { return e.Err }
-
-// ChecksumError means the program downloaded does not have the sum
-// checksums.txt of the release gives it.
-type ChecksumError struct {
-	File string // the name of the program in the release
-	Want string // the sum of checksums.txt, "" if it names no such file
-	Got  string // the sum of the file downloaded
+// A ToolFailure is an integration that could not be built anew.
+type ToolFailure struct {
+	Tool string
+	Err  error
 }
 
-func (e *ChecksumError) Error() string {
-	return fmt.Sprintf("%s: sha256 %s, want %s", e.File, e.Got, e.Want)
-}
-
-// WriteError means the program of the data root could not be written.
-type WriteError struct {
-	Program string
+// A ProjectFailure is a project whose subagents could not be laid out.
+type ProjectFailure struct {
+	Project string
 	Err     error
-	// Restore is why the program renamed aside could not get its name
-	// back: it is <program>.old; nil if it has its name.
-	Restore error
 }
 
-func (e *WriteError) Error() string {
-	if e.Restore != nil {
-		return e.Program + ": " + e.Err.Error() + "; " + e.Restore.Error()
+// A Handoff is the update going on in another program: gentry update of
+// Program, with the variables Env added to the environment. The entry runs
+// it, then calls Done.
+type Handoff struct {
+	Program string
+	Env     []string
+	unlock  func() // releases the lock of updates the new program works under
+}
+
+// Done ends the handoff: the lock of updates is released.
+func (h *Handoff) Done() {
+	if h.unlock != nil {
+		h.unlock()
+		h.unlock = nil
 	}
-	return e.Program + ": " + e.Err.Error()
-}
-func (e *WriteError) Unwrap() error { return e.Err }
-
-// A Client downloads the releases of the address Releases.
-type Client struct {
-	Releases string
-	HTTP     *http.Client
 }
 
-// New returns a client of the releases of Releases(). Redirects are followed,
-// as to the storage of the files of GitHub; a server that does not answer
-// fails the request in a minute.
-func New() *Client {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.ResponseHeaderTimeout = time.Minute
-	return &Client{Releases: Releases(), HTTP: &http.Client{Transport: t, Timeout: 30 * time.Minute}}
+// ElsewhereError refuses an update of a program other than that of the data
+// root.
+type ElsewhereError struct {
+	Running   string
+	Installed string // "" if the data root has no program
 }
 
-// tagPath is the path of the page of a release the redirect of
-// /releases/latest leads to: its group is the version.
-var tagPath = regexp.MustCompile(`/tag/v([^/?#]+)$`)
+func (e *ElsewhereError) Error() string { return e.Running + " is not the program of the data root" }
 
-// Latest returns the version of the latest release: /releases/latest
-// redirects to the page of its tag, /releases/tag/v<version>.
-func (c *Client) Latest(ctx context.Context) (string, error) {
-	addr := c.Releases + "/latest"
-	resp, err := c.get(ctx, addr)
+// NotReleaseError refuses an update of a build that is no release.
+type NotReleaseError struct{ Version string }
+
+func (e *NotReleaseError) Error() string { return e.Version + " is no release" }
+
+// NewerError refuses an update of a version newer than the latest release.
+type NewerError struct{ Version, Latest string }
+
+func (e *NewerError) Error() string {
+	return e.Version + " is newer than the latest release " + e.Latest
+}
+
+// PluginElsewhereError refuses an update when an AI tool serves the plugin
+// of Gentry from the directory of another data root.
+type PluginElsewhereError struct{ Tool, Registered, Dir string }
+
+func (e *PluginElsewhereError) Error() string {
+	return e.Tool + " serves the plugin from " + e.Registered + ", not " + e.Dir
+}
+
+// CheckError refuses an update when an AI tool whose integration is
+// connected fails to tell where it serves the plugin from.
+type CheckError struct {
+	Tool string
+	Err  error
+}
+
+func (e *CheckError) Error() string { return e.Tool + ": " + e.Err.Error() }
+func (e *CheckError) Unwrap() error { return e.Err }
+
+// Run updates Gentry. It returns the Result of an update done here, or the
+// Handoff of one that goes on in the program installed, or why it is
+// refused.
+func (u *Updater) Run(ctx context.Context, req Request) (*Result, *Handoff, error) {
+	installed := Installed(req.Root)
+	// The new program finishes the update under the lock its predecessor
+	// holds.
+	if releases.IsRelease(req.From) {
+		return u.finish(ctx, req, installed), nil, nil
+	}
+	if err := sameProgram(req.Running, installed); err != nil {
+		return nil, nil, err
+	}
+
+	// Two updates at once do not replace the program together: the second
+	// waits for the first, and then the program installed is the latest
+	// release, which tells the rest.
+	lock, err := releases.Lock(ctx, installed)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
-	resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return "", &NotFoundError{}
+	if v, ok := u.VersionOf(installed); ok && v != req.Version {
+		lock.Release()
+		return nil, &Handoff{Program: installed}, nil
 	}
-	if resp.StatusCode != http.StatusOK {
-		return "", &DownloadError{URL: addr, Err: statusError(resp)}
+	held := true
+	defer func() {
+		if held {
+			lock.Release()
+		}
+	}()
+	if !releases.IsRelease(req.Version) {
+		return nil, nil, &NotReleaseError{Version: req.Version}
 	}
-	m := tagPath.FindStringSubmatch(resp.Request.URL.Path)
-	if m == nil || !IsRelease(m[1]) {
-		return "", &NotFoundError{}
+	if err := u.checkTools(); err != nil {
+		return nil, nil, err
 	}
-	return m[1], nil
+
+	latest, err := u.Releases.Latest(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch releases.Compare(req.Version, latest) {
+	case 1:
+		return nil, nil, &NewerError{Version: req.Version, Latest: latest}
+	case 0:
+		return u.current(ctx, req, installed), nil, nil
+	}
+	tmp, err := os.MkdirTemp("", "gentry-update-")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer os.RemoveAll(tmp)
+	downloaded, err := u.Releases.Download(ctx, latest, releases.Asset(runtime.GOOS, runtime.GOARCH), tmp)
+	if err != nil {
+		return nil, nil, err
+	}
+	releases.RemoveOld(installed)
+	if err := releases.Replace(downloaded, installed); err != nil {
+		return nil, nil, err
+	}
+	// The lock is held until the new program has done its part.
+	held = false
+	return nil, &Handoff{Program: installed, Env: []string{FromEnv + "=" + req.Version}, unlock: lock.Release}, nil
 }
 
-// Download downloads checksums.txt and the program asset of the release v
-// into dir, checks the sum of the program and returns its path.
-func (c *Client) Download(ctx context.Context, v, asset, dir string) (string, error) {
-	base := c.Releases + "/download/v" + v
-	checksums, err := c.fetch(ctx, base+"/checksums.txt", filepath.Join(dir, "checksums.txt"))
-	var nf *httpNotFound
-	if errors.As(err, &nf) {
-		return "", &NotFoundError{Version: v}
+// Installed returns the path of the program of the data root: <data
+// root>/bin/gentry, gentry.exe on Windows.
+func Installed(root string) string { return filepath.Join(root, "bin", releases.Program()) }
+
+// sameProgram refuses unless running is the program installed, compared
+// with its symbolic links resolved.
+func sameProgram(running, installed string) error {
+	resolved, err := filepath.EvalSymlinks(installed)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return &ElsewhereError{Running: running}
+	case err != nil || !paths.Same(resolved, running):
+		return &ElsewhereError{Running: running, Installed: installed}
 	}
-	if err != nil {
-		return "", err
-	}
-	program := filepath.Join(dir, asset)
-	got, err := c.fetch(ctx, base+"/"+asset, program)
-	if errors.As(err, &nf) {
-		return "", &DownloadError{URL: nf.url, Err: nf.err}
-	}
-	if err != nil {
-		return "", err
-	}
-	b, err := os.ReadFile(checksums.path)
-	if err != nil {
-		return "", err
-	}
-	want := checksumOf(string(b), asset)
-	if want != got.sum {
-		return "", &ChecksumError{File: asset, Want: want, Got: got.sum}
-	}
-	return program, nil
+	return nil
 }
 
-// checksumLine is a line of checksums.txt: the sum and the name of a file,
-// apart by a space and a space or *, as sha256sum writes them.
-var checksumLine = regexp.MustCompile(`^([0-9a-fA-F]{64}) [ *](.+)$`)
+// connected reports whether the integration of the folder dir is connected:
+// setup made the folder.
+func connected(dir string) bool {
+	fi, err := os.Stat(dir)
+	return err == nil && fi.IsDir()
+}
 
-// checksumOf returns the sum checksums.txt gives the file name, in lower
-// case; "" if it gives none.
-func checksumOf(checksums, name string) string {
-	for _, l := range strings.Split(strings.ReplaceAll(checksums, "\r\n", "\n"), "\n") {
-		if m := checksumLine.FindStringSubmatch(l); m != nil && m[2] == name {
-			return strings.ToLower(m[1])
+// checkTools refuses the update if an AI tool serves the plugin of Gentry
+// from the directory of another data root, though this data root has no
+// integration with it: the update would move the plugin of the other one.
+// With no program of the tool there is nothing to check; a tool that fails
+// to tell refuses only if its integration is connected.
+func (u *Updater) checkTools() error {
+	for _, t := range u.Tools {
+		registered, err := t.Elsewhere()
+		switch {
+		case errors.Is(err, ErrToolNotFound):
+		case err != nil && !connected(t.Dir):
+		case err != nil:
+			return &CheckError{Tool: t.Name, Err: err}
+		case registered != "":
+			return &PluginElsewhereError{Tool: t.Name, Registered: registered, Dir: t.Dir}
 		}
 	}
-	return ""
+	return nil
 }
 
-// maxChangelog limits the journal of changes read.
-const maxChangelog = 4 << 20
-
-// ChangelogURL returns the address of the journal of changes on the tag of
-// the version v in the repository: the address of the releases without
-// /releases, then /raw/v<version>/CHANGELOG.md.
-func (c *Client) ChangelogURL(v string) string {
-	return strings.TrimSuffix(c.Releases, "/releases") + "/raw/v" + v + "/CHANGELOG.md"
+// finish finishes the update in the new program: it builds anew every
+// integration connected, lays out the subagents and reads the incompatible
+// changes of the versions skipped.
+func (u *Updater) finish(ctx context.Context, req Request, installed string) *Result {
+	r := &Result{Action: Updated, Previous: req.From, Version: req.Version, Program: installed}
+	for _, t := range u.Tools {
+		if !connected(t.Dir) {
+			continue
+		}
+		r.Connected = true
+		u.setup(r, t)
+	}
+	u.layout(r)
+	journal, err := u.Releases.Changelog(ctx, req.Version)
+	if err != nil {
+		r.ChangelogErr = err
+	} else {
+		r.Breaking = BreakingOf(journal, req.From, req.Version)
+	}
+	return r
 }
 
-// Changelog returns the journal of changes on the tag of the version v.
-func (c *Client) Changelog(ctx context.Context, v string) (string, error) {
-	addr := c.ChangelogURL(v)
-	resp, err := c.get(ctx, addr)
-	if err != nil {
-		return "", err
+// current checks the integrations with the latest release installed: one
+// that matches the program is left as it is, nothing written; another is
+// built anew, and then the subagents are laid out, as they name the tools of
+// the plugin.
+func (u *Updater) current(ctx context.Context, req Request, installed string) *Result {
+	r := &Result{Action: Current, Version: req.Version, Program: installed}
+	rebuilt := false
+	for _, t := range u.Tools {
+		if !connected(t.Dir) {
+			continue
+		}
+		r.Connected = true
+		if out, ok := t.Current(); ok {
+			r.Integrations = append(r.Integrations, out)
+			continue
+		}
+		if out, ok := u.setup(r, t); ok && out.Action != unchanged {
+			rebuilt = true
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", &DownloadError{URL: addr, Err: statusError(resp)}
+	if rebuilt {
+		u.layout(r)
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, maxChangelog))
-	if err != nil {
-		return "", &DownloadError{URL: addr, Err: reason(err)}
-	}
-	return string(b), nil
+	return r
 }
 
-// get requests the address; a request that gets no answer is a
-// DownloadError.
-func (c *Client) get(ctx context.Context, addr string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr, nil)
+// setup builds the integration with the tool anew and returns it; false if
+// it failed, which does not stop the others.
+func (u *Updater) setup(r *Result, t Tool) (contract.SetupOutput, bool) {
+	out, err := t.Setup()
 	if err != nil {
-		return nil, &DownloadError{URL: addr, Err: err}
+		r.Tools = append(r.Tools, ToolFailure{Tool: t.Name, Err: err})
+		return out, false
 	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, &DownloadError{URL: addr, Err: reason(err)}
-	}
-	return resp, nil
+	r.Integrations = append(r.Integrations, out)
+	return out, true
 }
 
-// fetched is a file downloaded: its path and its sum.
-type fetched struct {
-	path, sum string
-}
-
-// httpNotFound is a file the server has not: it answered 404.
-type httpNotFound struct {
-	url string
-	err error
-}
-
-func (e *httpNotFound) Error() string { return e.url + ": " + e.err.Error() }
-
-// fetch downloads the address into the file and returns its SHA-256.
-func (c *Client) fetch(ctx context.Context, addr, file string) (fetched, error) {
-	resp, err := c.get(ctx, addr)
+// layout lays out the subagents of each project, in the order of gentry
+// project list; a project that fails does not stop the others.
+func (u *Updater) layout(r *Result) {
+	projects, err := u.Projects.List()
 	if err != nil {
-		return fetched{}, err
+		r.ListErr = err
+		return
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return fetched{}, &httpNotFound{url: addr, err: statusError(resp)}
+	for _, p := range projects {
+		a, err := u.Projects.Deploy(p)
+		if err != nil {
+			r.Projects = append(r.Projects, ProjectFailure{Project: p, Err: err})
+			continue
+		}
+		r.Agents = append(r.Agents, a)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return fetched{}, &DownloadError{URL: addr, Err: statusError(resp)}
-	}
-	f, err := os.Create(file)
-	if err != nil {
-		return fetched{}, err
-	}
-	h := sha256.New()
-	_, err = io.Copy(io.MultiWriter(f, h), resp.Body)
-	if cerr := f.Close(); err == nil && cerr != nil {
-		return fetched{}, cerr
-	}
-	if err != nil {
-		return fetched{}, &DownloadError{URL: addr, Err: reason(err)}
-	}
-	return fetched{path: file, sum: hex.EncodeToString(h.Sum(nil))}, nil
-}
-
-// statusError is the answer of a server that did not give the file.
-func statusError(resp *http.Response) error { return errors.New("HTTP " + resp.Status) }
-
-// reason is what went wrong with a request, without the address the
-// DownloadError names apart.
-func reason(err error) error {
-	var ue *url.Error
-	if errors.As(err, &ue) {
-		return ue.Err
-	}
-	return err
 }

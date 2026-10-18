@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/t8nax/gentry/internal/changelog"
+	"github.com/t8nax/gentry/internal/releases"
 )
 
 // Breaking is the incompatible changes of a version in the journal of
@@ -21,13 +22,13 @@ type Breaking struct {
 func BreakingOf(journal, from, to string) []Breaking {
 	var out []Breaking
 	for _, s := range changelog.Sections(journal) {
-		if !IsRelease(s.Version) || Compare(s.Version, from) <= 0 || Compare(s.Version, to) > 0 {
+		if !releases.IsRelease(s.Version) || releases.Compare(s.Version, from) <= 0 || releases.Compare(s.Version, to) > 0 {
 			continue
 		}
 		if lines := s.Entries[changelog.Breaking]; len(lines) > 0 {
 			out = append(out, Breaking{Version: s.Version, Lines: lines})
 		}
 	}
-	slices.SortStableFunc(out, func(a, b Breaking) int { return Compare(a.Version, b.Version) })
+	slices.SortStableFunc(out, func(a, b Breaking) int { return releases.Compare(a.Version, b.Version) })
 	return out
 }

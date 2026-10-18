@@ -1,17 +1,12 @@
 package cli
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"slices"
-	"time"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
@@ -20,137 +15,45 @@ import (
 	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/integration"
 	"github.com/t8nax/gentry/internal/msg"
-	"github.com/t8nax/gentry/internal/paths"
+	"github.com/t8nax/gentry/internal/process"
+	"github.com/t8nax/gentry/internal/releases"
 	"github.com/t8nax/gentry/internal/update"
 )
 
-// The actions of gentry update.
-const (
-	updateUpdated = "updated" // the program of the latest release took the place of the program
-	updateCurrent = "current" // the latest release was installed already
-)
-
-// runUpdate installs the latest release of Gentry in place of the program of
-// the data root. Two programs do it. The program the operator runs checks
-// what it can without the network — where it runs, its version, the tools
-// that serve the plugin of another data root — then finds the latest release,
-// downloads it into a temporary folder, checks its sum and replaces itself.
-// Then it runs the new program, gentry update with update.FromEnv set, which
-// builds the integrations anew, lays out the subagents and tells the result:
-// the plugin, the subagents and the texts are those of the new program. A
-// failure before the program is replaced leaves the installation as it was.
-//
-// With the latest release installed the program itself checks the
-// integrations, builds anew those that do not match it and lays out the
-// subagents if it did.
+// runUpdate runs the scenario of gentry update, package update, and turns
+// its result into the output: the result of an update done here, or the
+// program installed it hands the update over to, which this one runs on its
+// own output and ends with its code.
 func runUpdate(args []string, env Env) int {
 	f := newFlags("update")
 	if code, done := f.parse(args, env); done {
 		return code
 	}
-	if from := os.Getenv(update.FromEnv); update.IsRelease(from) {
-		return updated(env, from)
-	}
-
-	installed, bad := installedProgram()
-	if bad != nil {
-		return fail(env, *bad)
+	root, err := home.Root()
+	if err != nil {
+		return fail(env, homeUnknown())
 	}
 	exe, err := executable()
 	if err != nil {
 		return fail(env, internal(err))
 	}
-	resolved, err := filepath.EvalSymlinks(installed)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return fail(env, programElsewhere(exe, ""))
-	case err != nil || !paths.Same(resolved, exe):
-		return fail(env, programElsewhere(exe, installed))
-	}
-
-	// Two updates at once do not replace the program together: the second
-	// waits for the first, and then the program installed may be another.
-	ctx := env.context()
-	lock, err := update.Lock(ctx, installed)
-	if err != nil {
-		return fail(env, updateFailure(err))
-	}
 	own := buildinfo.Version()
-	if v, ok := versionOf(installed); ok && v != own {
-		lock.Release()
-		return runInstalled(env, installed, nil, args)
+	projects := &updateProjects{}
+	defer projects.close()
+	u := update.Updater{Releases: releases.New(), Tools: updateTools(own), Projects: projects, VersionOf: releases.VersionOf}
+	r, h, err := u.Run(env.context(), update.Request{Root: root, Running: exe, Version: own, From: os.Getenv(update.FromEnv)})
+	switch {
+	case err != nil:
+		return fail(env, updateRefusal(err))
+	case h != nil:
+		defer h.Done()
+		return runInstalled(env, h.Program, h.Env, args)
 	}
-	defer lock.Release()
-
-	if !update.IsRelease(own) {
-		return fail(env, notRelease(own))
-	}
-	if bad := pluginElsewhereCheck(); bad != nil {
-		return fail(env, *bad)
-	}
-	c := update.New()
-	latest, err := c.Latest(ctx)
-	if err != nil {
-		return fail(env, updateFailure(err))
-	}
-	switch update.Compare(own, latest) {
-	case 1:
-		return fail(env, newerThanRelease(own, latest))
-	case 0:
-		return current(env, installed, own)
-	}
-
-	tmp, err := os.MkdirTemp("", "gentry-update-")
-	if err != nil {
-		return fail(env, internal(err))
-	}
-	defer os.RemoveAll(tmp)
-	downloaded, err := c.Download(ctx, latest, update.Asset(runtime.GOOS, runtime.GOARCH), tmp)
-	if err != nil {
-		return fail(env, updateFailure(err))
-	}
-	update.RemoveOld(installed)
-	if err := update.Replace(downloaded, installed); err != nil {
-		return fail(env, updateFailure(err))
-	}
-	// The lock is held until the new program has done its part.
-	return runInstalled(env, installed, []string{update.FromEnv + "=" + own}, args)
-}
-
-// installedProgram returns the path of the program of the data root:
-// <data root>/bin/gentry, gentry.exe on Windows.
-func installedProgram() (string, *failure) {
-	root, err := home.Root()
-	if err != nil {
-		f := homeUnknown()
-		return "", &f
-	}
-	return filepath.Join(root, "bin", update.Program()), nil
-}
-
-// versionTimeout limits the run of the program installed that names its
-// version: the update holds the lock meanwhile, and a program that hangs
-// must not stop every update.
-const versionTimeout = 10 * time.Second
-
-// versionOf returns the version the program names; false if it does not
-// run in versionTimeout.
-func versionOf(program string) (string, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
-	defer cancel()
-	b, err := exec.CommandContext(ctx, program, "version", "--json").Output()
-	if err != nil {
-		return "", false
-	}
-	var v contract.VersionOutput
-	if json.Unmarshal(b, &v) != nil || v.Gentry == "" {
-		return "", false
-	}
-	return v.Gentry, true
+	return emitUpdate(env, r)
 }
 
 // runInstalled runs gentry update of the program with args and the
-// variables env adds, on the output of env, and returns its exit code.
+// variables vars added, on the output of env, and returns its exit code.
 func runInstalled(env Env, program string, vars, args []string) int {
 	cmd := exec.CommandContext(env.context(), program, append([]string{"update"}, args...)...)
 	cmd.Env = append(os.Environ(), vars...)
@@ -166,133 +69,93 @@ func runInstalled(env Env, program string, vars, args []string) int {
 	return contract.ExitOK
 }
 
-// pluginElsewhereCheck refuses the update if Claude Code serves the plugin of
-// Gentry from an existing directory of another data root, as setup does,
-// though this data root has no integration of it: the update would move the
-// plugin of the other one. With no claude there is nothing to check; claude
-// that fails refuses only if the integration of this data root is connected.
-func pluginElsewhereCheck() *failure {
-	dir, err := home.Integration(claude.Tool)
-	if err != nil {
-		f := homeUnknown()
-		return &f
+// failureError is a failure of a command as the error of a step the
+// scenario of update asks the entry for: it turns back into the failure.
+type failureError struct{ f failure }
+
+func (e *failureError) Error() string { return e.f.message }
+
+// failureOf returns the failure an error of a step of update is: the one it
+// carries, or an internal one.
+func failureOf(err error) failure {
+	var fe *failureError
+	if errors.As(err, &fe) {
+		return fe.f
 	}
+	return internal(err)
+}
+
+// An updateAdapter is what the update needs of the adapter of an AI tool
+// apart from setupTool.
+type updateAdapter struct {
+	// elsewhere returns the existing directory of another data root the
+	// tool serves the plugin of Gentry from, as update.Tool.Elsewhere.
+	elsewhere func(dir string) (string, error)
+	// current returns the integration in dir if the tool serves the plugin
+	// this program of the version own builds from it already.
+	current func(tool, dir, own string) (contract.SetupOutput, bool)
+}
+
+// updateAdapters are the adapters of the tools of setup for the update.
+var updateAdapters = map[string]updateAdapter{
+	claude.Tool: {elsewhere: claudeElsewhere, current: claudeCurrent},
+}
+
+// updateTools returns the AI tools of setup for the update, each by its
+// adapter.
+func updateTools(own string) []update.Tool {
+	var out []update.Tool
+	for _, tool := range tools {
+		a, ok := updateAdapters[tool]
+		if !ok {
+			continue
+		}
+		dir, err := home.Integration(tool)
+		if err != nil {
+			continue
+		}
+		out = append(out, update.Tool{
+			Name:      tool,
+			Dir:       dir,
+			Elsewhere: func() (string, error) { return a.elsewhere(dir) },
+			Current:   func() (contract.SetupOutput, bool) { return a.current(tool, dir, own) },
+			Setup: func() (contract.SetupOutput, error) {
+				out, bad := setupTool(tool, false)
+				if bad != nil {
+					return out, &failureError{*bad}
+				}
+				return out, nil
+			},
+		})
+	}
+	return out
+}
+
+// claudeElsewhere returns the existing directory of another data root
+// Claude Code serves the plugin of Gentry from, as setup refuses it; "" if
+// it serves none, or that of dir, or one that is no more.
+func claudeElsewhere(dir string) (string, error) {
 	program, err := claude.Program()
 	if err != nil {
-		return nil
+		return "", update.ErrToolNotFound
 	}
 	registered, err := claude.Registered(program)
 	if err != nil {
-		if connected(dir) {
-			f := setupToolError(err)
-			return &f
-		}
-		return nil
+		return "", &failureError{setupToolError(err)}
 	}
 	if registered == "" || claude.SamePath(registered, dir) {
-		return nil
+		return "", nil
 	}
 	if _, err := os.Stat(registered); errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return "", nil
 	}
-	f := pluginElsewhere(claude.Tool, registered, dir)
-	return &f
+	return registered, nil
 }
 
-// connected reports whether the integration of the directory dir is
-// connected: setup made it.
-func connected(dir string) bool {
-	fi, err := os.Stat(dir)
-	return err == nil && fi.IsDir()
-}
-
-// An updateRun is what an update did after the program, with what failed.
-type updateRun struct {
-	out          contract.UpdateOutput
-	connected    bool // an integration is connected, built anew or not
-	integrations []integrationFailure
-	agents       []agentsFailure
-	bad          *failure // the state store could not be read for the layout
-}
-
-// integrationFailure is an integration that could not be built anew.
-type integrationFailure struct {
-	tool   string
-	reason string
-}
-
-// agentsFailure is a project whose subagents could not be laid out.
-type agentsFailure struct {
-	project string
-	reason  string
-}
-
-// updated finishes the update in the new program, which the program of the
-// version from has installed: it builds anew every integration connected,
-// lays out the subagents and tells the update with the incompatible changes
-// of the versions it skipped.
-func updated(env Env, from string) int {
-	installed, bad := installedProgram()
-	if bad != nil {
-		return fail(env, *bad)
-	}
-	own := buildinfo.Version()
-	page := update.Page(own)
-	run := updateRun{out: contract.UpdateOutput{
-		Action: updateUpdated, Previous: &from, Version: own, Program: installed, Page: &page,
-		Integrations: []contract.SetupOutput{},
-	}}
-	for _, tool := range tools {
-		dir, err := home.Integration(tool)
-		if err != nil || !connected(dir) {
-			continue
-		}
-		run.connected = true
-		run.setup(tool)
-	}
-	run.layout()
-	journal, err := update.New().Changelog(env.context(), own)
-	if err != nil {
-		e := err.Error()
-		run.out.ChangelogError = &e
-	} else {
-		for _, b := range update.BreakingOf(journal, from, own) {
-			run.out.Breaking = append(run.out.Breaking, contract.UpdateBreaking{Version: b.Version, Lines: b.Lines})
-		}
-	}
-	return run.emit(env)
-}
-
-// current checks the integrations when the latest release is installed:
-// one that matches the program is left as it is, nothing written; another is
-// built anew, and then the subagents are laid out.
-func current(env Env, installed, own string) int {
-	run := updateRun{out: contract.UpdateOutput{Action: updateCurrent, Version: own, Program: installed, Integrations: []contract.SetupOutput{}}}
-	rebuilt := false
-	for _, tool := range tools {
-		dir, err := home.Integration(tool)
-		if err != nil || !connected(dir) {
-			continue
-		}
-		run.connected = true
-		if out, ok := currentIntegration(tool, dir, own); ok {
-			run.out.Integrations = append(run.out.Integrations, out)
-			continue
-		}
-		if out, ok := run.setup(tool); ok && out.Action != claude.Unchanged {
-			rebuilt = true
-		}
-	}
-	if rebuilt {
-		run.layout()
-	}
-	return run.emit(env)
-}
-
-// currentIntegration returns the integration with the tool in dir if the
-// tool serves the plugin this program builds from it already: then nothing
+// claudeCurrent returns the integration with Claude Code in dir if Claude
+// Code serves the plugin this program builds from it already: then nothing
 // is written.
-func currentIntegration(tool, dir, own string) (contract.SetupOutput, bool) {
+func claudeCurrent(tool, dir, own string) (contract.SetupOutput, bool) {
 	program, err := claude.Program()
 	if err != nil {
 		return contract.SetupOutput{}, false
@@ -312,99 +175,160 @@ func currentIntegration(tool, dir, own string) (contract.SetupOutput, bool) {
 	return contract.SetupOutput{Tool: tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled}, true
 }
 
-// setup builds the integration with the tool anew, as gentry setup does,
-// and returns it; false if it failed, which does not stop the others.
-func (u *updateRun) setup(tool string) (contract.SetupOutput, bool) {
-	out, bad := setupTool(tool, false)
-	if bad != nil {
-		u.integrations = append(u.integrations, integrationFailure{tool: tool, reason: bad.message})
-		return out, false
-	}
-	u.out.Integrations = append(u.out.Integrations, out)
-	return out, true
+// updateProjects lays out the subagents of the projects for the update, as
+// agents deploy --project does, but a subagent in conflict is skipped and
+// told. The state store is only read, and not created; the process is
+// opened for the first project.
+type updateProjects struct {
+	pool *layoutPool
+	repo *process.Repo
 }
 
-// layout lays out the subagents in every worktree of each project, in the
-// order of gentry project list, as gentry agents deploy --project does, but
-// a conflict skips the subagent and is told; a project that fails does not
-// stop the others. The state store is only read, and not created.
-func (u *updateRun) layout() {
-	p, bad := readLayoutPool()
+func (p *updateProjects) List() ([]string, error) {
+	pool, bad := readLayoutPool()
 	if bad != nil {
-		u.bad = bad
-		return
+		return nil, &failureError{*bad}
 	}
-	defer p.close()
-	if p.st == nil {
-		return
+	p.pool = pool
+	if pool.st == nil {
+		return nil, nil
 	}
-	projects, err := p.st.Projects()
+	projects, err := pool.st.Projects()
 	if err != nil {
-		f := stateFailure(err)
-		u.bad = &f
-		return
+		return nil, &failureError{stateFailure(err)}
 	}
-	if len(projects) == 0 {
-		return
-	}
-	r, bad := openProcess()
-	if bad != nil {
-		for _, pr := range projects {
-			u.agents = append(u.agents, agentsFailure{project: pr.ID, reason: bad.message})
-		}
-		return
-	}
-	defer r.Close()
+	var ids []string
 	for _, pr := range projects {
-		d, bad := deployOf(r, p, pr.ID)
+		ids = append(ids, pr.ID)
+	}
+	return ids, nil
+}
+
+func (p *updateProjects) Deploy(id string) (contract.UpdateAgents, error) {
+	if p.repo == nil {
+		r, bad := openProcess()
 		if bad != nil {
-			u.agents = append(u.agents, agentsFailure{project: pr.ID, reason: bad.message})
-			continue
+			return contract.UpdateAgents{}, &failureError{*bad}
 		}
-		res, err := agents.Sync(agentsLayout, d.targets, p.paths())
-		if err != nil {
-			u.agents = append(u.agents, agentsFailure{project: pr.ID, reason: layoutFailure(err).message})
-			continue
-		}
-		out := d.output(res, p)
-		a := contract.UpdateAgents{Project: out.Project, Changed: out.Changed, Worktrees: out.Worktrees}
-		if len(res.Conflicts) > 0 {
-			a.Conflicts = conflictsJSON(res.Conflicts)
-		}
-		u.out.Agents = append(u.out.Agents, a)
+		p.repo = r
+	}
+	d, bad := deployOf(p.repo, p.pool, id)
+	if bad != nil {
+		return contract.UpdateAgents{}, &failureError{*bad}
+	}
+	res, err := agents.Sync(agentsLayout, d.targets, p.pool.paths())
+	if err != nil {
+		return contract.UpdateAgents{}, &failureError{layoutFailure(err)}
+	}
+	out := d.output(res, p.pool)
+	a := contract.UpdateAgents{Project: out.Project, Changed: out.Changed, Worktrees: out.Worktrees}
+	if len(res.Conflicts) > 0 {
+		a.Conflicts = conflictsJSON(res.Conflicts)
+	}
+	return a, nil
+}
+
+func (p *updateProjects) close() {
+	if p.repo != nil {
+		p.repo.Close()
+	}
+	if p.pool != nil {
+		p.pool.close()
 	}
 }
 
-// emit prints the result of the update, then what failed after the program
-// was replaced. In JSON a failure is the output, with the result of the
-// update in its details.
-func (u *updateRun) emit(env Env) int {
-	bad := u.failure()
-	if bad == nil {
-		return emit(env, u.out, func(p *page, out contract.UpdateOutput) { updateText(p, out, u.extra()) })
+// updateRefusal turns why the update is refused into the failure.
+func updateRefusal(err error) failure {
+	var elsewhere *update.ElsewhereError
+	var notRel *update.NotReleaseError
+	var newer *update.NewerError
+	var plugin *update.PluginElsewhereError
+	var check *update.CheckError
+	switch {
+	case errors.As(err, &elsewhere):
+		return programElsewhere(elsewhere.Running, elsewhere.Installed)
+	case errors.As(err, &notRel):
+		return notRelease(notRel.Version)
+	case errors.As(err, &newer):
+		return newerThanRelease(newer.Version, newer.Latest)
+	case errors.As(err, &plugin):
+		return pluginElsewhere(plugin.Tool, plugin.Registered, plugin.Dir)
+	case errors.As(err, &check):
+		return failureOf(check.Err)
 	}
-	if !env.json {
-		p := &page{ch: channelOf(env)}
-		updateText(p, u.out, u.extra())
-		fmt.Fprint(env.Stdout, p.String())
-	}
-	bad.details["update"] = u.out
-	return fail(env, *bad)
+	return updateFailure(err)
 }
 
-// failure is what failed after the program was replaced: the integrations,
-// then the subagents; nil if nothing did.
-func (u *updateRun) failure() *failure {
+// emitUpdate prints the result of the update, then what failed after the
+// program was replaced. In JSON a failure is the output, with the result of
+// the update in its details.
+func emitUpdate(env Env, r *update.Result) int {
+	out := updateOutput(r)
+	x := updateExtra{connected: r.Connected}
+	text := func(p *page, out contract.UpdateOutput) { updateText(p, out, x) }
+	if bad := updateFailed(r); bad != nil {
+		return emitFailed(env, out, text, *bad, "update")
+	}
+	return emit(env, out, text)
+}
+
+// updateOutput is the result of the update as the contract has it.
+func updateOutput(r *update.Result) contract.UpdateOutput {
+	out := contract.UpdateOutput{Action: r.Action, Version: r.Version, Program: r.Program, Integrations: append([]contract.SetupOutput{}, r.Integrations...), Agents: r.Agents}
+	if r.Action == update.Updated {
+		page := releases.Page(r.Version)
+		out.Previous, out.Page = &r.Previous, &page
+	}
+	for _, b := range r.Breaking {
+		out.Breaking = append(out.Breaking, contract.UpdateBreaking{Version: b.Version, Lines: b.Lines})
+	}
+	if r.ChangelogErr != nil {
+		e := r.ChangelogErr.Error()
+		out.ChangelogError = &e
+	}
+	return out
+}
+
+// integrationFailure is an integration that could not be built anew.
+type integrationFailure struct {
+	tool   string
+	reason string
+}
+
+// agentsFailure is a project whose subagents could not be laid out.
+type agentsFailure struct {
+	project string
+	reason  string
+}
+
+// updateFailed is what failed after the program was replaced, as one
+// failure: of the integrations, with the subagents under it; nil if nothing
+// did.
+func updateFailed(r *update.Result) *failure {
 	var parts []failure
-	if len(u.integrations) > 0 {
-		parts = append(parts, integrationsFailed(u.integrations))
+	if len(r.Tools) > 0 {
+		var fs []integrationFailure
+		for _, t := range r.Tools {
+			fs = append(fs, integrationFailure{tool: t.Tool, reason: failureOf(t.Err).message})
+		}
+		parts = append(parts, integrationsFailed(fs))
 	}
-	if len(u.agents) > 0 {
-		parts = append(parts, agentsFailed(u.agents))
+	if len(r.Projects) > 0 {
+		var fs []agentsFailure
+		for _, p := range r.Projects {
+			fs = append(fs, agentsFailure{project: p.Project, reason: failureOf(p.Err).message})
+		}
+		parts = append(parts, agentsFailed(fs))
 	}
-	if u.bad != nil {
-		parts = append(parts, *u.bad)
+	if r.ListErr != nil {
+		parts = append(parts, failureOf(r.ListErr))
 	}
+	return joinFailures(parts)
+}
+
+// joinFailures returns the failures as one: the first, with the others told
+// under it, each a block, and the hints of all; nil for none.
+func joinFailures(parts []failure) *failure {
 	if len(parts) == 0 {
 		return nil
 	}
@@ -412,7 +336,6 @@ func (u *updateRun) failure() *failure {
 	if f.details == nil {
 		f.details = map[string]any{}
 	}
-	// The failures after the first are told under it, each a block.
 	for _, more := range parts[1:] {
 		f.more += "\n" + more.message + "\n" + more.more
 		f.hints = append(f.hints, more.hints...)
@@ -431,19 +354,17 @@ type updateExtra struct {
 	connected bool
 }
 
-func (u *updateRun) extra() updateExtra { return updateExtra{connected: u.connected} }
-
 // updateText prints the result of the update: the versions and whether the
 // changes take effect in new sessions, what needs the attention of the
 // operator, the incompatible changes of the versions skipped and the page of
 // the release. What was built anew and laid out is told by --json only.
 func updateText(p *page, out contract.UpdateOutput, x updateExtra) {
-	if out.Action == updateUpdated && out.Previous != nil {
+	if out.Action == update.Updated && out.Previous != nil {
 		fmt.Fprintln(p, msg.Text(msg.UpdateUpdated, *out.Previous, out.Version))
 	} else {
 		fmt.Fprintln(p, msg.Text(msg.UpdateCurrent, out.Version))
 	}
-	changed := out.Action == updateUpdated || slices.ContainsFunc(out.Integrations, func(s contract.SetupOutput) bool { return s.Action != claude.Unchanged })
+	changed := out.Action == update.Updated || slices.ContainsFunc(out.Integrations, func(s contract.SetupOutput) bool { return s.Action != claude.Unchanged })
 	if changed {
 		fmt.Fprintln(p, msg.Text(msg.UpdateNewSessions))
 	}
@@ -494,7 +415,7 @@ func updateText(p *page, out contract.UpdateOutput, x updateExtra) {
 func programElsewhere(running, installed string) failure {
 	details := map[string]any{"program": running}
 	shown := msg.Text(msg.UpdateNotInstalled)
-	h := hintOf(msg.HintInstallGentry, update.InstallCommand())
+	h := hintOf(msg.HintInstallGentry, releases.InstallCommand())
 	if installed != "" {
 		details["installed"] = installed
 		shown = installed
@@ -515,7 +436,7 @@ func notRelease(version string) failure {
 		exit:    contract.ExitError,
 		code:    contract.CodeNotRelease,
 		message: msg.Text(msg.ErrNotRelease, version),
-		hints:   []hint{hintOf(msg.HintInstallRelease, update.InstallCommand())},
+		hints:   []hint{hintOf(msg.HintInstallRelease, releases.InstallCommand())},
 		details: map[string]any{"version": version},
 	}
 }
@@ -534,10 +455,10 @@ func newerThanRelease(version, latest string) failure {
 // updateFailure is a failure to find, download, check or write the latest
 // release; the installation is as it was.
 func updateFailure(err error) failure {
-	var nf *update.NotFoundError
-	var de *update.DownloadError
-	var ce *update.ChecksumError
-	var we *update.WriteError
+	var nf *releases.NotFoundError
+	var de *releases.DownloadError
+	var ce *releases.ChecksumError
+	var we *releases.WriteError
 	switch {
 	case errors.As(err, &nf):
 		version, details := msg.Text(msg.UpdateLatest), map[string]any{}
@@ -548,7 +469,7 @@ func updateFailure(err error) failure {
 			exit:    contract.ExitError,
 			code:    contract.CodeReleaseNotFound,
 			message: msg.Text(msg.ErrReleaseNotFound, version),
-			hints:   []hint{hintOf(msg.HintReleases, update.GitHub)},
+			hints:   []hint{hintOf(msg.HintReleases, releases.GitHub)},
 			details: details,
 		}
 	case errors.As(err, &de):

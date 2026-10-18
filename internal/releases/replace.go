@@ -1,17 +1,21 @@
-package update
+package releases
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
+	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/filelock"
 )
 
@@ -139,4 +143,25 @@ func stage(downloaded, staged string) error {
 	}
 	// The mode of a file created is cut by the umask.
 	return os.Chmod(staged, 0o755)
+}
+
+// versionTimeout limits the run of a program that names its version: an
+// update holds the lock meanwhile, and a program that hangs must not stop
+// every update.
+const versionTimeout = 10 * time.Second
+
+// VersionOf returns the version the program names on gentry version --json;
+// false if it does not run in versionTimeout or names none.
+func VersionOf(program string) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
+	defer cancel()
+	b, err := exec.CommandContext(ctx, program, "version", "--json").Output()
+	if err != nil {
+		return "", false
+	}
+	var v contract.VersionOutput
+	if json.Unmarshal(b, &v) != nil || v.Gentry == "" {
+		return "", false
+	}
+	return v.Gentry, true
 }

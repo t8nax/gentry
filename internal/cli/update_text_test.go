@@ -9,6 +9,7 @@ import (
 	"github.com/t8nax/gentry/internal/adapter/claude"
 	"github.com/t8nax/gentry/internal/agents"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/releases"
 	"github.com/t8nax/gentry/internal/update"
 )
 
@@ -17,7 +18,7 @@ import (
 // the page of the release. What was built anew and laid out is not told.
 func TestUpdateText(t *testing.T) {
 	const program = "/home/anna/.gentry/bin/gentry"
-	link := update.Page("0.3.0")
+	link := releases.Page("0.3.0")
 	plugin := func(action string, enabled bool) contract.SetupOutput {
 		return contract.SetupOutput{Tool: claude.Tool, Dir: "/home/anna/.gentry/integrations/claude", PluginVersion: "0.3.0+1a2b3c4d", Action: action, Enabled: enabled}
 	}
@@ -137,7 +138,7 @@ func TestUpdateRefusalText(t *testing.T) {
 		installed = "/home/anna/.gentry/bin/gentry"
 		spaced    = "/home/anna/Gentry data/bin/gentry"
 	)
-	install := update.InstallCommand()
+	install := releases.InstallCommand()
 	tests := []struct {
 		name       string
 		f          failure
@@ -171,29 +172,29 @@ func TestUpdateRefusalText(t *testing.T) {
 			"Версия: 0.4.0",
 			"Последний выпуск: 0.3.0",
 		), ""},
-		{"no latest release", updateFailure(&update.NotFoundError{}), lines(
+		{"no latest release", updateFailure(&releases.NotFoundError{}), lines(
 			"Выпуск не найден.",
 			"Версия: последняя",
 			"",
 			msg.Text(msg.HintReleases, "https://github.com/t8nax/gentry/releases"),
 		), ""},
-		{"no release of the version", updateFailure(&update.NotFoundError{Version: "0.3.0"}), lines(
+		{"no release of the version", updateFailure(&releases.NotFoundError{Version: "0.3.0"}), lines(
 			msg.Text(msg.ErrReleaseNotFound, "0.3.0"),
 			"",
-			msg.Text(msg.HintReleases, update.GitHub),
+			msg.Text(msg.HintReleases, releases.GitHub),
 		), ""},
-		{"download failed", updateFailure(&update.DownloadError{URL: "https://github.com/t8nax/gentry/releases/latest", Err: errors.New("connection refused")}), lines(
+		{"download failed", updateFailure(&releases.DownloadError{URL: "https://github.com/t8nax/gentry/releases/latest", Err: errors.New("connection refused")}), lines(
 			"Не удалось скачать файл.",
 			"Адрес: https://github.com/t8nax/gentry/releases/latest",
 			"Ошибка: connection refused",
 		), ""},
-		{"checksum mismatch", updateFailure(&update.ChecksumError{File: "gentry-linux-amd64", Want: "aa11", Got: "bb22"}), lines(
+		{"checksum mismatch", updateFailure(&releases.ChecksumError{File: "gentry-linux-amd64", Want: "aa11", Got: "bb22"}), lines(
 			"Контрольная сумма скачанного файла не совпала.",
 			"Файл: gentry-linux-amd64",
 			"Ожидалась: aa11",
 			"Получена: bb22",
 		), ""},
-		{"program not written", updateFailure(&update.WriteError{Program: installed, Err: errors.New("permission denied")}), lines(
+		{"program not written", updateFailure(&releases.WriteError{Program: installed, Err: errors.New("permission denied")}), lines(
 			"Не удалось записать программу.",
 			"Программа: /home/anna/.gentry/bin/gentry",
 			"Ошибка: permission denied",
@@ -236,12 +237,12 @@ func TestUpdateRefusalText(t *testing.T) {
 // replaced are one refusal: of the integrations, with the subagents under
 // it, and the result of the update in its details.
 func TestUpdateFailures(t *testing.T) {
-	u := updateRun{
-		out:          contract.UpdateOutput{Action: "updated", Version: "0.3.0", Program: "/home/anna/.gentry/bin/gentry", Integrations: []contract.SetupOutput{}},
-		integrations: []integrationFailure{{tool: claude.Tool, reason: "claude отказал"}},
-		agents:       []agentsFailure{{project: "shop", reason: "git не признаёт копию"}},
+	r := &update.Result{
+		Action: update.Updated, Version: "0.3.0", Program: "/home/anna/.gentry/bin/gentry",
+		Tools:    []update.ToolFailure{{Tool: claude.Tool, Err: &failureError{failure{message: "claude отказал"}}}},
+		Projects: []update.ProjectFailure{{Project: "shop", Err: &failureError{failure{message: "git не признаёт копию"}}}},
 	}
-	f := u.failure()
+	f := updateFailed(r)
 	if f == nil || f.code != contract.CodeIntegrationFailed {
 		t.Fatalf("failure %+v, want %s", f, contract.CodeIntegrationFailed)
 	}
@@ -259,7 +260,7 @@ func TestUpdateFailures(t *testing.T) {
 	if f.details["integrations"] == nil || f.details["agents"] == nil {
 		t.Errorf("details %v, want integrations and agents", f.details)
 	}
-	if (&updateRun{out: u.out}).failure() != nil {
+	if updateFailed(&update.Result{Action: update.Updated}) != nil {
 		t.Error("an update with nothing failed is a failure")
 	}
 }
@@ -282,7 +283,7 @@ func TestUpdateElsewhere(t *testing.T) {
 	if out.Error.Code != contract.CodeProgramElsewhere || out.Error.Details["program"] != exe || out.Error.Details["installed"] != nil {
 		t.Errorf("update --json: %s\nwant program_elsewhere of %s", stdout, exe)
 	}
-	if out.Error.Hint == nil || *out.Error.Hint != msg.Text(msg.HintInstallGentry, update.InstallCommand()) {
+	if out.Error.Hint == nil || *out.Error.Hint != msg.Text(msg.HintInstallGentry, releases.InstallCommand()) {
 		t.Errorf("update --json: %s\nwant the hint of the installation", stdout)
 	}
 }

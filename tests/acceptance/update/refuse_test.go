@@ -226,6 +226,27 @@ func TestUpdateToolFailed(t *testing.T) {
 	s.wantNoRequests()
 }
 
+// TestUpdateToolNotFound checks that the update refuses before it downloads
+// anything when the program of Claude Code, connected, is not found: the
+// refusal is that of setup, tool_not_found, with the hint to repeat the
+// update.
+func TestUpdateToolNotFound(t *testing.T) {
+	parallel(t)
+	s := installedStand(t, v010, true)
+	s.set(testkit.ClaudeProgramEnv, filepath.Join(s.root, "no-claude", "claude"+exe))
+	before := s.programSum()
+	r := s.update()
+	wantCode(t, r, 1)
+	notFound := regexp.MustCompile(`^Программа .+ не найдена\.$`)
+	if ls := lines(r.stderr); len(ls) != 3 || !notFound.MatchString(ls[0]) {
+		t.Errorf("stderr:\n%s\nwant «Программа <программа> не найдена.» and the hint", r.stderr)
+	}
+	wantLastBlock(t, r.stderr, "Установите Claude Code и повторите: gentry update")
+	s.wantError("tool_not_found")
+	s.wantProgram(before)
+	s.wantNoRequests()
+}
+
 // 6. Ошибки при обновлении.
 
 // TestUpdateReleaseNotFound checks the refusal when the mock has no release.

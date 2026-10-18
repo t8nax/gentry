@@ -179,6 +179,60 @@ func TestUpdateDisabledPlugin(t *testing.T) {
 	}
 }
 
+// The line of setup about the rule of permission of the tools of Gentry it
+// could not write, as the settings of Claude Code are not read, and its hint.
+const (
+	permissionUnread = "Разрешить инструменты Gentry не удалось: настройки Claude Code не прочитаны."
+	permissionHint   = "Разрешить инструменты вручную: правило mcp__plugin_gentry_core в permissions.allow"
+)
+
+// breakSettings replaces the file of the settings of Claude Code of the
+// stand with a text that is not read as settings.
+func (s *stand) breakSettings() {
+	s.t.Helper()
+	writeFile(s.t, filepath.Join(s.claudeConfig, "settings.json"), "{ это не настройки\n")
+}
+
+// TestUpdatePermissionUnread checks that the update tells the rule of
+// permission it could not write, with the hint to write it by hand, and
+// installs the program.
+func TestUpdatePermissionUnread(t *testing.T) {
+	parallel(t)
+	s := installedStand(t, v010, true)
+	s.breakSettings()
+	r := s.update()
+	wantCode(t, r, 0)
+	s.wantVersion(latest)
+	wantLine(t, r.stdout, permissionUnread)
+	wantInLastBlock(t, r.stdout, permissionHint)
+}
+
+// TestUpdatePermissionAndDisabledPlugin checks the order of the line of the
+// rule of permission and that of the disabled plugin and of their hints,
+// and that the update does not name the file of the settings.
+func TestUpdatePermissionAndDisabledPlugin(t *testing.T) {
+	parallel(t)
+	s := installedStand(t, v010, true)
+	s.editPlugin(func(p *claudePlugin) { p.Enabled = false })
+	s.breakSettings()
+	r := s.update()
+	wantCode(t, r, 0)
+	wantOrdered(t, r.stdout, permissionUnread, "Плагин Gentry отключён в Claude Code.")
+	const enable = "Включить плагин: claude plugin enable gentry@gentry"
+	wantInLastBlock(t, r.stdout, enable, permissionHint)
+	ls := lines(r.stdout)
+	if e, p := slices.Index(ls, enable), slices.Index(ls, permissionHint); e < 0 || p < 0 || e > p {
+		t.Errorf("stdout:\n%s\nwant «%s» before «%s»", r.stdout, enable, permissionHint)
+	}
+	for _, out := range []string{r.stdout, r.stderr} {
+		for _, l := range lines(out) {
+			if strings.HasPrefix(l, "Настройки:") {
+				t.Errorf("output has the line %q:\n%s", l, out)
+			}
+		}
+	}
+}
+
 // TestUpdatePluginPaths checks that the hook and the tool server of the
 // plugin after the update name the installed program.
 func TestUpdatePluginPaths(t *testing.T) {

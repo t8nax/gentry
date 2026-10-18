@@ -219,6 +219,11 @@ func (u *Updater) Run(ctx context.Context, req Request) (*Result, *Handoff, erro
 	if err := sameProgram(req.Running, installed); err != nil {
 		return nil, nil, err
 	}
+	// A build that is no release is refused before the lock: a folder of
+	// the program closed for writing must not hide the refusal.
+	if !releases.IsRelease(req.Version) {
+		return nil, nil, &NotReleaseError{Version: req.Version}
+	}
 
 	// Two updates at once do not replace the program together: the second
 	// waits for the first, and then the program installed is the latest
@@ -237,9 +242,6 @@ func (u *Updater) Run(ctx context.Context, req Request) (*Result, *Handoff, erro
 			lock.Release()
 		}
 	}()
-	if !releases.IsRelease(req.Version) {
-		return nil, nil, &NotReleaseError{Version: req.Version}
-	}
 	if err := u.checkTools(); err != nil {
 		return nil, nil, err
 	}

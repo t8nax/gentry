@@ -235,6 +235,10 @@ func TestRunRefusals(t *testing.T) {
 			if !errors.As(err, &e) || e.Version != "0.0.0-dev" || s.releases.latests != 0 {
 				t.Errorf("%v, want NotReleaseError and no request", err)
 			}
+			// Refused before the lock, whose file is left once taken.
+			if _, err := os.Stat(filepath.Join(filepath.Dir(s.installed), ".update.lock")); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("the lock was taken: %v", err)
+			}
 		}},
 		{"newer", "0.4.0", nil, func(t *testing.T, s *stand, err error) {
 			var e *NewerError

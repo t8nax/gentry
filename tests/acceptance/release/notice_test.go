@@ -29,7 +29,8 @@ func (r *repo) notice(version string) result {
 }
 
 // shopNotice is a text for the group of 0.4.0 with its subsections out of
-// the order of the journal, an item on two lines, code and signs of HTML.
+// the order of the journal, an item on two lines, code, a link and signs
+// of HTML.
 const shopNotice = "# Сообщение в группу\n" +
 	"\n" +
 	"## Изменено\n" +
@@ -41,7 +42,7 @@ const shopNotice = "# Сообщение в группу\n" +
 	"\n" +
 	"## Новое\n" +
 	"* Оплата заказа частями & напоминания о платежах.\n" +
-	"* Список желаний.\n" +
+	"* Список желаний — [подробнее](https://shop.example/wishlist?from=group&page=1).\n" +
 	"\n" +
 	"## Исправлено\n" +
 	"* Поиск находит товары по артикулу с дефисом.\n"
@@ -49,7 +50,8 @@ const shopNotice = "# Сообщение в группу\n" +
 // TestNotice checks the message to the group of a release of the shop: the
 // title with the version, the phrase about the main thing, the mark of the
 // actions on the update, the subsections in the order of the journal with
-// their items on one line each, the signs of HTML escaped and code, and the
+// their items on one line each, the signs of HTML escaped, code and the
+// link as an element a, and the
 // address of the page; the checks of the button pass the text.
 func TestNotice(t *testing.T) {
 	r := shopRepo(t, shopFiles(map[string]string{contentDir + "0.4.0.md": content040 + "\n" + shopNotice}), "0.3.0")
@@ -63,7 +65,7 @@ func TestNotice(t *testing.T) {
 		"",
 		"<b>Новое</b>",
 		"• Оплата заказа частями &amp; напоминания о платежах.",
-		"• Список желаний.",
+		`• Список желаний — <a href="https://shop.example/wishlist?from=group&amp;page=1">подробнее</a>.`,
 		"",
 		"<b>Изменено</b>",
 		"• Корзина сохраняется после входа.",
@@ -106,6 +108,15 @@ func TestNoticeMissing(t *testing.T) {
 	wantRefusal(t, res, want...)
 	r.wantTags("v0.3.0")
 	wantRefusal(t, r.notice("0.4.0"), want...)
+}
+
+// TestNoticeVersion checks that the build of the message refuses a version
+// that is not three numbers apart by dots and a version with no section in
+// the journal.
+func TestNoticeVersion(t *testing.T) {
+	r := shopRepo(t, shopFiles(nil), "0.3.0")
+	wantRefusal(t, r.notice("0.4"), "Версия указана неверно.", "Версия: 0.4")
+	wantRefusal(t, r.notice("0.5.0"), "В журнале изменений нет раздела этой версии.", "Версия: 0.5.0")
 }
 
 // TestNoticeInvalid checks that the button refuses a text for the group
@@ -156,6 +167,12 @@ func TestNoticeInvalid(t *testing.T) {
 				"Ошибка: неизвестный подраздел «Акции»", "Допустимые подразделы:",
 				"  Несовместимые изменения", "  Новое", "  Изменено", "  Исправлено", "  Безопасность",
 			},
+		},
+		{
+			name: "item_without_text",
+			text: page + notice040 + "* \n",
+			line: 72, at: "* ",
+			error: []string{"Ошибка: пункт без текста"},
 		},
 		{
 			name: "repeated_subsection",

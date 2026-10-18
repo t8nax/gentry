@@ -257,6 +257,8 @@ func TestParseContentInvalid(t *testing.T) {
 		{"indented line after a blank line", lines("# Сообщение в группу", "## Новое", "* Корзина.", "", "  сохраняется."), 5, reasonNoticeOutside, ""},
 		{"example in the notice", lines("# Сообщение в группу", "## Новое", "* Корзина.", "```", "a", "```"), 4, reasonNoticeOutside, ""},
 		{"subheading in the notice", lines("# Сообщение в группу", "## Новое", "### Вкладка: А"), 3, reasonNoticeOutside, ""},
+		{"item with no text", lines("# Сообщение в группу", "## Новое", "* Корзина.", "* "), 4, reasonNoticeEmptyItem, ""},
+		{"item of blanks", lines("# Сообщение в группу", "## Новое", "*   ", "  сохраняется."), 3, reasonNoticeEmptyItem, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseContent("releases/0.4.0.md", tc.text)

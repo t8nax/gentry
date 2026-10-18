@@ -108,7 +108,8 @@ func TestCheckNotice(t *testing.T) {
 	}{
 		{"right", shopRelease("", entries, newSub, fixedSub), nil},
 		{"subsection of an empty one of the journal", shopRelease("", entries, newSub, fixedSub,
-			noticeSub{title: journalSecurity, line: 9, items: []string{"Пароли."}}), nil},
+			noticeSub{title: journalSecurity, line: 9, items: []string{"Пароли."}}),
+			&contentInvalidError{line: 9, reason: reasonNoticeExtra, subject: journalSecurity}},
 		{"no section", release{section: journalSection{entries: entries}, content: &content{}},
 			&contentInvalidError{reason: reasonNoNotice}},
 		{"subsection the journal has not", shopRelease("", entries, newSub,
@@ -139,6 +140,25 @@ func TestCheckNotice(t *testing.T) {
 	}
 }
 
+// TestTelegramInline checks the HTML of Telegram of a line: the signs
+// escaped, code, a link by the rules of the page with its address escaped
+// and its text only escaped, and what starts no markup as written.
+func TestTelegramInline(t *testing.T) {
+	for _, tc := range []struct{ s, want string }{
+		{"Цена < 100 & > 10", "Цена &lt; 100 &amp; &gt; 10"},
+		{"Команда `shop add <SKU>`.", "Команда <code>shop add &lt;SKU&gt;</code>."},
+		{"` без пары", "` без пары"},
+		{"См. [раздел «Оплата»](https://shop.example/pay?a=1&b=\"2\").", `См. <a href="https://shop.example/pay?a=1&amp;b=&quot;2&quot;">раздел «Оплата»</a>.`},
+		{"[`shop` <x>](http://shop.example)", `<a href="http://shop.example">` + "`shop` &lt;x&gt;</a>"},
+		{"[файл](ftp://shop.example) и [пробел](https://shop.example/a b)", "[файл](ftp://shop.example) и [пробел](https://shop.example/a b)"},
+		{"[без адреса] и `код` [x](https://a.example)", `[без адреса] и <code>код</code> <a href="https://a.example">x</a>`},
+	} {
+		if got := telegramInline(tc.s); got != tc.want {
+			t.Errorf("telegramInline(%q) = %q, want %q", tc.s, got, tc.want)
+		}
+	}
+}
+
 // TestNoticeLength checks the length of a message as Telegram counts it: no
 // tags, an entity one sign, signs out of the plane of UTF-16 two units, no
 // blanks at the ends.
@@ -149,6 +169,7 @@ func TestNoticeLength(t *testing.T) {
 	}{
 		{"<b>Магазин</b>\n", 7},
 		{"<code>&lt;SKU&gt; &amp; цена</code>", 12},
+		{`См. <a href="https://shop.example/?a=1&amp;b=2">оплату</a>`, 10},
 		{"⚠️ Скидка", 9},
 		{"🛒 корзина", 10},
 		{"\n a\nb \n", 3},

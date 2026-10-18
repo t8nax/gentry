@@ -190,6 +190,8 @@ func contentRefusal(e *contentInvalidError) string {
 		reason = msg.Text(msg.ReleaseContentNoticeMissing, e.subject)
 	case reasonNoticeEmpty:
 		reason = msg.Text(msg.ReleaseContentNoticeEmpty, e.subject)
+	case reasonNoticeEmptyItem:
+		reason = msg.Text(msg.ReleaseContentNoticeEmptyItem)
 	case reasonNoticeLong:
 		reason = msg.Text(msg.ReleaseContentNoticeLong, e.length, noticeLimit)
 	}

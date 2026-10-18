@@ -913,5 +913,6 @@ const (
 	ReleaseContentNoticeMissing     Key = "release.content_notice_missing"
 	ReleaseContentNoticeEmpty       Key = "release.content_notice_empty"
 	ReleaseContentNoticeLong        Key = "release.content_notice_long"
+	ReleaseContentNoticeEmptyItem   Key = "release.content_notice_empty_item"
 	ReleaseNoticeDetails            Key = "release.notice_details"
 )

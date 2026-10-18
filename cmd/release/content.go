@@ -7,17 +7,21 @@ import (
 )
 
 // The content of the page of a release is the file releases/<version>.md
-// of the repository: markdown with three sections of the first level.
-// «Перед обновлением» holds the table «Было | Стало» and text; «Новое»
-// holds the cards, each a heading of the second level, an explanation and
-// examples: a block of code alone is one window, blocks under subheadings
-// «Вкладка: <name>» in a row are tabs, two under «Рядом: <caption>» in a row
-// are a pair side by side. «Сообщение в группу» holds the text of the
-// message about the release to the group in Telegram, which the page does
-// not show: subsections of the second level named as the subsections of the
-// journal, each with items «* ». The names of the sections and of the
-// subheadings are the format of the file, as the names of the subsections
-// of the journal are.
+// of the repository: markdown with three sections of the first level, each
+// optional in the format. «Перед обновлением» holds the table «Было |
+// Стало» and text; «Новое» holds the cards, each a heading of the second
+// level, an explanation and examples: a block of code alone is one window,
+// blocks under subheadings «Вкладка: <name>» in a row are tabs, two under
+// «Рядом: <caption>» in a row are a pair side by side. «Сообщение в группу»
+// holds the text of the message about the release to the group in
+// Telegram, which the page does not show: subsections of the second level
+// named as the subsections of the journal, each with items «* » that have
+// text; a line goes on with an item only when it is indented and right
+// after it, unlike a list of the journal, so that a line out of an item is
+// told. The pages need no section; the version released needs «Сообщение в
+// группу», which release check and release notice check. The names of the
+// sections and of the subheadings are the format of the file, as the names
+// of the subsections of the journal are.
 const (
 	contentDir    = "releases"
 	sectionBefore = "Перед обновлением"
@@ -97,7 +101,7 @@ func (b block) isText() bool {
 type contentReason int
 
 const (
-	reasonUnknownSection    contentReason = iota + 1 // a section of the first level other than the two
+	reasonUnknownSection    contentReason = iota + 1 // a section of the first level other than the three
 	reasonRepeated                                   // a section twice
 	reasonOutside                                    // text before the first section
 	reasonOutsideCard                                // text in «Новое» before its first card
@@ -117,6 +121,7 @@ const (
 	reasonNoticeMissing                              // no subsection of the text for the group of one of the journal with entries
 	reasonNoticeEmpty                                // a subsection of the text for the group with no items
 	reasonNoticeLong                                 // the message to the group longer than Telegram takes
+	reasonNoticeEmptyItem                            // an item of the text for the group with no text
 )
 
 // The refusals of the content of a page. main.go turns them into words.
@@ -306,9 +311,9 @@ func parseContent(file, text string) (*content, error) {
 // readNotice reads an item of the file in the section «Сообщение в группу»
 // into the content. A subsection is a heading of the second level named as
 // a subsection of the journal; an item is a line that starts with «* » in a
-// subsection, and an indented line right after it goes on with it. Any other
-// text, a block of code or another heading is an error. open tells whether
-// the last item goes on with the next line.
+// subsection, and an indented line right after it goes on with it. An item
+// with no text, any other text, a block of code or another heading is an
+// error. open tells whether the last item goes on with the next line.
 func (c *content) readNotice(it item, open *bool, invalid func(int, contentReason, string) error) error {
 	switch {
 	case it.kind == headingItem && it.level == 2:
@@ -323,8 +328,12 @@ func (c *content) readNotice(it item, open *bool, invalid func(int, contentReaso
 	case it.kind == blankItem:
 		*open = false
 	case it.kind == textItem && len(c.notice) > 0 && strings.HasPrefix(it.text, "* "):
+		text := strings.TrimSpace(it.text[2:])
+		if text == "" {
+			return invalid(it.line, reasonNoticeEmptyItem, "")
+		}
 		s := &c.notice[len(c.notice)-1]
-		s.items, *open = append(s.items, strings.TrimSpace(it.text[2:])), true
+		s.items, *open = append(s.items, text), true
 	case it.kind == textItem && *open && (it.text[0] == ' ' || it.text[0] == '\t'):
 		s := &c.notice[len(c.notice)-1]
 		s.items[len(s.items)-1] += " " + strings.TrimSpace(it.text)

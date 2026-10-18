@@ -61,17 +61,18 @@ func noticeOf(dir string, v version) (string, error) {
 // checkNotice checks the text for the group of the release in the content
 // of its page, the file, against the section of its version in the journal:
 // the content has the section «Сообщение в группу»; each of its subsections
-// is one the section of the journal has and has items; each subsection of
-// the journal with entries has its subsection in the text. The first error
-// in the order of the file is returned, then a missing subsection in the
-// order of the journal.
+// is one the section of the journal has with entries, as the page shows
+// only those, and has items; each subsection of the journal with entries
+// has its subsection in the text. The first error in the order of the file
+// is returned, then a missing subsection in the order of
+// journalSubsections, the order of the page.
 func checkNotice(file string, r release) error {
 	c := r.content
 	if c.notice == nil {
 		return &contentInvalidError{file: file, reason: reasonNoNotice}
 	}
 	for _, s := range c.notice {
-		if !r.section.has(s.title) {
+		if len(r.section.entries[s.title]) == 0 {
 			return &contentInvalidError{file: file, line: s.line, reason: reasonNoticeExtra, subject: s.title}
 		}
 		if len(s.items) == 0 {
@@ -90,7 +91,8 @@ func checkNotice(file string, r release) error {
 // line ended by \n: the title with the version in bold; the phrase about the
 // main thing when the section has one; the mark of the actions on the
 // update when the page has the block «Перед обновлением»; each subsection of
-// the text for the group in the order of the journal, after an empty line:
+// the text for the group in the order of journalSubsections, the order of
+// the page, after an empty line:
 // its heading in bold and a line «• » of each item; after an empty line, the
 // line of the page of the release and its address.
 func noticeMessage(r release) string {
@@ -123,25 +125,44 @@ var telegramEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;"
 func telegramEscape(s string) string { return telegramEscaper.Replace(s) }
 
 // telegramInline returns the HTML of Telegram of a line of the text for the
-// group: the text as written, its signs escaped, with `code` as the element
-// code; a ` with no pair is shown as written.
+// group or of the phrase about the main thing: the text as written, its
+// signs escaped, with `code` as the element code and [text](address) as a
+// link, by the rules of the page (link): a link leads only to an address
+// http:// or https://, another is shown as written, as are a ` with no pair
+// and a [ that starts no link. The text of a link is only escaped: Telegram
+// takes no code in a link.
 func telegramInline(s string) string {
 	var b strings.Builder
-	for {
-		start := strings.IndexByte(s, '`')
-		if start < 0 {
-			break
+	for i := 0; i < len(s); {
+		switch s[i] {
+		case '`':
+			if end := strings.IndexByte(s[i+1:], '`'); end >= 0 {
+				b.WriteString("<code>" + telegramEscape(s[i+1:i+1+end]) + "</code>")
+				i += 1 + end + 1
+				continue
+			}
+		case '[':
+			if text, address, n, ok := link(s[i:]); ok {
+				b.WriteString(`<a href="` + telegramAttribute(address) + `">` + telegramEscape(text) + "</a>")
+				i += n
+				continue
+			}
 		}
-		end := strings.IndexByte(s[start+1:], '`')
+		// The text up to the next sign that may start markup.
+		end := strings.IndexAny(s[i+1:], "`[")
 		if end < 0 {
-			break
+			end = len(s) - i - 1
 		}
-		b.WriteString(telegramEscape(s[:start]))
-		b.WriteString("<code>" + telegramEscape(s[start+1:start+1+end]) + "</code>")
-		s = s[start+1+end+1:]
+		b.WriteString(telegramEscape(s[i : i+1+end]))
+		i += 1 + end
 	}
-	b.WriteString(telegramEscape(s))
 	return b.String()
+}
+
+// telegramAttribute returns the text escaped for a value of an attribute of
+// the HTML of Telegram, in quotes: its signs and the quote.
+func telegramAttribute(s string) string {
+	return strings.ReplaceAll(telegramEscape(s), `"`, "&quot;")
 }
 
 // noticeLength returns the length of the message as Telegram counts it: of

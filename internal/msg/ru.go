@@ -877,6 +877,7 @@ var ru = catalog{
 		ReleaseContentNoticeMissing:     "нет подраздела «%s», который есть в журнале изменений этой версии",
 		ReleaseContentNoticeEmpty:       "в подразделе «%s» нет пунктов",
 		ReleaseContentNoticeLong:        "сообщение в группу длиннее допустимого: %d при пределе %d знаков",
+		ReleaseContentNoticeEmptyItem:   "пункт без текста",
 		ReleaseNoticeDetails:            "Подробности — на странице выпуска:",
 	},
 	plurals: map[Key][]string{

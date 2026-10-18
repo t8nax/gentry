@@ -100,8 +100,9 @@ func check(dir, value string) (string, error) {
 	if _, err := site(dir, append(releasedVersions(tags), v)); err != nil {
 		return "", err
 	}
-	// The message to the group is built after the release is created: a
-	// text for the group missing or written wrong would fail its build.
+	// The message to the group is built in the job that publishes, before
+	// the release is created: a text for the group missing or written wrong
+	// is refused here, before the tests.
 	if _, err := noticeOf(dir, v); err != nil {
 		return "", err
 	}

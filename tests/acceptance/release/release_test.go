@@ -68,13 +68,17 @@ func TestReleaseFirst(t *testing.T) {
 	}
 }
 
+// noChanges is the refusal of a release when main has changed nothing but
+// the texts about the releases since the latest one.
+const noChanges = "После последнего выпуска в main нет изменений, кроме журнала изменений и содержимого страниц выпусков."
+
 // TestReleaseNoChanges checks that the button refuses a release when the
 // latest one is on the head of main.
 func TestReleaseNoChanges(t *testing.T) {
 	r := newRepo(t)
 	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section021, section020)}))
 	r.tag("0.2.0")
-	wantRefusal(t, r.check("0.2.1"), "После последнего выпуска в main нет изменений, кроме журнала изменений.", "Последний выпуск: 0.2.0")
+	wantRefusal(t, r.check("0.2.1"), noChanges, "Последний выпуск: 0.2.0")
 	r.wantTags("v0.2.0")
 }
 
@@ -85,7 +89,29 @@ func TestReleaseOnlyChangelogChanged(t *testing.T) {
 	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section020)}))
 	r.tag("0.2.0")
 	r.commit(map[string]string{changelogFile: changelog(section021, section020)})
-	wantRefusal(t, r.check("0.2.1"), "После последнего выпуска в main нет изменений, кроме журнала изменений.", "Последний выпуск: 0.2.0")
+	wantRefusal(t, r.check("0.2.1"), noChanges, "Последний выпуск: 0.2.0")
+	r.wantTags("v0.2.0")
+}
+
+// TestReleaseOnlyReleaseTextsChanged checks that the button refuses a
+// release when main has changed only the journal and the contents of the
+// pages of the releases, of the new version and of a past one, since the
+// latest one, and passes it after a change of the code.
+func TestReleaseOnlyReleaseTextsChanged(t *testing.T) {
+	r := newRepo(t)
+	first := withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section020)})
+	r.commit(first)
+	r.tag("0.2.0")
+	past := contentDir + "0.2.0.md"
+	r.commit(withContents(map[string]string{
+		changelogFile: changelog(section021, section020),
+		past:          strings.Replace(first[past], "Каталог открывается быстрее.", "Каталог открывается ещё быстрее.", 1),
+	}))
+	wantRefusal(t, r.check("0.2.1"), noChanges, "Последний выпуск: 0.2.0")
+	r.commit(map[string]string{"cart.go": "package cart\n\nconst Limit = 10\n"})
+	if res := r.check("0.2.1"); res.code != 0 {
+		t.Errorf("the checks refused a release with a change of the code: %s", res)
+	}
 	r.wantTags("v0.2.0")
 }
 

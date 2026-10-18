@@ -20,8 +20,8 @@ type (
 	releasedError struct{ version version }
 	// notGreaterError: the version is not greater than the latest release.
 	notGreaterError struct{ version, latest version }
-	// noChangesError: main has changed nothing but the journal since the
-	// latest release.
+	// noChangesError: main has changed nothing but the journal and the
+	// contents of the pages of the releases since the latest release.
 	noChangesError struct{ latest version }
 	// noSectionError: the journal has no section of the version.
 	noSectionError struct{ version version }
@@ -34,7 +34,7 @@ func (e *notGreaterError) Error() string {
 	return "the version " + e.version.String() + " is not greater than the latest release " + e.latest.String()
 }
 func (e *noChangesError) Error() string {
-	return "main has no change but the journal since the release " + e.latest.String()
+	return "main has no change but the journal and the contents of the pages since the release " + e.latest.String()
 }
 func (e *noSectionError) Error() string {
 	return "the journal has no section of the version " + e.version.String()
@@ -48,12 +48,12 @@ const detached = "HEAD"
 // value and returns the text of the release: the version has the form X.Y.Z;
 // the head of main is checked out; there is no tag of the version; the
 // version is greater than the latest release; main has changed more than the
-// journal since it; the journal of the commit of the release has the
-// section of the version; the site of the pages of the released versions
-// and of the new one builds from the commit; the message about the new
-// version to the group builds from it. It returns the section of the
-// version: main.go adds the line with the address of the page of the
-// release to it.
+// journal and the contents of the pages of the releases since it; the
+// journal of the commit of the release has the section of the version; the
+// site of the pages of the released versions and of the new one builds from
+// the commit; the message about the new version to the group builds from it.
+// It returns the section of the version: main.go adds the line with the
+// address of the page of the release to it.
 func check(dir, value string) (string, error) {
 	v, ok := parseVersion(value)
 	if !ok {
@@ -109,16 +109,30 @@ func check(dir, value string) (string, error) {
 }
 
 // changedSince reports whether HEAD changes a file other than the journal
-// against the commit of the tag.
+// and the contents of the pages of the releases against the commit of the
+// tag: these are texts about the releases, and a release of them alone would
+// publish the same programs again.
 func changedSince(dir, tag string) (bool, error) {
 	out, err := git.Run(dir, git.Opts{}, "diff", "--name-only", "--no-renames", tag, "HEAD", "--")
 	if err != nil {
 		return false, err
 	}
 	for _, name := range strings.Split(strings.TrimSpace(out), "\n") {
-		if name != "" && name != changelogFile {
+		if name != "" && !releaseTextFile(name) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+// releaseTextFile reports whether the file, a path apart by / from the root
+// of the repository, is a text about the releases: the journal or a content
+// of a page of a release, a file .md right in the folder releases, as the
+// program reads them.
+func releaseTextFile(name string) bool {
+	if name == changelogFile {
+		return true
+	}
+	file, ok := strings.CutPrefix(name, contentDir+"/")
+	return ok && !strings.Contains(file, "/") && strings.HasSuffix(file, ".md")
 }

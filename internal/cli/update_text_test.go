@@ -120,6 +120,24 @@ func TestUpdateText(t *testing.T) {
 		x := updateExtra{connected: len(tt.out.Integrations) > 0}
 		wantText(t, tt.name, func(p *page) { updateText(p, tt.out, x) }, tt.cli, tt.agent)
 	}
+	// The rule of permission setup could not read or write, with the plugin
+	// disabled: the lines of setup in the block of the versions, its hints
+	// last.
+	for permission, line := range map[string]msg.Key{claude.PermissionFailed: msg.SetupPermissionFailed, claude.PermissionUnwritten: msg.SetupPermissionUnwritten} {
+		denied := plugin(claude.Updated, false)
+		denied.Permission = &permission
+		wantText(t, "permission "+permission, func(p *page) { updateText(p, updated("0.1.0", denied), updateExtra{connected: true}) }, lines(
+			msg.Text(msg.UpdateUpdated, "0.1.0", "0.3.0"),
+			msg.Text(msg.UpdateNewSessions),
+			msg.Text(line),
+			msg.Text(msg.SetupDisabled),
+			"",
+			msg.Text(msg.ReleasePageLink, link),
+			"",
+			msg.Text(msg.HintPluginEnable),
+			msg.Text(msg.HintSetupPermission, claude.PermissionRule),
+		), "")
+	}
 	// An integration that could not be built anew is connected all the same:
 	// its failure is told after the result.
 	wantText(t, "integration failed", func(p *page) { updateText(p, updated("0.1.0"), updateExtra{connected: true}) }, lines(

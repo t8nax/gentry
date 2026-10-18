@@ -405,9 +405,26 @@ func updateText(p *page, out contract.UpdateOutput, x updateExtra) {
 	if !x.connected {
 		fmt.Fprintln(p, msg.Text(msg.UpdateNoIntegrations))
 	}
+	// What setup tells the operator to do by hand is told as setup tells
+	// it: the rule of permission it could not write, the plugin disabled.
+	permission := ""
+	for _, s := range out.Integrations {
+		if s.Permission != nil && (*s.Permission == claude.PermissionFailed || *s.Permission == claude.PermissionUnwritten) {
+			permission = *s.Permission
+		}
+	}
+	switch permission {
+	case claude.PermissionFailed:
+		fmt.Fprintln(p, msg.Text(msg.SetupPermissionFailed))
+	case claude.PermissionUnwritten:
+		fmt.Fprintln(p, msg.Text(msg.SetupPermissionUnwritten))
+	}
 	if slices.ContainsFunc(out.Integrations, func(s contract.SetupOutput) bool { return !s.Enabled }) {
 		fmt.Fprintln(p, msg.Text(msg.SetupDisabled))
 		hints = append(hints, hintOf(msg.HintPluginEnable))
+	}
+	if permission != "" {
+		hints = append(hints, hintOf(msg.HintSetupPermission, claude.PermissionRule))
 	}
 
 	var conflicts []contract.AgentsConflict

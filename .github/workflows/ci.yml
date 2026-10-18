@@ -89,9 +89,29 @@ jobs:
           path: ${{ steps.go-cache.outputs.paths }}
           key: ${{ steps.go-cache.outputs.key }}
 
+      # The unit and integration tests: every package of the module but those
+      # under tests, which run in the jobs of their suites, in short mode. A
+      # new package of the code, such as contract outside cmd and internal,
+      # runs here with no change of the workflow.
+      - name: unit tests
+        if: matrix.suite == 'unit'
+        run: |
+          packages=$(go list ./... | grep -v '/tests/')
+          # shellcheck disable=SC2086 # a word per package
+          go test -short $packages
+
+      - uses: actions/cache/save@v6
+        if: matrix.suite == 'unit' && steps.go-cache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.go-cache.outputs.paths }}
+          key: ${{ steps.go-cache.outputs.key }}
+
       # The checks that are not tests run in the jobs with checks: the format
       # and the generated code do not depend on the OS and are checked on
-      # Linux only, go vet, the build and the smoke test on each OS.
+      # Linux only, go vet, the build and the smoke test on each OS. In the
+      # job of macOS they come after the unit tests: go vet before them would
+      # build their packages first, and the time of the suite there would not
+      # compare with that on the other OS.
       - name: gofmt
         if: matrix.checks && runner.os == 'Linux'
         run: |
@@ -120,23 +140,6 @@ jobs:
         run: |
           go vet ./...
           go vet -tags acceptance ./cmd/gentry
-
-      # The unit and integration tests: every package of the module but those
-      # under tests, which run in the jobs of their suites, in short mode. A
-      # new package of the code, such as contract outside cmd and internal,
-      # runs here with no change of the workflow.
-      - name: unit tests
-        if: matrix.suite == 'unit'
-        run: |
-          packages=$(go list ./... | grep -v '/tests/')
-          # shellcheck disable=SC2086 # a word per package
-          go test -short $packages
-
-      - uses: actions/cache/save@v6
-        if: matrix.suite == 'unit' && steps.go-cache-restore.outputs.cache-hit != 'true'
-        with:
-          path: ${{ steps.go-cache.outputs.paths }}
-          key: ${{ steps.go-cache.outputs.key }}
 
       - name: architecture tests
         if: matrix.suite == 'architecture'

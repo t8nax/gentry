@@ -130,8 +130,9 @@ func build(dir, value, out string) (err error) {
 	return nil
 }
 
-// makeFolder makes the folder of the release, or takes an empty one, and
-// reports whether it made it.
+// makeFolder makes the folder of a build, of the files of a release or of
+// the site of the pages, or takes an empty one, and reports whether it made
+// it.
 func makeFolder(out string) (made bool, err error) {
 	entries, err := os.ReadDir(out)
 	switch {
@@ -140,13 +141,13 @@ func makeFolder(out string) (made bool, err error) {
 	case err != nil:
 		return false, err
 	case len(entries) > 0:
-		return false, fmt.Errorf("the folder of the release %s is not empty", out)
+		return false, fmt.Errorf("the folder %s is not empty", out)
 	}
 	return false, nil
 }
 
-// clean removes the files of the release from the folder out, and the
-// folder if the build made it.
+// clean removes the files of a build from the folder out, and the folder if
+// the build made it.
 func clean(out string, made bool) {
 	if made {
 		os.RemoveAll(out)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/t8nax/gentry/internal/git"
@@ -50,27 +49,26 @@ const detached = "HEAD"
 // the head of main is checked out; there is no tag of the version; the
 // version is greater than the latest release; main has changed more than the
 // journal since it; the journal of the commit of the release has the
-// section of the version.
+// section of the version; the site of the pages of the released versions
+// and of the new one builds from the commit. It returns the section of the
+// version: main.go adds the line with the address of the page of the
+// release to it.
 func check(dir, value string) (string, error) {
 	v, ok := parseVersion(value)
 	if !ok {
 		return "", &versionFormatError{value: value}
 	}
-	branch, err := git.Branch(dir)
+	branch, err := headBranch(dir)
 	if err != nil {
 		return "", err
-	}
-	if branch == "" {
-		branch = detached
 	}
 	if branch != releaseBranch {
 		return "", &notMainError{branch: branch}
 	}
-	out, err := git.Run(dir, git.Opts{}, "tag", "--list")
+	tags, err := tagList(dir)
 	if err != nil {
 		return "", err
 	}
-	tags := strings.Fields(out)
 	for _, tag := range tags {
 		if tag == tagPrefix+v.String() {
 			return "", &releasedError{version: v}
@@ -88,16 +86,18 @@ func check(dir, value string) (string, error) {
 			return "", &noChangesError{latest: latest}
 		}
 	}
-	journal, err := git.Run(dir, git.Opts{}, "show", "HEAD:"+changelogFile)
-	var ce *git.CommandError
-	if errors.As(err, &ce) {
-		journal = "" // no journal in the commit: no section either
-	} else if err != nil {
+	journal, err := headFile(dir, changelogFile)
+	if err != nil {
 		return "", err
 	}
 	text, ok := notes(journal, v)
 	if !ok {
 		return "", &noSectionError{version: v}
+	}
+	// The site is published whole: a content of a page of a past release
+	// written wrong would fail the publication after the release.
+	if _, err := site(dir, append(releasedVersions(tags), v)); err != nil {
+		return "", err
 	}
 	return text, nil
 }

@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# The steps of the workflow Release source this file to run the program of
-# release as release <command> <arguments>:
+# The steps of the workflows Release and Publish pages source this file to
+# run the program of release as release <command> <arguments>:
 #
 #   . .github/release.sh
 #   release check "$VERSION" > "$RUNNER_TEMP/notes.md"

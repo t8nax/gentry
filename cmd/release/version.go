@@ -51,18 +51,26 @@ func (v version) String() string {
 // tagPrefix makes the tag of a release of its version.
 const tagPrefix = "v"
 
-// latestRelease returns the greatest version among the tags of the releases,
-// v<version>; other tags are not releases. ok is false when there is none.
-func latestRelease(tags []string) (latest version, ok bool) {
+// releasedVersions returns the versions of the tags of the releases,
+// v<version>, in the order of the tags; other tags are not releases.
+func releasedVersions(tags []string) []version {
+	var out []version
 	for _, tag := range tags {
 		s, found := strings.CutPrefix(tag, tagPrefix)
 		if !found {
 			continue
 		}
-		v, valid := parseVersion(s)
-		if !valid {
-			continue
+		if v, valid := parseVersion(s); valid {
+			out = append(out, v)
 		}
+	}
+	return out
+}
+
+// latestRelease returns the greatest version among the tags of the releases,
+// v<version>; other tags are not releases. ok is false when there is none.
+func latestRelease(tags []string) (latest version, ok bool) {
+	for _, v := range releasedVersions(tags) {
 		if !ok || v.compare(latest) > 0 {
 			latest, ok = v, true
 		}

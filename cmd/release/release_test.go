@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/t8nax/gentry/internal/msg"
 )
 
 func TestParseVersion(t *testing.T) {
@@ -111,10 +115,86 @@ func TestRefusal(t *testing.T) {
 // TestRunUsage checks that a wrong command line exits with code 2 and the
 // usage.
 func TestRunUsage(t *testing.T) {
-	for _, args := range [][]string{nil, {"check"}, {"build", "0.1.0"}, {"publish", "0.1.0"}} {
+	for _, args := range [][]string{nil, {"check"}, {"build", "0.1.0"}, {"publish", "0.1.0"}, {"pages"}, {"pages", "a", "b"}} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code != 2 || stderr.String() != usage || stdout.Len() != 0 {
 			t.Errorf("run(%q) = %d, stdout %q, stderr %q; want 2 and the usage", args, code, stdout.String(), stderr.String())
+		}
+	}
+}
+
+// TestReadSection checks the reading of the section of a version for its
+// page: the date, the phrase about the main thing, the entries of the
+// subsections, an entry on two lines.
+func TestReadSection(t *testing.T) {
+	journal := "# Журнал изменений\n\n## Не выпущено\n\n" +
+		"## 0.4.0 — 2026-11-02\n\nКорзина сохраняется\nпосле входа.\n\nВторой абзац.\n\n" +
+		"### Несовместимые изменения\n\n### Новое\n* Добавлен список\n  желаний.\n* Добавлена оплата.\nпродолжение без отступа\n\n" +
+		"### Изменено\n* Корзина\nсохраняется.\n\n  отступ после пустой строки\n" +
+		"## 0.3.0 — 2026-10-20\n\n### Исправлено\n* Исправлен поиск.\n"
+	s, ok := readSection(journal, version{0, 4, 0})
+	want := journalSection{
+		date:   "2026-11-02",
+		phrase: "Корзина сохраняется после входа.",
+		entries: map[string][]string{
+			journalBreaking: {},
+			journalNew:      {"Добавлен список желаний.", "Добавлена оплата. продолжение без отступа"},
+			journalChanged:  {"Корзина сохраняется."},
+		},
+	}
+	if !ok || !reflect.DeepEqual(s, want) {
+		t.Errorf("readSection = %+v, %v; want %+v", s, ok, want)
+	}
+	if !s.has(journalBreaking) || s.has(journalFixed) {
+		t.Errorf("has: breaking %v, fixed %v; want true, false", s.has(journalBreaking), s.has(journalFixed))
+	}
+	s, ok = readSection(journal, version{0, 3, 0})
+	if !ok || s.phrase != "" || !reflect.DeepEqual(s.entries, map[string][]string{journalFixed: {"Исправлен поиск."}}) {
+		t.Errorf("readSection of a section with no phrase = %+v, %v", s, ok)
+	}
+	if _, ok := readSection(journal, version{0, 2, 0}); ok {
+		t.Error("readSection found a section of a version with none")
+	}
+}
+
+// TestReleaseText checks the text of a release: the section, an empty line
+// and the line with the address of the page; with no section, the line
+// alone.
+func TestReleaseText(t *testing.T) {
+	link := msg.Text(msg.ReleasePageLink, "https://t8nax.github.io/gentry/0.3.0/") + "\n"
+	if got, want := releaseText("Корзина.\n", version{0, 3, 0}), "Корзина.\n\n"+link; got != want {
+		t.Errorf("releaseText = %q, want %q", got, want)
+	}
+	if got := releaseText("", version{0, 3, 0}); got != link {
+		t.Errorf("releaseText of an empty section = %q, want %q", got, link)
+	}
+}
+
+// TestContentRefusal checks the refusal of a content written wrong: the
+// line only when the error is of one, and the sections and the subheadings
+// a content may have after the errors of an unknown one.
+func TestContentRefusal(t *testing.T) {
+	file := msg.Text(msg.ReleaseContentInvalid, "releases/0.4.0.md")
+	for _, tc := range []struct {
+		err  contentInvalidError
+		want []string
+	}{
+		{contentInvalidError{line: 1, reason: reasonUnknownSection, subject: "Скидки"}, []string{
+			file, msg.Text(msg.ReleaseContentLine, 1),
+			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentUnknownSection, "Скидки")), msg.Text(msg.ReleaseContentSections),
+		}},
+		{contentInvalidError{line: 14, reason: reasonUnknownSubheading, subject: "Пример"}, []string{
+			file, msg.Text(msg.ReleaseContentLine, 14),
+			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentUnknownSubheading, "Пример")), msg.Text(msg.ReleaseContentSubheadings),
+		}},
+		{contentInvalidError{line: 12, reason: reasonOutsideCard}, []string{
+			file, msg.Text(msg.ReleaseContentLine, 12), msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentOutsideCard)),
+		}},
+		{contentInvalidError{reason: reasonNoNew}, []string{file, msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoNew))}},
+	} {
+		tc.err.file = "releases/0.4.0.md"
+		if got, want := refusal(fmt.Errorf("site: %w", &tc.err)), strings.Join(tc.want, "\n"); got != want {
+			t.Errorf("refusal of %+v:\n%s\nwant:\n%s", tc.err, got, want)
 		}
 	}
 }

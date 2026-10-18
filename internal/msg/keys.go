@@ -898,3 +898,31 @@ const (
 	ReleaseMonthNovember            Key = "release.month_november"
 	ReleaseMonthDecember            Key = "release.month_december"
 )
+
+// Keys of gentry update.
+const (
+	CmdUpdateSummary      Key = "cmd.update.summary"
+	CmdUpdateDesc         Key = "cmd.update.desc"
+	UpdateUpdated         Key = "update.updated"
+	UpdateNewSessions     Key = "update.new_sessions"
+	UpdateCurrent         Key = "update.current"
+	UpdateNoIntegrations  Key = "update.no_integrations"
+	UpdateBreaking        Key = "update.breaking"
+	UpdateChangelogFailed Key = "update.changelog_failed"
+	HintUpdateSetup       Key = "hint.update_setup"
+	ErrProgramElsewhere   Key = "err.program_elsewhere"
+	UpdateNotInstalled    Key = "update.not_installed"
+	HintUpdateProgram     Key = "hint.update_program"
+	HintInstallGentry     Key = "hint.install_gentry"
+	ErrNotRelease         Key = "err.not_release"
+	HintInstallRelease    Key = "hint.install_release"
+	ErrNewerThanRelease   Key = "err.newer_than_release"
+	ErrReleaseNotFound    Key = "err.release_not_found"
+	UpdateLatest          Key = "update.latest"
+	HintReleases          Key = "hint.releases"
+	ErrDownloadFailed     Key = "err.download_failed"
+	ErrChecksumMismatch   Key = "err.checksum_mismatch"
+	ErrProgramWrite       Key = "err.program_write"
+	ErrIntegrationFailed  Key = "err.integration_failed"
+	HintIntegrationSetup  Key = "hint.integration_setup"
+)

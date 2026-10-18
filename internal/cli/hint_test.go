@@ -50,6 +50,10 @@ func TestHintChannels(t *testing.T) {
 			hintLineOf(msg.HintIntroPluginStale, "/home/anna/.gentry/bin/gentry setup claude"), hintLineOf(msg.HintIntroPluginStale, "/home/anna/.gentry/bin/gentry setup claude")},
 		{hintOf(msg.HintIntroPluginStale).set("tool", "claude").by("/home/anna/Gentry data/bin/gentry"),
 			hintLineOf(msg.HintIntroPluginStale, `"/home/anna/Gentry data/bin/gentry" setup claude`), hintLineOf(msg.HintIntroPluginStale, `"/home/anna/Gentry data/bin/gentry" setup claude`)},
+		// A command of the command line only has no tool.
+		{hintOf(msg.HintIntegrationSetup).set("tool", "claude"), hintLineOf(msg.HintIntegrationSetup, "gentry setup claude"), ""},
+		{hintOf(msg.HintAgentsDeployFailed).forProject("shop"),
+			hintLineOf(msg.HintAgentsDeployFailed, "gentry agents deploy --project shop"), hintLineOf(msg.HintAgentsDeployFailed, "agents_deploy (project: shop)")},
 	} {
 		for _, ch := range []struct {
 			channel channel
@@ -214,6 +218,12 @@ func TestHintText(t *testing.T) {
 		{msg.HintAgentsConflict, nil, "Необходимо переименовать субагента во флоу или удалить файл из рабочей копии, затем повторить команду."},
 		{msg.HintAgentsConflictWarning, nil, "Разложить субагентов после разбора файлов"},
 		{msg.HintAgentsDeployFailed, nil, "Повторить раскладку"},
+		{msg.HintUpdateSetup, nil, "Подключить ИИ-инструмент"},
+		{msg.HintUpdateProgram, nil, "Обновить программу из папки данных"},
+		{msg.HintIntegrationSetup, nil, "Пересоздать интеграцию"},
+		{msg.HintInstallGentry, []any{"curl -fsSL https://github.com/t8nax/gentry/releases/latest/download/install.sh | sh"}, "Установить Gentry: curl -fsSL https://github.com/t8nax/gentry/releases/latest/download/install.sh | sh"},
+		{msg.HintInstallRelease, []any{"irm https://github.com/t8nax/gentry/releases/latest/download/install.ps1 | iex"}, "Поставить выпуск скриптом установки: irm https://github.com/t8nax/gentry/releases/latest/download/install.ps1 | iex"},
+		{msg.HintReleases, []any{"https://github.com/t8nax/gentry/releases"}, "Посмотреть выпуски: https://github.com/t8nax/gentry/releases"},
 		{msg.HintHookEvents, []any{"session-start"}, "Допустимые значения: session-start"},
 		{msg.HintSetupPermission, []any{"mcp__plugin_gentry_gentry"}, "Разрешить инструменты вручную: правило mcp__plugin_gentry_gentry в permissions.allow"},
 		{msg.HintToolNotFound, []any{"Claude Code"}, "Установите Claude Code и повторите"},

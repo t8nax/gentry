@@ -142,6 +142,33 @@ func Register(program, dir, version string) (Result, error) {
 	return Result{Action: Installed, Enabled: !disabled}, nil
 }
 
+// Current reports whether Claude Code serves the plugin of the version
+// from dir already, nothing written or run but the lists of Claude Code: the
+// plugin files in dir have the version, the marketplace of Gentry is dir,
+// and the plugin installed for the user has the version. With ok the result
+// is Unchanged and tells whether the plugin is enabled.
+func Current(program, dir, version string) (Result, bool, error) {
+	b, err := os.ReadFile(filepath.Join(dir, integration.Name, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		return Result{}, false, nil
+	}
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(b, &manifest) != nil || manifest.Version != version {
+		return Result{}, false, nil
+	}
+	registered, err := Registered(program)
+	if err != nil || registered == "" || !SamePath(registered, dir) {
+		return Result{}, false, err
+	}
+	p, found, err := (cli{program: program}).plugin(integration.Name + "@" + integration.Name)
+	if err != nil || !found || p.Version != version {
+		return Result{}, false, err
+	}
+	return Result{Action: Unchanged, Enabled: p.Enabled}, true, nil
+}
+
 // SamePath tells whether two paths name one directory: equal after cleaning,
 // case-insensitively on Windows, or one directory reached by different
 // paths, such as through a symbolic link or a short name.

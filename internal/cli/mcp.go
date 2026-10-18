@@ -29,7 +29,7 @@ import (
 // the agent, the panel and the help, or install and maintain Gentry, which is
 // the decision of the operator. The agent runs those in a shell when the
 // operator asks it to.
-var serviceCommands = []string{"help", "hook", "events", "mcp", "version", "setup"}
+var serviceCommands = []string{"help", "hook", "events", "mcp", "version", "setup", "update"}
 
 // toolDescs are the descriptions of tools that differ from the help of their
 // commands: the help names flags.

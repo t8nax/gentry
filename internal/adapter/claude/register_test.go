@@ -142,6 +142,35 @@ func TestRegisterMovedKeepsDisabled(t *testing.T) {
 	}
 }
 
+// TestCurrent checks that Current tells the plugin Claude Code serves from
+// the directory with the version, and only reads the lists of Claude Code.
+func TestCurrent(t *testing.T) {
+	program, log := fake(t)
+	dir := filepath.Join(t.TempDir(), "claude")
+	v1 := plugin(t, dir, "0.1.0")
+	if _, ok, err := Current(program, dir, v1); ok || err != nil {
+		t.Errorf("a plugin not registered is current: %v, %v", ok, err)
+	}
+	register(t, program, dir, v1)
+	n := len(log())
+	if r, ok, err := Current(program, dir, v1); !ok || err != nil || r != (Result{Unchanged, true}) {
+		t.Errorf("the plugin registered: %+v, %v, %v; want unchanged and enabled", r, ok, err)
+	}
+	if got, want := log()[n:], []string{"plugin marketplace list --json", "plugin list --json"}; !slices.Equal(got, want) {
+		t.Errorf("Current ran:\n%s\nwant the lists only:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// The files of another version, and Claude Code serving another one.
+	v2 := plugin(t, dir, "0.2.0")
+	for _, v := range []string{v1, v2} {
+		if _, ok, err := Current(program, dir, v); ok || err != nil {
+			t.Errorf("the plugin %s with the files of %s and %s installed is current: %v", v, v2, v1, err)
+		}
+	}
+	if _, ok, _ := Current(program, filepath.Join(t.TempDir(), "claude"), v2); ok {
+		t.Error("a plugin of another directory is current")
+	}
+}
+
 func TestSamePathLink(t *testing.T) {
 	dir := t.TempDir()
 	link := filepath.Join(t.TempDir(), "link")

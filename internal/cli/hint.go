@@ -46,6 +46,9 @@ var hintSpecs = map[msg.Key]hint{
 	msg.HintPluginElsewhere:       {cmd: "setup", params: []param{arg("tool"), flag("switch")}},
 	msg.HintToolNotFound:          {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintIntroPluginStale:      {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintUpdateSetup:           {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintIntegrationSetup:      {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintUpdateProgram:         {cmd: "update"},
 	msg.HintProjectUnpooled:       {cmd: "worktree add", params: []param{arg("path")}},
 	msg.HintProjectClone:          {cmd: "worktree add", params: []param{flag("project")}},
 	msg.HintProjectNotFound:       {cmd: "project list"},
@@ -146,6 +149,12 @@ func (h hint) set(field, v string) hint {
 // of the command line, which the agent has no tool of.
 func (h hint) by(program string) hint {
 	h.program = program
+	return h
+}
+
+// forProject names the project id in the command of h by --project.
+func (h hint) forProject(id string) hint {
+	h.params = append(h.params, param{field: "project", flag: true, value: id})
 	return h
 }
 

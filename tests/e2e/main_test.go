@@ -3,7 +3,7 @@
 // boundary shows: commands of several processes at once, the MCP server, the
 // hooks and their budget, the startup time and the end of the commands of
 // checks of a stage. Short mode skips the whole package before it builds
-// gentry: CI runs it apart, in full.
+// gentry: CI runs it in full, in a job of its own.
 package e2e
 
 import (

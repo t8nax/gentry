@@ -96,6 +96,22 @@ const content040New = "# Новое\n" +
 	"+ Товар SKU-7 отложен в список желаний.\n" +
 	"```\n"
 
+// notice040 is the section «Сообщение в группу» of the content of 0.4.0:
+// the text for the group of each subsection of its section in the journal.
+const notice040 = "# Сообщение в группу\n" +
+	"\n" +
+	"## Несовместимые изменения\n" +
+	"* Скидки старого формата нужно задать заново в разделе «Акции».\n" +
+	"\n" +
+	"## Новое\n" +
+	"* Оплата заказа частями.\n" +
+	"\n" +
+	"## Изменено\n" +
+	"* Корзина сохраняется после входа.\n" +
+	"\n" +
+	"## Исправлено\n" +
+	"* Поиск находит товары по артикулу с дефисом.\n"
+
 // The words of the pages.
 const (
 	badge          = "Требует действий при обновлении"
@@ -112,13 +128,13 @@ const (
 )
 
 // shopFiles returns the journal of the shop and the contents of the pages of
-// 0.3.0 and 0.4.0, with the files changed by the given ones; an empty text
-// removes a file.
+// 0.3.0 and 0.4.0, that of 0.4.0 with the text for the group, with the files
+// changed by the given ones; an empty text removes a file.
 func shopFiles(changed map[string]string) map[string]string {
 	files := map[string]string{
 		changelogFile:           shopJournal,
 		contentDir + "0.3.0.md": content,
-		contentDir + "0.4.0.md": content040,
+		contentDir + "0.4.0.md": content040 + "\n" + notice040,
 	}
 	maps.Copy(files, changed)
 	for name, text := range files {
@@ -917,8 +933,8 @@ func TestPageBeforeUpdateParagraphs(t *testing.T) {
 func TestPagesPastInvalid(t *testing.T) {
 	r := shopRepo(t, shopFiles(map[string]string{contentDir + "0.3.0.md": brokenContent()}), "0.3.0", "0.4.0")
 	_, res := r.pages()
-	wantRefusal(t, res, badContent, "Файл: releases/0.3.0.md", "Строка: 1",
-		"Ошибка: неизвестный раздел «Скидки»", "Допустимые разделы:", "  Перед обновлением", "  Новое")
+	wantRefusal(t, res, append([]string{badContent, "Файл: releases/0.3.0.md", "Строка: 1",
+		"Ошибка: неизвестный раздел «Скидки»"}, allowedSections...)...)
 }
 
 // TestPagesPastMissing checks that the build refuses when a past release

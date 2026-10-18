@@ -19,6 +19,11 @@ const (
 	journalSecurity = changelog.Security
 )
 
+// journalSubsections are the subsections of a section of a version that the
+// page of the release shows, in the order the page and the message to the
+// group show them.
+var journalSubsections = []string{journalBreaking, journalNew, journalChanged, journalFixed, journalSecurity}
+
 // notes returns the text of the release of the version: the lines of its
 // section in the journal, each ended by \n. ok is false when the journal has
 // no section of the version.

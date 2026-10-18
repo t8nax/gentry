@@ -28,6 +28,7 @@ type workflow struct {
 	On          any            `yaml:"on"`
 	Permissions any            `yaml:"permissions"`
 	Concurrency any            `yaml:"concurrency"`
+	Env         any            `yaml:"env"`
 	Jobs        map[string]job `yaml:"jobs"`
 }
 
@@ -38,6 +39,9 @@ type job struct {
 	ContinueOnError any    `yaml:"continue-on-error"`
 	Permissions     any    `yaml:"permissions"`
 	Concurrency     any    `yaml:"concurrency"`
+	Env             any    `yaml:"env"`
+	With            any    `yaml:"with"`
+	Secrets         any    `yaml:"secrets"`
 	Steps           []step `yaml:"steps"`
 }
 
@@ -45,8 +49,11 @@ type step struct {
 	Name            string `yaml:"name"`
 	Uses            string `yaml:"uses"`
 	Run             string `yaml:"run"`
+	Shell           string `yaml:"shell"`
 	If              any    `yaml:"if"`
 	ContinueOnError any    `yaml:"continue-on-error"`
+	Env             any    `yaml:"env"`
+	With            any    `yaml:"with"`
 }
 
 // readWorkflow reads a workflow of the module.

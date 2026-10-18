@@ -183,7 +183,8 @@ func section(version, date, phrase string, entries ...string) string {
 }
 
 // fixes returns the section of a version with only the section
-// «Исправлено»: such a release needs no content of its page.
+// «Исправлено»: the content of the page of such a release needs only the
+// text for the group.
 func fixes(version, date, phrase string, entries ...string) string {
 	s := "## " + version + " — " + date + "\n\n" + phrase + "\n\n### Исправлено\n"
 	for _, e := range entries {
@@ -214,10 +215,12 @@ const content = "# Новое\n\n## Каталог\n\nКаталог откры�
 var sectionVersion = regexp.MustCompile(`(?m)^## (\d+\.\d+\.\d+) — \d{4}-\d{2}-\d{2}$`)
 
 // withContents adds to the files a right content of the page of each
-// version whose section in the journal of the files has «Новое» or
-// «Несовместимые изменения» and that the files give no content of. A
-// release needs the content of its page then, and the checks of the button
-// check the pages of all the released versions.
+// version of the journal of the files that the files give no content of:
+// the content content when its section has «Новое» or «Несовместимые
+// изменения», and the text for the group of each subsection of the section,
+// its entries as they are. A release needs the content of its page with the
+// text for the group, and the checks of the button check the pages of all
+// the released versions.
 func withContents(files map[string]string) map[string]string {
 	journal := files[changelogFile]
 	out := map[string]string{}
@@ -231,15 +234,33 @@ func withContents(files map[string]string) map[string]string {
 			end = at[i+1][0]
 		}
 		body := journal[m[1]:end]
-		if !strings.Contains(body, "\n### Новое\n") && !strings.Contains(body, "\n### Несовместимые изменения\n") {
+		name := contentDir + journal[m[2]:m[3]] + ".md"
+		if _, ok := out[name]; ok {
 			continue
 		}
-		name := contentDir + journal[m[2]:m[3]] + ".md"
-		if _, ok := out[name]; !ok {
-			out[name] = content
+		text := ""
+		if strings.Contains(body, "\n### Новое\n") || strings.Contains(body, "\n### Несовместимые изменения\n") {
+			text = content + "\n"
 		}
+		out[name] = text + noticeOf(body)
 	}
 	return out
+}
+
+// noticeOf returns the section «Сообщение в группу» of the content of the
+// page of a version: a subsection of each subsection of its section in the
+// journal, the body, with its entries as they are.
+func noticeOf(body string) string {
+	s := "# Сообщение в группу\n"
+	for _, l := range strings.Split(body, "\n") {
+		switch {
+		case strings.HasPrefix(l, "### "):
+			s += "\n## " + strings.TrimPrefix(l, "### ") + "\n"
+		case strings.HasPrefix(l, "* "):
+			s += l + "\n"
+		}
+	}
+	return s
 }
 
 // released makes a repository on main with the release last tagged and a

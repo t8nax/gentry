@@ -1,0 +1,51 @@
+# Go of go.mod with the cache of Go restored: the modules and the build
+# cache. setup-go runs with no cache of its own, which every job would save,
+# and the cache is only restored here; the workflow saves it from one job,
+# with the outputs paths and key. The paths and the key are those that
+# setup-go makes (src/cache-restore.ts and src/cache-utils.ts of
+# actions/setup-go), so that the caches it has saved still serve: the
+# version of an entry of the cache is a hash of its paths, in their order.
+name: Go
+description: Sets up the Go of go.mod and restores the cache of Go.
+
+outputs:
+  paths:
+    description: The paths of the cache, GOMODCACHE and GOCACHE, one a line.
+    value: ${{ steps.cache.outputs.paths }}
+  key:
+    description: The key of the cache.
+    value: ${{ steps.cache.outputs.key }}
+  cache-hit:
+    description: Whether the key had an exact match.
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      id: go
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - id: cache
+      shell: bash
+      env:
+        GO_VERSION: ${{ steps.go.outputs.go-version }}
+        GO_MOD_HASH: ${{ hashFiles('go.mod') }}
+      run: |
+        {
+          echo "paths<<EOF"
+          go env GOMODCACHE GOCACHE
+          echo EOF
+        } >> "$GITHUB_OUTPUT"
+        arch=$(echo "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')
+        image=""
+        if [ "$RUNNER_OS" = Linux ]; then image="$ImageOS-"; fi
+        echo "key=setup-go-$RUNNER_OS-$arch-${image}go-$GO_VERSION-$GO_MOD_HASH" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache/restore@v6
+      id: restore
+      with:
+        path: ${{ steps.cache.outputs.paths }}
+        key: ${{ steps.cache.outputs.key }}

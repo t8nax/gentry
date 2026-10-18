@@ -53,12 +53,6 @@ jobs:
         with:
           fetch-depth: 0  # tags give the version Go stamps into the binary
 
-      - uses: actions/setup-go@v7
-        id: go
-        with:
-          go-version-file: go.mod
-          cache: false
-
       # The jobs of one OS share the cache of Go: the modules and the build
       # cache. Saved by setup-go, it would be saved by the job that ends
       # first, an almost empty one such as the architecture tests, and every
@@ -66,29 +60,9 @@ jobs:
       # restores it, and the job of the acceptance tests saves it: it builds
       # the dependencies of its OS, sqlite among them, as the unit tests do,
       # and on Linux the builds of gentry for the six platforms of the area
-      # release too. The paths and the key are those of setup-go, so that the
-      # caches it has saved still serve.
-      - name: cache of Go
-        id: go-cache
-        env:
-          GO_VERSION: ${{ steps.go.outputs.go-version }}
-          GO_MOD_HASH: ${{ hashFiles('go.mod') }}
-        run: |
-          {
-            echo "paths<<EOF"
-            go env GOMODCACHE GOCACHE
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
-          arch=$(echo "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')
-          image=""
-          if [ "$RUNNER_OS" = Linux ]; then image="$ImageOS-"; fi
-          echo "key=setup-go-$RUNNER_OS-$arch-${image}go-$GO_VERSION-$GO_MOD_HASH" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache/restore@v6
-        id: go-cache-restore
-        with:
-          path: ${{ steps.go-cache.outputs.paths }}
-          key: ${{ steps.go-cache.outputs.key }}
+      # release too.
+      - uses: ./.github/actions/go
+        id: go
 
       # The unit and integration tests: every package of the module but those
       # under tests, which run in the jobs of their suites, in short mode. A
@@ -171,13 +145,13 @@ jobs:
             go test -count=1 ./tests/acceptance/install
           fi
 
-      # What the jobs build does not depend on the result of the tests: the
+      # What the job builds does not depend on the result of the tests: the
       # cache is saved when they fail too.
       - uses: actions/cache/save@v6
-        if: "!cancelled() && matrix.suite == 'acceptance' && steps.go-cache-restore.outputs.cache-hit != 'true'"
+        if: "!cancelled() && matrix.suite == 'acceptance' && steps.go.outputs.cache-hit != 'true'"
         with:
-          path: ${{ steps.go-cache.outputs.paths }}
-          key: ${{ steps.go-cache.outputs.key }}
+          path: ${{ steps.go.outputs.paths }}
+          key: ${{ steps.go.outputs.key }}
 
       # Runs the tests of tests/e2e in full (concurrent processes, the MCP
       # server, the hooks and their budget, startup time, the end of the
@@ -226,10 +200,9 @@ jobs:
         with:
           fetch-depth: 0  # tags give the version Go stamps into the binary
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.mod
+      # Restores the cache of Go and does not save it: the key is that of the
+      # jobs of the tests on Linux, which save it with what they build.
+      - uses: ./.github/actions/go
 
       - name: cross-build
         env:

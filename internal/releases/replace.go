@@ -147,8 +147,8 @@ func stage(downloaded, staged string) error {
 
 // versionTimeout limits the run of a program that names its version: an
 // update holds the lock meanwhile, and a program that hangs must not stop
-// every update.
-const versionTimeout = 10 * time.Second
+// every update. The tests shorten it.
+var versionTimeout = 10 * time.Second
 
 // VersionOf returns the version the program names on gentry version --json;
 // false if it does not run in versionTimeout or names none.

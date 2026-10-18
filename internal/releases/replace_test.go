@@ -3,6 +3,7 @@ package releases
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -12,16 +13,27 @@ import (
 	"time"
 )
 
-// holdEnv makes the program of the tests hold its file: it runs until its
-// standard input is closed, as a server of tools of a session does.
-const holdEnv = "GENTRY_TEST_HOLD"
+// holdEnv makes the program of the tests stand for a program of Gentry:
+// with 1 it holds its file until its standard input is closed, as a server
+// of tools of a session does; with hang it hangs; with print it prints
+// outputEnv and ends.
+const (
+	holdEnv   = "GENTRY_TEST_HOLD"
+	outputEnv = "GENTRY_TEST_OUTPUT"
+)
 
 func TestMain(m *testing.M) {
-	if os.Getenv(holdEnv) != "" {
+	switch os.Getenv(holdEnv) {
+	case "":
+		os.Exit(m.Run())
+	case "hang":
+		time.Sleep(time.Hour)
+	case "print":
+		fmt.Print(os.Getenv(outputEnv))
+	default:
 		io.Copy(io.Discard, os.Stdin)
-		os.Exit(0)
 	}
-	os.Exit(m.Run())
+	os.Exit(0)
 }
 
 // running puts a copy of the program of the tests at program and runs it
@@ -157,5 +169,40 @@ func TestLockWaits(t *testing.T) {
 	second.Release()
 	if d := time.Since(start); d < 150*time.Millisecond {
 		t.Errorf("the second Lock took %s: it did not wait for the first", d)
+	}
+}
+
+// TestVersionOf checks the version a program names on version --json: none
+// for an output with no field gentry or no JSON, for no program, and for a
+// program that hangs, which is stopped in versionTimeout.
+func TestVersionOf(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(holdEnv, "print")
+	for output, want := range map[string]string{
+		`{"gentry":"0.3.0","contract":1,"state_schema":6,"knowledge_format":1}`: "0.3.0",
+		`{"contract":1,"state_schema":6,"knowledge_format":1}`:                  "",
+		"Версия Gentry: 0.3.0\n":                                                "",
+	} {
+		t.Setenv(outputEnv, output)
+		if v, ok := VersionOf(exe); v != want || ok != (want != "") {
+			t.Errorf("VersionOf of a program that prints %q = %q, %v; want %q", output, v, ok, want)
+		}
+	}
+	if v, ok := VersionOf(filepath.Join(t.TempDir(), Program())); ok {
+		t.Errorf("VersionOf of no program = %q", v)
+	}
+
+	defer func(d time.Duration) { versionTimeout = d }(versionTimeout)
+	versionTimeout = 200 * time.Millisecond
+	t.Setenv(holdEnv, "hang")
+	start := time.Now()
+	if v, ok := VersionOf(exe); ok {
+		t.Errorf("VersionOf of a program that hangs = %q", v)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("VersionOf waited %s for a program that hangs", d)
 	}
 }

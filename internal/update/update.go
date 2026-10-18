@@ -188,6 +188,13 @@ func (e *NewerError) Error() string {
 	return e.Version + " is newer than the latest release " + e.Latest
 }
 
+// ToolNotFoundError refuses an update when the program of an AI tool whose
+// integration is connected is not found: whether it serves the plugin of
+// another data root cannot be known.
+type ToolNotFoundError struct{ Tool string }
+
+func (e *ToolNotFoundError) Error() string { return "the program of " + e.Tool + " is not found" }
+
 // PluginElsewhereError refuses an update when an AI tool serves the plugin
 // of Gentry from the directory of another data root.
 type PluginElsewhereError struct{ Tool, Registered, Dir string }
@@ -303,14 +310,16 @@ func connected(dir string) bool {
 // checkTools refuses the update if an AI tool serves the plugin of Gentry
 // from the directory of another data root, though this data root has no
 // integration with it: the update would move the plugin of the other one.
-// With no program of the tool there is nothing to check; a tool that fails
-// to tell refuses only if its integration is connected.
+// A tool whose program is not found, or that fails to tell, refuses only if
+// its integration is connected: then it cannot be known, and the update
+// would fail to build the integration after the program is replaced.
 func (u *Updater) checkTools() error {
 	for _, t := range u.Tools {
 		registered, err := t.Elsewhere()
 		switch {
-		case errors.Is(err, ErrToolNotFound):
 		case err != nil && !connected(t.Dir):
+		case errors.Is(err, ErrToolNotFound):
+			return &ToolNotFoundError{Tool: t.Name}
 		case err != nil:
 			return &CheckError{Tool: t.Name, Err: err}
 		case registered != "":

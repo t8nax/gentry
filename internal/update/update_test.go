@@ -263,6 +263,12 @@ func TestRunRefusals(t *testing.T) {
 				t.Errorf("%v, want PluginElsewhereError and no request", err)
 			}
 		}},
+		{"no program of the tool, connected", "0.1.0", func(s *stand) { s.tool(&fakeTool{checkErr: ErrToolNotFound}, true) }, func(t *testing.T, s *stand, err error) {
+			var e *ToolNotFoundError
+			if !errors.As(err, &e) || e.Tool != "claude" || s.releases.latests != 0 {
+				t.Errorf("%v, want ToolNotFoundError and no request", err)
+			}
+		}},
 		{"tool failed, connected", "0.1.0", func(s *stand) { s.tool(&fakeTool{checkErr: errors.New("claude failed")}, true) }, func(t *testing.T, s *stand, err error) {
 			var e *CheckError
 			if !errors.As(err, &e) || e.Tool != "claude" || s.releases.latests != 0 {

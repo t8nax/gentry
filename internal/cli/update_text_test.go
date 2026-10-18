@@ -161,6 +161,11 @@ func TestUpdateRefusalText(t *testing.T) {
 			"",
 			msg.Text(msg.HintInstallGentry, install),
 		), ""},
+		{"no Claude Code", updateRefusal(&update.ToolNotFoundError{Tool: claude.Tool}), lines(
+			msg.Text(msg.ErrToolNotFound, "claude"),
+			"",
+			msg.Text(msg.HintToolNotFound, "Claude Code")+": gentry update",
+		), msg.Text(msg.ErrToolNotFound, "claude") + "\n"},
 		{"no release build", notRelease("0.0.0-dev"), lines(
 			"Установлена сборка не из выпуска.",
 			"Версия: 0.0.0-dev",

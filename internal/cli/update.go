@@ -92,6 +92,9 @@ func failureOf(err error) failure {
 // An updateAdapter is what the update needs of the adapter of an AI tool
 // apart from setupTool.
 type updateAdapter struct {
+	// program is the program of the tool, which a refusal names when it is
+	// not found.
+	program string
 	// elsewhere returns the existing directory of another data root the
 	// tool serves the plugin of Gentry from, as update.Tool.Elsewhere.
 	elsewhere func(dir string) (string, error)
@@ -102,7 +105,7 @@ type updateAdapter struct {
 
 // updateAdapters are the adapters of the tools of setup for the update.
 var updateAdapters = map[string]updateAdapter{
-	claude.Tool: {elsewhere: claudeElsewhere, current: claudeCurrent},
+	claude.Tool: {program: "claude", elsewhere: claudeElsewhere, current: claudeCurrent},
 }
 
 // updateTools returns the AI tools of setup for the update, each by its
@@ -248,7 +251,15 @@ func updateRefusal(err error) failure {
 	var newer *update.NewerError
 	var plugin *update.PluginElsewhereError
 	var check *update.CheckError
+	var notFound *update.ToolNotFoundError
 	switch {
+	case errors.As(err, &notFound):
+		// The refusal of setup, with the hint to install the tool and repeat
+		// the update.
+		title := toolTitles[notFound.Tool]
+		f := toolNotFound(notFound.Tool, updateAdapters[notFound.Tool].program, title)
+		f.hints = []hint{{label: msg.HintToolNotFound, args: []any{title}, cmd: "update"}}
+		return f
 	case errors.As(err, &elsewhere):
 		return programElsewhere(elsewhere.Running, elsewhere.Installed)
 	case errors.As(err, &notRel):

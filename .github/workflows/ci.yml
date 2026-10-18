@@ -134,21 +134,31 @@ jobs:
       # on Linux only, where the button Release runs: on Windows and macOS it
       # adds nothing, and its builds of the six platforms take most of the
       # time of the job. Both commands are one step, so that the time of the
-      # suite reads as the time of the step.
+      # suite reads as the time of the step; the second runs when the first
+      # fails too, and the step fails when either does.
       - name: acceptance tests
+        id: acceptance
         if: matrix.suite == 'acceptance'
         run: |
-          GENTRY_TEST_BINARY="$ACCEPTANCE_BINARY" go test -count=1 ./tests/acceptance/...
+          status=0
+          GENTRY_TEST_BINARY="$ACCEPTANCE_BINARY" go test -count=1 ./tests/acceptance/... || status=$?
           if [ "$RUNNER_OS" = Linux ]; then
-            go test -count=1 ./tests/acceptance/install ./tests/acceptance/release
+            go test -count=1 ./tests/acceptance/install ./tests/acceptance/release || status=$?
           else
-            go test -count=1 ./tests/acceptance/install
+            go test -count=1 ./tests/acceptance/install || status=$?
           fi
+          exit "$status"
 
       # What the job builds does not depend on the result of the tests: the
-      # cache is saved when they fail too.
+      # cache is saved when they fail too. It is saved only when the step of
+      # the tests has run in full, so that a cache without the builds of the
+      # tests, such as after a failed build of gentry, does not take the key
+      # until it changes.
       - uses: actions/cache/save@v6
-        if: "!cancelled() && matrix.suite == 'acceptance' && steps.go.outputs.cache-hit != 'true'"
+        if: >-
+          !cancelled() && matrix.suite == 'acceptance' &&
+          steps.go.outputs.cache-hit != 'true' &&
+          (steps.acceptance.outcome == 'success' || steps.acceptance.outcome == 'failure')
         with:
           path: ${{ steps.go.outputs.paths }}
           key: ${{ steps.go.outputs.key }}

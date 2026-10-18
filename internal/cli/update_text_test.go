@@ -149,7 +149,8 @@ func TestUpdateText(t *testing.T) {
 }
 
 // TestUpdateRefusalText checks the refusals of gentry update, before and
-// after the program is replaced, by code.
+// after the program is replaced: the errors of the scenario and of the
+// releases turned into the text and the code of each.
 func TestUpdateRefusalText(t *testing.T) {
 	const (
 		running   = "/home/anna/Downloads/gentry"
@@ -162,7 +163,7 @@ func TestUpdateRefusalText(t *testing.T) {
 		f          failure
 		cli, agent string
 	}{
-		{"program elsewhere", programElsewhere(running, installed), lines(
+		{"program elsewhere", updateRefusal(&update.ElsewhereError{Running: running, Installed: installed}), lines(
 			"Обновляется только программа из папки данных.",
 			"Программа: /home/anna/Downloads/gentry",
 			"Программа в папке данных: /home/anna/.gentry/bin/gentry",
@@ -174,7 +175,7 @@ func TestUpdateRefusalText(t *testing.T) {
 			"",
 			hintLineOf(msg.HintUpdateProgram, `"`+spaced+`" update`),
 		), ""},
-		{"no program in the data root", programElsewhere(running, ""), lines(
+		{"no program in the data root", updateRefusal(&update.ElsewhereError{Running: running}), lines(
 			msg.Text(msg.ErrProgramElsewhere, running, "не установлена"),
 			"",
 			msg.Text(msg.HintInstallGentry, install),
@@ -184,40 +185,40 @@ func TestUpdateRefusalText(t *testing.T) {
 			"",
 			msg.Text(msg.HintToolNotFound, "Claude Code")+": gentry update",
 		), msg.Text(msg.ErrToolNotFound, "claude") + "\n"},
-		{"no release build", notRelease("0.0.0-dev"), lines(
+		{"no release build", updateRefusal(&update.NotReleaseError{Version: "0.0.0-dev"}), lines(
 			"Установлена сборка не из выпуска.",
 			"Версия: 0.0.0-dev",
 			"",
 			msg.Text(msg.HintInstallRelease, install),
 		), ""},
-		{"newer than the release", newerThanRelease("0.4.0", "0.3.0"), lines(
+		{"newer than the release", updateRefusal(&update.NewerError{Version: "0.4.0", Latest: "0.3.0"}), lines(
 			"Установленная версия новее последнего выпуска.",
 			"Версия: 0.4.0",
 			"Последний выпуск: 0.3.0",
 		), ""},
-		{"no latest release", updateFailure(&releases.NotFoundError{}), lines(
+		{"no latest release", updateRefusal(&releases.NotFoundError{}), lines(
 			"Выпуск не найден.",
 			"Версия: последняя",
 			"",
 			msg.Text(msg.HintReleases, "https://github.com/t8nax/gentry/releases"),
 		), ""},
-		{"no release of the version", updateFailure(&releases.NotFoundError{Version: "0.3.0"}), lines(
+		{"no release of the version", updateRefusal(&releases.NotFoundError{Version: "0.3.0"}), lines(
 			msg.Text(msg.ErrReleaseNotFound, "0.3.0"),
 			"",
 			msg.Text(msg.HintReleases, releases.GitHub),
 		), ""},
-		{"download failed", updateFailure(&releases.DownloadError{URL: "https://github.com/t8nax/gentry/releases/latest", Err: errors.New("connection refused")}), lines(
+		{"download failed", updateRefusal(&releases.DownloadError{URL: "https://github.com/t8nax/gentry/releases/latest", Err: errors.New("connection refused")}), lines(
 			"Не удалось скачать файл.",
 			"Адрес: https://github.com/t8nax/gentry/releases/latest",
 			"Ошибка: connection refused",
 		), ""},
-		{"checksum mismatch", updateFailure(&releases.ChecksumError{File: "gentry-linux-amd64", Want: "aa11", Got: "bb22"}), lines(
+		{"checksum mismatch", updateRefusal(&releases.ChecksumError{File: "gentry-linux-amd64", Want: "aa11", Got: "bb22"}), lines(
 			"Контрольная сумма скачанного файла не совпала.",
 			"Файл: gentry-linux-amd64",
 			"Ожидалась: aa11",
 			"Получена: bb22",
 		), ""},
-		{"program not written", updateFailure(&releases.WriteError{Program: installed, Err: errors.New("permission denied")}), lines(
+		{"program not written", updateRefusal(&releases.WriteError{Program: installed, Err: errors.New("permission denied")}), lines(
 			"Не удалось записать программу.",
 			"Программа: /home/anna/.gentry/bin/gentry",
 			"Ошибка: permission denied",
@@ -254,6 +255,44 @@ func TestUpdateRefusalText(t *testing.T) {
 	for _, tt := range tests {
 		wantFail(t, tt.name, tt.f, tt.cli, tt.agent)
 	}
+
+	// The code of each refusal, and of those whose texts are of setup.
+	codes := map[string]string{
+		"program elsewhere":                      contract.CodeProgramElsewhere,
+		"program elsewhere, a path with a space": contract.CodeProgramElsewhere,
+		"no program in the data root":            contract.CodeProgramElsewhere,
+		"no Claude Code":                         contract.CodeToolNotFound,
+		"no release build":                       contract.CodeNotRelease,
+		"newer than the release":                 contract.CodeNewerThanRelease,
+		"no latest release":                      contract.CodeReleaseNotFound,
+		"no release of the version":              contract.CodeReleaseNotFound,
+		"download failed":                        contract.CodeDownloadFailed,
+		"checksum mismatch":                      contract.CodeChecksumMismatch,
+		"program not written":                    contract.CodeIOError,
+		"integration failed":                     contract.CodeIntegrationFailed,
+		"subagents failed":                       contract.CodeAgentsFailed,
+	}
+	for _, tt := range tests {
+		if tt.f.code != codes[tt.name] {
+			t.Errorf("%s: the code %s, want %s", tt.name, tt.f.code, codes[tt.name])
+		}
+	}
+	other := "/home/anna/.gentry-old/integrations/claude"
+	for _, c := range []struct {
+		f    failure
+		code string
+	}{
+		{updateRefusal(&update.PluginElsewhereError{Tool: claude.Tool, Registered: other, Dir: "/home/anna/.gentry/integrations/claude"}), contract.CodePluginElsewhere},
+		{updateRefusal(&update.CheckError{Tool: claude.Tool, Err: &failureError{toolFailed(claude.Tool, "claude plugin marketplace list --json", "нет ответа")}}), contract.CodeToolFailed},
+		{updateRefusal(errors.New("сбой")), contract.CodeInternal},
+	} {
+		if c.f.code != c.code {
+			t.Errorf("%s: the code %s, want %s", c.f.message, c.f.code, c.code)
+		}
+	}
+	// A program that could not get its name back is told with the reason.
+	restore := updateRefusal(&releases.WriteError{Program: installed, Err: errors.New("busy"), Restore: errors.New("denied")})
+	wantFail(t, "program not given its name back", restore, lines(msg.Text(msg.ErrProgramWrite, installed, "busy; denied")), "")
 }
 
 // TestUpdateFailures checks that the failures after the program is

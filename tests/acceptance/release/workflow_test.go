@@ -41,6 +41,7 @@ type job struct {
 	Concurrency     any    `yaml:"concurrency"`
 	Env             any    `yaml:"env"`
 	With            any    `yaml:"with"`
+	Secrets         any    `yaml:"secrets"`
 	Steps           []step `yaml:"steps"`
 }
 
@@ -48,6 +49,7 @@ type step struct {
 	Name            string `yaml:"name"`
 	Uses            string `yaml:"uses"`
 	Run             string `yaml:"run"`
+	Shell           string `yaml:"shell"`
 	If              any    `yaml:"if"`
 	ContinueOnError any    `yaml:"continue-on-error"`
 	Env             any    `yaml:"env"`

@@ -191,7 +191,10 @@ jobs:
   # to Pages, with no checkout of the code. Its failure, such as Pages not
   # turned on, leaves the release; «Re-run failed jobs» publishes the site
   # built within the 7 days it is kept. Later the button Publish pages
-  # publishes the pages: it builds the site again.
+  # publishes the pages: it builds the site again. The message about the
+  # release to the group goes out only after this job: after its failure,
+  # only when «Re-run failed jobs» publishes the site within the 7 days; the
+  # button Publish pages sends no message.
   #
   # One publication at a time, in the button Release and in the button
   # Publish pages alike: a publication started during another waits for it.
@@ -218,21 +221,23 @@ jobs:
   # The message about the release to the group of Gentry in Telegram, sent
   # after the pages are published, so the address of the page in it opens.
   # The job has the secrets of the bot and of the group, so it gets no
-  # checkout of the code and may only read: it downloads the message the job
-  # that publishes has built and sends it as it is. A failure here, such as
-  # a refusal of Telegram, fails the job and leaves the release and the
-  # pages; «Re-run failed jobs» sends the message again within the 30 days
-  # it is kept. When the publication of the pages fails, the job is skipped,
-  # and the rerun of the publication runs it after. Telegram has no key
-  # against a repeat: a rerun after a message that did arrive, such as one
-  # whose answer was lost, sends it once more.
+  # checkout of the code and no permissions: it downloads the message the job
+  # that publishes has built, an artifact of its own run, which the action
+  # gets with the token of the runner, not with that of the repository, and
+  # sends it as it is. A failure here, such as a refusal of Telegram, fails
+  # the job and leaves the release and the pages; «Re-run failed jobs» sends
+  # the message again within the 30 days it is kept. When the publication of
+  # the pages fails, the job is skipped: the message goes out only when
+  # «Re-run failed jobs» publishes the site within the 7 days it is kept and
+  # then runs this job. The button Publish pages sends no message. Telegram
+  # has no key against a repeat: a rerun after a message that did arrive,
+  # such as one whose answer was lost, sends it once more.
   notify:
     name: telegram
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
+    permissions: {}
     steps:
       - uses: actions/download-artifact@v8
         with:

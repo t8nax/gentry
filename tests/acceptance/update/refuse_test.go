@@ -3,7 +3,9 @@ package update_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -205,6 +207,25 @@ func TestUpdatePluginElsewhereNoIntegration(t *testing.T) {
 	s.wantNoRequests()
 }
 
+// TestUpdateToolFailed checks that the update refuses before it downloads
+// anything when Claude Code, connected, does not answer the reading of its
+// lists: the refusal is that of setup, tool_failed.
+func TestUpdateToolFailed(t *testing.T) {
+	parallel(t)
+	s := installedStand(t, v010, true)
+	s.set(fakeClaudeFailEnv, "marketplace-list")
+	before := s.programSum()
+	r := s.update()
+	wantCode(t, r, 1)
+	failed := regexp.MustCompile(`^Не удалось подключить плагин, команда «.+» завершилась ошибкой: .+$`)
+	if ls := lines(r.stderr); len(ls) == 0 || !failed.MatchString(ls[0]) {
+		t.Errorf("stderr:\n%s\nwant it to start with «Не удалось подключить плагин, команда «…» завершилась ошибкой: …»", r.stderr)
+	}
+	s.wantError("tool_failed")
+	s.wantProgram(before)
+	s.wantNoRequests()
+}
+
 // 6. Ошибки при обновлении.
 
 // TestUpdateReleaseNotFound checks the refusal when the mock has no release.
@@ -307,6 +328,43 @@ func TestUpdateIntegrationFailed(t *testing.T) {
 		}
 		wantReason(t, ls[2], "Ошибка: ")
 		wantLastBlock(t, r.stderr, "Пересоздать интеграцию: gentry setup claude")
+	})
+	t.Run("json", func(t *testing.T) {
+		t.Parallel()
+		setup(t).wantError("integration_failed")
+	})
+}
+
+// TestUpdateIntegrationAndAgentsFailed checks that a failure of both the
+// integration and the layout after the program is replaced is one error,
+// integration_failed: the failure of the integration, then that of the
+// layout with the project, and the hints of both in the last block.
+func TestUpdateIntegrationAndAgentsFailed(t *testing.T) {
+	parallel(t)
+	setup := func(t *testing.T) *stand {
+		s := installedStand(t, v010, true)
+		s.project("shop", "fix")
+		s.project("admin")
+		// git no longer knows the worktree.
+		writeFile(t, filepath.Join(s.worktree("shop", "fix"), ".git"), "gitdir: "+filepath.Join(s.root, "nowhere")+"\n")
+		s.set(fakeClaudeFailEnv, "update")
+		return s
+	}
+	t.Run("text", func(t *testing.T) {
+		t.Parallel()
+		s := setup(t)
+		r := s.update()
+		wantCode(t, r, 1)
+		s.wantVersion(latest)
+		ls := lines(r.stderr)
+		integration := slices.Index(ls, "Не удалось пересоздать интеграцию с ИИ-инструментом.")
+		agents := slices.Index(ls, "Субагентов не удалось разложить.")
+		if integration < 0 || agents <= integration || agents+1 >= len(ls) || ls[agents+1] != "Проект: shop" {
+			t.Errorf("stderr:\n%s\nwant «Не удалось пересоздать интеграцию с ИИ-инструментом.», then «Субагентов не удалось разложить.» with «Проект: shop»", r.stderr)
+		}
+		wantInLastBlock(t, r.stderr,
+			"Пересоздать интеграцию: gentry setup claude",
+			"Повторить раскладку: gentry agents deploy --project shop")
 	})
 	t.Run("json", func(t *testing.T) {
 		t.Parallel()

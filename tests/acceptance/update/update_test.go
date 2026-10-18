@@ -389,6 +389,24 @@ func TestUpdateCurrent(t *testing.T) {
 	s.wantProgram(before)
 }
 
+// TestUpdateCurrentWithoutIntegrations checks that with the latest version
+// installed and no integration connected the update says so after the
+// lines of the version and hints at setup, and downloads no program.
+func TestUpdateCurrentWithoutIntegrations(t *testing.T) {
+	parallel(t)
+	s := installedStand(t, latest, false)
+	r := s.update()
+	wantCode(t, r, 0)
+	want := []string{"Установлена последняя версия Gentry.", "Версия: " + latest, "Интеграции с ИИ-инструментами не подключены."}
+	if ls := lines(r.stdout); len(ls) < len(want) || !slices.Equal(ls[:len(want)], want) {
+		t.Errorf("stdout:\n%s\nwant the first lines:\n%s", r.stdout, testkit.Lines(want...))
+	}
+	wantLastBlock(t, r.stdout, "Подключить ИИ-инструмент: gentry setup <ИИ-инструмент>")
+	if p := s.mock.programRequests(); len(p) > 0 {
+		t.Errorf("the mock gave the programs %q", p)
+	}
+}
+
 // TestUpdateCurrentPluginMatches checks that the plugin that matches the
 // program is not updated or installed anew.
 func TestUpdateCurrentPluginMatches(t *testing.T) {
@@ -619,6 +637,35 @@ func TestUpdateAgentsConflict(t *testing.T) {
 	if got := readFile(t, reviewer(fix)); got != own {
 		t.Errorf("the tracked file changed:\n%s", got)
 	}
+}
+
+// TestUpdateOutputOrder checks the order of the blocks of the output with a
+// warning of each kind: the versions, the new sessions, the disabled plugin,
+// the conflict of the layout, the incompatible changes, the page, and the
+// hints of both warnings in the last block.
+func TestUpdateOutputOrder(t *testing.T) {
+	parallel(t)
+	s := installedStand(t, v010, true)
+	s.editPlugin(func(p *claudePlugin) { p.Enabled = false })
+	s.project("shop", "fix")
+	fix := s.worktree("shop", "fix")
+	writeFile(t, reviewer(fix), "Ревьюер проекта.\n")
+	gittest.Run(t, fix, "add", "--force", ".claude/agents/reviewer.md")
+	gittest.Run(t, fix, "commit", "--quiet", "-m", "reviewer")
+
+	r := s.update()
+	wantCode(t, r, 0)
+	wantOrdered(t, r.stdout,
+		updated(v010),
+		newSessions,
+		"Плагин Gentry отключён в Claude Code.",
+		"Часть субагентов не разложена: файлы с их именами уже есть.",
+		"Несовместимые изменения 0.2.0:",
+		"Несовместимые изменения 0.3.0:",
+		pageLine)
+	wantInLastBlock(t, r.stdout,
+		"Включить плагин: claude plugin enable gentry@gentry",
+		"Разложить субагентов после разбора файлов: gentry agents deploy --project shop")
 }
 
 // TestUpdateAgentsFailed checks that a project whose layout fails does not

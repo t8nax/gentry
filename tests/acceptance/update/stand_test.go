@@ -1275,6 +1275,41 @@ func wantLastBlock(t *testing.T, out string, want ...string) {
 	}
 }
 
+// wantOrdered checks that out has each of the lines, one after another in
+// the order given, other lines between them allowed.
+func wantOrdered(t *testing.T, out string, want ...string) {
+	t.Helper()
+	ls, at := lines(out), 0
+	for _, w := range want {
+		i := slices.Index(ls[at:], w)
+		if i < 0 {
+			t.Errorf("output has no line %q after the lines before it in the order:\n%s\noutput:\n%s", w, testkit.Lines(want...), out)
+			return
+		}
+		at += i + 1
+	}
+}
+
+// wantInLastBlock checks that the last block of the output, after its last
+// empty line, has each of the lines.
+func wantInLastBlock(t *testing.T, out string, want ...string) {
+	t.Helper()
+	ls := lines(out)
+	i := len(ls) - 1
+	for i >= 0 && ls[i] != "" {
+		i--
+	}
+	if i < 0 {
+		t.Errorf("the output has no last block after an empty line:\n%s", out)
+		return
+	}
+	for _, w := range want {
+		if !slices.Contains(ls[i+1:], w) {
+			t.Errorf("the last block of the output has no line %q:\n%s", w, out)
+		}
+	}
+}
+
 // wantReason checks that the line starts with the label and names a reason
 // after it.
 func wantReason(t *testing.T, line, label string) {

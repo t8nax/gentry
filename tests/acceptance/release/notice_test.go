@@ -202,7 +202,7 @@ func TestNoticeTooLong(t *testing.T) {
 	}
 	r, res := checkShop(t, map[string]string{contentDir + "0.4.0.md": text})
 	wantRefusal(t, res, badContent, "Файл: releases/0.4.0.md",
-		"Ошибка: сообщение в группу длиннее допустимого: "+strconv.Itoa(n)+" знаков при пределе 4096")
+		"Ошибка: сообщение в группу длиннее допустимого: "+strconv.Itoa(n)+" при пределе 4096 знаков")
 	r.wantTags("v0.3.0")
 }
 

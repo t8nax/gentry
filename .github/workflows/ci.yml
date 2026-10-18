@@ -63,8 +63,10 @@ jobs:
       # cache. Saved by setup-go, it would be saved by the job that ends
       # first, an almost empty one such as the architecture tests, and every
       # job would build the rest anew until the key changes. So each job only
-      # restores it, and the job of the unit tests, which builds the most,
-      # saves it. The paths and the key are those of setup-go, so that the
+      # restores it, and the job of the acceptance tests saves it: it builds
+      # the dependencies of its OS, sqlite among them, as the unit tests do,
+      # and on Linux the builds of gentry for the six platforms of the area
+      # release too. The paths and the key are those of setup-go, so that the
       # caches it has saved still serve.
       - name: cache of Go
         id: go-cache
@@ -98,12 +100,6 @@ jobs:
           packages=$(go list ./... | grep -v '/tests/')
           # shellcheck disable=SC2086 # a word per package
           go test -short $packages
-
-      - uses: actions/cache/save@v6
-        if: matrix.suite == 'unit' && steps.go-cache-restore.outputs.cache-hit != 'true'
-        with:
-          path: ${{ steps.go-cache.outputs.paths }}
-          key: ${{ steps.go-cache.outputs.key }}
 
       # The checks that are not tests run in the jobs with checks: the format
       # and the generated code do not depend on the OS and are checked on
@@ -174,6 +170,12 @@ jobs:
           else
             go test -count=1 ./tests/acceptance/install
           fi
+
+      - uses: actions/cache/save@v6
+        if: matrix.suite == 'acceptance' && steps.go-cache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.go-cache.outputs.paths }}
+          key: ${{ steps.go-cache.outputs.key }}
 
       # Runs the tests of tests/e2e in full (concurrent processes, the MCP
       # server, the hooks and their budget, startup time, the end of the

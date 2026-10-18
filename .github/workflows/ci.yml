@@ -64,9 +64,9 @@ jobs:
       - uses: ./.github/actions/go
         id: go
 
-      # The unit and integration tests: every package of the module but those
-      # under tests, which run in the jobs of their suites, in short mode. A
-      # new package of the code, such as contract outside cmd and internal,
+      # The unit and integration tests, in short mode: every package of the
+      # module but those under tests, which run in the jobs of their suites.
+      # A new package of the code, such as contract outside cmd and internal,
       # runs here with no change of the workflow.
       - name: unit tests
         if: matrix.suite == 'unit'

@@ -259,7 +259,7 @@ func updateRefusal(err error) failure {
 		// the update.
 		title := toolTitles[notFound.Tool]
 		f := toolNotFound(notFound.Tool, updateAdapters[notFound.Tool].program, title)
-		f.hints = []hint{{label: msg.HintToolNotFound, args: []any{title}, cmd: "update"}}
+		f.hints = []hint{hintOf(msg.HintToolNotFound, title).instead("update")}
 		return f
 	case errors.As(err, &elsewhere):
 		return programElsewhere(elsewhere.Running, elsewhere.Installed)

@@ -50,6 +50,9 @@ func TestHintChannels(t *testing.T) {
 			hintLineOf(msg.HintIntroPluginStale, "/home/anna/.gentry/bin/gentry setup claude"), hintLineOf(msg.HintIntroPluginStale, "/home/anna/.gentry/bin/gentry setup claude")},
 		{hintOf(msg.HintIntroPluginStale).set("tool", "claude").by("/home/anna/Gentry data/bin/gentry"),
 			hintLineOf(msg.HintIntroPluginStale, `"/home/anna/Gentry data/bin/gentry" setup claude`), hintLineOf(msg.HintIntroPluginStale, `"/home/anna/Gentry data/bin/gentry" setup claude`)},
+		// The words of a hint for another command, alone.
+		{hintOf(msg.HintToolNotFound, "Claude Code").instead("task show"),
+			msg.Text(msg.HintToolNotFound, "Claude Code") + ": gentry task show", msg.Text(msg.HintToolNotFound, "Claude Code") + ": task_show"},
 		// A command of the command line only has no tool.
 		{hintOf(msg.HintIntegrationSetup).set("tool", "claude"), hintLineOf(msg.HintIntegrationSetup, "gentry setup claude"), ""},
 		{hintOf(msg.HintAgentsDeployFailed).forProject("shop"),

@@ -132,6 +132,14 @@ func (h hint) on(cmd string) hint {
 	return h
 }
 
+// instead returns h with the command cmd alone in place of its own and its
+// arguments and flags: the same words for another command, such as the hint
+// of setup to install the tool and repeat gentry update.
+func (h hint) instead(cmd string) hint {
+	h.cmd, h.params = cmd, nil
+	return h
+}
+
 // set gives the param field of h the value v.
 func (h hint) set(field, v string) hint {
 	for i, p := range h.params {

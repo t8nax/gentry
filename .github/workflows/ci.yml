@@ -17,14 +17,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The tests run as a matrix of the OS and the suite of tests, a job for
+  # each, so the time of a suite reads as the time of the step of its tests.
+  # The checks that are not tests run in a job of their own on Linux and
+  # Windows. On macOS they run in the job of the unit tests instead: the plan
+  # Free runs at most 5 jobs on macOS at once, and a run with a fifth one
+  # there would take them all, so that another run waited for it. The
+  # timeout leaves room over the longest suite, the acceptance tests on
+  # Linux with the area release, and for the slower runners of Windows.
   test:
-    name: test (${{ matrix.os }})
+    name: ${{ matrix.os }} / ${{ matrix.title || matrix.suite }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+        os: [ubuntu, windows, macos]
+        suite: [unit, architecture, acceptance, e2e]
+        include:
+          - os: macos
+            suite: unit
+            title: unit + checks
+            checks: true
+          - os: ubuntu
+            suite: checks
+            checks: true
+          - os: windows
+            suite: checks
+            checks: true
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash
@@ -33,13 +53,36 @@ jobs:
         with:
           fetch-depth: 0  # tags give the version Go stamps into the binary
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.mod
+      # The jobs of one OS share the cache of Go: the modules and the build
+      # cache. Saved by setup-go, it would be saved by the job that ends
+      # first, an almost empty one such as the architecture tests, and every
+      # job would build the rest anew until the key changes. So each job only
+      # restores it, and the job of the acceptance tests saves it: it builds
+      # the dependencies of its OS, sqlite among them, as the unit tests do,
+      # and on Linux the builds of gentry for the six platforms of the area
+      # release too.
+      - uses: ./.github/actions/go
+        id: go
 
+      # The unit and integration tests, in short mode: every package of the
+      # module but those under tests, which run in the jobs of their suites.
+      # A new package of the code, such as contract outside cmd and internal,
+      # runs here with no change of the workflow.
+      - name: unit tests
+        if: matrix.suite == 'unit'
+        run: |
+          packages=$(go list ./... | grep -v '^github.com/t8nax/gentry/tests/')
+          # shellcheck disable=SC2086 # a word per package
+          go test -short $packages
+
+      # The checks that are not tests run in the jobs with checks: the format
+      # and the generated code do not depend on the OS and are checked on
+      # Linux only, go vet, the build and the smoke test on each OS. In the
+      # job of macOS they come after the unit tests: go vet before them would
+      # build their packages first, and the time of the suite there would not
+      # compare with that on the other OS.
       - name: gofmt
-        if: runner.os == 'Linux'
+        if: matrix.checks && runner.os == 'Linux'
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
@@ -49,7 +92,7 @@ jobs:
           fi
 
       - name: generated code is up to date
-        if: runner.os == 'Linux'
+        if: matrix.checks && runner.os == 'Linux'
         run: |
           go generate ./...
           if [ -n "$(git status --porcelain)" ]; then
@@ -62,47 +105,77 @@ jobs:
       # The second run covers the files of the build for the acceptance tests,
       # which only the tag acceptance compiles.
       - name: go vet
+        if: matrix.checks
         run: |
           go vet ./...
           go vet -tags acceptance ./cmd/gentry
 
-      # The fast suite: short mode skips tests/e2e whole, before it builds
-      # gentry, so the binary tests run in the next step only. The acceptance
-      # tests of the release run on Linux only, where the button Release
-      # runs: on Windows and macOS they add nothing, and their builds of the
-      # six platforms take most of the time of the job.
-      - name: go test
-        run: |
-          if [ "$RUNNER_OS" = Linux ]; then
-            go test -short ./...
-          else
-            packages=$(go list ./... | grep -v '/tests/acceptance/release$')
-            # shellcheck disable=SC2086 # a word per package
-            go test -short $packages
-          fi
+      - name: architecture tests
+        if: matrix.suite == 'architecture'
+        run: go test -count=1 ./tests/architecture
 
-      # Runs the tests of tests/e2e in full (concurrent processes, the MCP
-      # server, the hooks and their budget, startup time, the end of the
-      # checks of a stage) on one build of gentry; CI runs them nowhere else.
-      - name: binary tests
-        run: go test -count=1 -v ./tests/e2e
-
-      # Runs the acceptance tests again, each command on a build of gentry for
-      # the tests instead of in the process of the test: the same tests
-      # check that both give the same output, exit code and changes. The tag
-      # acceptance adds the entries of the agent and of the tools; with
-      # -buildvcs=false the version is that of the test binary.
-      - name: acceptance tests on the binary
+      # CI runs the acceptance tests only on a built gentry, in processes of
+      # its own, as the commands run in fact. The run in the process of the
+      # test gives the same output, exit code and changes and is the faster
+      # one on the operator's machine. The tag acceptance adds the entries of
+      # the agent and of the tools; with -buildvcs=false the version is that
+      # of the test binary.
+      - name: build for the acceptance tests
+        if: matrix.suite == 'acceptance'
         run: |
           mkdir -p "$RUNNER_TEMP/acceptance"
           bin="$RUNNER_TEMP/acceptance/gentry$(go env GOEXE)"
           go build -tags acceptance -buildvcs=false -o "$bin" ./cmd/gentry
-          GENTRY_TEST_BINARY="$bin" go test -count=1 ./tests/acceptance/...
+          echo "ACCEPTANCE_BINARY=$bin" >> "$GITHUB_ENV"
+
+      # The areas install and release run no gentry commands: on the build
+      # their tests skip, so the second command runs them in the process of
+      # the test; without it they would run nowhere. The area release runs
+      # on Linux only, where the button Release runs: on Windows and macOS it
+      # adds nothing, and its builds of the six platforms take most of the
+      # time of the job. Both commands are one step, so that the time of the
+      # suite reads as the time of the step; the second runs when the first
+      # fails too, and the step fails when either does.
+      - name: acceptance tests
+        id: acceptance
+        if: matrix.suite == 'acceptance'
+        run: |
+          status=0
+          GENTRY_TEST_BINARY="$ACCEPTANCE_BINARY" go test -count=1 ./tests/acceptance/... || status=$?
+          if [ "$RUNNER_OS" = Linux ]; then
+            go test -count=1 ./tests/acceptance/install ./tests/acceptance/release || status=$?
+          else
+            go test -count=1 ./tests/acceptance/install || status=$?
+          fi
+          exit "$status"
+
+      # What the job builds does not depend on the result of the tests: the
+      # cache is saved when they fail too. It is saved only when the step of
+      # the tests has run in full, so that a cache without the builds of the
+      # tests, such as after a failed build of gentry, does not take the key
+      # until it changes.
+      - uses: actions/cache/save@v6
+        if: >-
+          !cancelled() && matrix.suite == 'acceptance' &&
+          steps.go.outputs.cache-hit != 'true' &&
+          (steps.acceptance.outcome == 'success' || steps.acceptance.outcome == 'failure')
+        with:
+          path: ${{ steps.go.outputs.paths }}
+          key: ${{ steps.go.outputs.key }}
+
+      # Runs the tests of tests/e2e in full (concurrent processes, the MCP
+      # server, the hooks and their budget, startup time, the end of the
+      # checks of a stage) on one build of gentry; short mode skips them.
+      - name: e2e tests
+        if: matrix.suite == 'e2e'
+        run: go test -count=1 -v ./tests/e2e
 
       - name: build
+        if: matrix.checks
         run: go build -o bin/ ./cmd/gentry
 
       - name: smoke test
+        if: matrix.checks
         run: |
           ./bin/gentry version
           ./bin/gentry version --json
@@ -137,10 +210,10 @@ jobs:
         with:
           fetch-depth: 0  # tags give the version Go stamps into the binary
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.mod
+      # Restores the cache of Go and does not save it: under the same key only
+      # the job ubuntu / acceptance saves it, with the builds of the six
+      # platforms of the area release, made with the same flags as here.
+      - uses: ./.github/actions/go
 
       - name: cross-build
         env:

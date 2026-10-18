@@ -13,7 +13,8 @@
 //
 // The commands run in the process of the test, or on a built gentry when
 // BinaryEnv names one; the tests expect the same of both. CI runs the
-// acceptance tests both ways.
+// acceptance tests on the built gentry, and the areas that skip there
+// (SkipOnBinary) in the process of the test.
 package testkit
 
 import (

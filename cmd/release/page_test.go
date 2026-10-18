@@ -114,7 +114,7 @@ func TestRenderPage(t *testing.T) {
 		{`name="ex2"`, 1},
 		{`<div class="term play">`, 1},
 		{`<div class="term solo play">`, 1},
-		{`<div class="term solo">`, 4}, // e, f and the two commands of installation
+		{`<div class="term solo">`, 5}, // e, f, the command of the update and the two commands of installation
 		{`<div class="beforeafter">`, 1},
 		{"<h2>" + msg.Text(msg.ReleasePageBefore) + "</h2>", 1},
 		{"<p>Скидки — заново.</p>", 1},

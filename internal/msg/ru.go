@@ -847,7 +847,7 @@ var ru = catalog{
 		ReleasePageHint:                 "Вывод появляется по строкам при открытии вкладки; чтобы повторить, откройте вкладку ещё раз.",
 		ReleasePageUnix:                 "Linux и macOS",
 		ReleasePageWindows:              "Windows",
-		ReleasePageNextStep:             "Затем в новом окне терминала обновить интеграцию с ИИ-инструментом: `gentry setup <ИИ-инструмент>`",
+		ReleasePageNotInstalled:         "Если Gentry ещё не установлен:",
 		ReleasePageAll:                  "Все выпуски",
 		ReleasePageFiles:                "Файлы выпуска",
 		ReleasePageChangelog:            "Журнал изменений",

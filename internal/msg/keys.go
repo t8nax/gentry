@@ -878,7 +878,7 @@ const (
 	ReleasePageHint                 Key = "release.page_hint"
 	ReleasePageUnix                 Key = "release.page_unix"
 	ReleasePageWindows              Key = "release.page_windows"
-	ReleasePageNextStep             Key = "release.page_next_step"
+	ReleasePageNotInstalled         Key = "release.page_not_installed"
 	ReleasePageAll                  Key = "release.page_all"
 	ReleasePageFiles                Key = "release.page_files"
 	ReleasePageChangelog            Key = "release.page_changelog"

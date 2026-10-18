@@ -77,7 +77,9 @@ there is no script and no resource outside it. */}}
 {{end}}
 <footer>
   <h2>{{.Words.Update}}</h2>
-{{template "commands" .Words}}  <div>{{.Words.NextStep}}</div>
+  <div class="term solo"><div class="line cmd">{{.Words.UpdateCommand}}</div></div>
+  <div>{{.Words.NotInstalled}}</div>
+{{template "commands" .Words}}  <div>{{.Words.ListNextStep}}</div>
   <div class="links">
     <a href="{{.AllURL}}">{{.Words.All}}</a>
     <a href="{{.FilesURL}}">{{.Words.Files}}</a>

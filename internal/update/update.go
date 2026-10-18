@@ -242,6 +242,9 @@ func (u *Updater) Run(ctx context.Context, req Request) (*Result, *Handoff, erro
 			lock.Release()
 		}
 	}()
+	// The programs earlier updates renamed aside on Windows go once free,
+	// whatever this update does.
+	releases.RemoveOld(installed)
 	if err := u.checkTools(); err != nil {
 		return nil, nil, err
 	}
@@ -265,7 +268,6 @@ func (u *Updater) Run(ctx context.Context, req Request) (*Result, *Handoff, erro
 	if err != nil {
 		return nil, nil, err
 	}
-	releases.RemoveOld(installed)
 	if err := releases.Replace(downloaded, installed); err != nil {
 		return nil, nil, err
 	}

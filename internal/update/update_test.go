@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 	"time"
@@ -384,5 +385,24 @@ func TestRunFinish(t *testing.T) {
 	}
 	if !errors.Is(r.ListErr, listErr) || !errors.Is(r.ChangelogErr, journalErr) || r.Breaking != nil {
 		t.Errorf("the layout and the journal: %v, %v, %+v", r.ListErr, r.ChangelogErr, r.Breaking)
+	}
+}
+
+// TestRunRemovesOld checks that on Windows the update removes a free .old
+// of an earlier update with the latest release installed too.
+func TestRunRemovesOld(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("a program is renamed to .old only on Windows")
+	}
+	s := newStand(t, "0.3.0")
+	old := releases.Old(s.installed)
+	if err := os.WriteFile(old, []byte("gentry 0.2.0"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.run("0.3.0", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the free %s is still there: %v", old, err)
 	}
 }

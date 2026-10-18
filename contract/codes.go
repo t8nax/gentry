@@ -17,7 +17,7 @@ const (
 	CodeMissingArgument        = "missing_argument"          // details: command, argument
 	CodeInvalidArgument        = "invalid_argument"          // details: command, argument, value
 	CodeHomeUnknown            = "home_unknown"              // the data root cannot be found: no GENTRY_HOME, no user home
-	CodeIOError                = "io_error"                  // reading or writing files failed; details: path
+	CodeIOError                = "io_error"                  // reading or writing files failed; details: path, and restore if gentry update could not give the program renamed to <program>.old its name back (the failure of that)
 	CodeToolNotFound           = "tool_not_found"            // the AI tool program is not found; details: tool, program
 	CodeToolFailed             = "tool_failed"               // a command of the AI tool failed; details: tool, command, output
 	CodePluginElsewhere        = "plugin_elsewhere"          // the plugin in the AI tool is served from an existing directory of another data root; setup --switch moves it; details: tool, registered, dir

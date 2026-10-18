@@ -102,7 +102,9 @@ const (
 	playHint       = "Вывод появляется по строкам при открытии вкладки; чтобы повторить, откройте вкладку ещё раз."
 	installSh      = "curl -fsSL https://github.com/t8nax/gentry/releases/latest/download/install.sh | sh"
 	installPs1     = "irm https://github.com/t8nax/gentry/releases/latest/download/install.ps1 | iex"
-	pageNextStep   = "Затем в новом окне терминала обновить интеграцию с ИИ-инструментом: gentry setup <ИИ-инструмент>"
+	updateCommand  = "gentry update"
+	notInstalled   = "Если Gentry ещё не установлен:"
+	oldNextStep    = "обновить интеграцию с ИИ-инструментом"
 	listNextStep   = "Затем в новом окне терминала подключить ИИ-инструмент: gentry setup <ИИ-инструмент>"
 	siteURL        = "https://t8nax.github.io/gentry/"
 	releaseTagURL  = "https://github.com/t8nax/gentry/releases/tag/v"
@@ -382,7 +384,9 @@ func TestPageMultilineEntry(t *testing.T) {
 }
 
 // TestPageUpdate checks that the page ends with the section «Как обновиться»:
-// the commands of installation, the next step and the links.
+// gentry update, then for those who have no Gentry yet the commands of
+// installation and the next step of the list of the releases, and the
+// links; the former next step to update the integration is gone.
 func TestPageUpdate(t *testing.T) {
 	p := shopPage(t, nil, "0.4.0", "0.4.0")
 	h := p.heading("Как обновиться")
@@ -390,7 +394,18 @@ func TestPageUpdate(t *testing.T) {
 		t.Fatalf("the last heading of %s is not «Как обновиться»: %q", p.name, p.headingTexts())
 	}
 	lo, hi := p.part(h)
-	wantText(t, "«Как обновиться» of "+p.name, p.textIn(lo, hi), "Linux и macOS", "Windows", pageNextStep, installSh, installPs1)
+	text := p.textIn(lo, hi)
+	where := "«Как обновиться» of " + p.name
+	wantText(t, where, text, updateCommand, notInstalled, "Linux и macOS", "Windows", installSh, installPs1, listNextStep)
+	// In order: the command of the update, the line before the commands of
+	// installation, the commands, the next step.
+	at := func(s string) int { return strings.Index(text, s) }
+	for _, after := range []string{"Linux и macOS", "Windows", installSh, installPs1} {
+		if !(at(updateCommand) < at(notInstalled) && at(notInstalled) < at(after) && at(after) < at(listNextStep)) {
+			t.Errorf("%s is not in the order «%s», «%s», «%s», «%s»:\n%s", where, updateCommand, notInstalled, after, listNextStep, text)
+		}
+	}
+	wantNoText(t, p.name, p.bodyText(), oldNextStep)
 	links := map[string]string{}
 	for _, a := range p.within(lo, hi, byTag("a")) {
 		links[p.text(a)] = a.attrs["href"]
@@ -728,6 +743,19 @@ func TestReleasesList(t *testing.T) {
 			t.Errorf("the row %s of index.html: has «%s» is %v, want %v:\n%s", r.version, badge, !r.badge, r.badge, text)
 		}
 	}
+}
+
+// TestReleasesListInstall checks that the section «Как установить» of the
+// list of the releases stays as it was: the commands of installation and
+// the next step to connect an AI tool, and no gentry update on the list.
+func TestReleasesListInstall(t *testing.T) {
+	dir := buildSite(t, shopRepo(t, shopFiles(nil), "0.2.1", "0.3.0", "0.4.0"))
+	p := readPage(t, dir, "index.html")
+	if p.heading("Как установить") == nil {
+		t.Errorf("index.html has no heading «Как установить»: %q", p.headingTexts())
+	}
+	wantText(t, "index.html", p.bodyText(), "Как установить", installSh, installPs1, listNextStep)
+	wantNoText(t, "index.html", p.bodyText(), updateCommand)
 }
 
 // TestReleasesListOrder checks that the list orders the versions by number,

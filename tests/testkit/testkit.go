@@ -50,6 +50,10 @@ const (
 	HomeEnv       = home.EnvVar          // the data root
 	SessionEnv    = caller.SessionEnv    // set by the driver for its sessions
 	ClaudeCodeEnv = caller.ClaudeCodeEnv // set by Claude Code for its commands
+
+	ClaudeProgramEnv = claude.ProgramEnv    // the claude program Gentry runs
+	ClaudeConfigEnv  = claude.ConfigDirEnv  // the folder of the settings of Claude Code
+	PluginRootEnv    = claude.PluginRootEnv // set by Claude Code for the hooks of a plugin
 )
 
 // BinaryEnv names a gentry the commands run on instead of the process of the
@@ -96,6 +100,9 @@ func Main(m *testing.M) int {
 	// The settings of Claude Code are in the home, and the tests run outside a
 	// session of an AI tool even when they are run from one.
 	os.Unsetenv(claude.ConfigDirEnv)
+	// The hook checks the plugin that runs it wherever it runs: the tests
+	// name the plugin themselves.
+	os.Unsetenv(claude.PluginRootEnv)
 	os.Unsetenv(caller.ClaudeCodeEnv)
 	os.Unsetenv(caller.SessionEnv)
 	if err := gittest.Isolate(dir); err != nil {

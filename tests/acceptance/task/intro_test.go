@@ -158,10 +158,11 @@ func TestIntroStalePlugin(t *testing.T) {
 
 	writeVersion("0.0.0+00000000")
 	// The warning is built in the introduction from the plugin: this test
-	// states its words.
+	// states its words. The hint names setup with the full path of the
+	// program, not a tool.
 	want := testkit.Lines(
 		"Плагин Gentry не соответствует программе gentry: скиллы могут описывать прежние команды.",
-		msg.Text(msg.HintIntroPluginStale)+": setup (tool: claude)",
+		"Сообщить оператору и по его слову обновить плагин: "+exe+" setup claude",
 		"",
 		msg.Text(msg.TaskProject, "shop"),
 	)
@@ -189,5 +190,74 @@ func TestIntroStalePlugin(t *testing.T) {
 	os.Remove(manifest)
 	if got := introIn(t, fix); !strings.HasPrefix(got, project) {
 		t.Errorf("no manifest:\n%s", got)
+	}
+}
+
+// stalePluginWarning is the warning of the hook about a plugin that does not
+// match the program, with its hint: setup with the full path of the program
+// the commands run on.
+func stalePluginWarning(t *testing.T) string {
+	t.Helper()
+	return testkit.Lines(
+		"Плагин Gentry не соответствует программе gentry: скиллы могут описывать прежние команды.",
+		"Сообщить оператору и по его слову обновить плагин: "+testkit.Executable(t)+" setup claude",
+	)
+}
+
+// pluginOf points CLAUDE_PLUGIN_ROOT at a plugin of the version v.
+func pluginOf(t *testing.T, v string) {
+	t.Helper()
+	root := t.TempDir()
+	testkit.WriteFiles(t, root, map[string]string{".claude-plugin/plugin.json": `{"name":"gentry","version":"` + v + `"}`})
+	t.Setenv(claude.PluginRootEnv, root)
+}
+
+// TestIntroStalePluginOutsidePool checks that outside the worktrees of the
+// pools the hook warns of a stale plugin with the warning and its hint only.
+func TestIntroStalePluginOutsidePool(t *testing.T) {
+	testkit.TaskShop(t)
+	pluginOf(t, "0.0.0+00000000")
+	if got, want := introIn(t, t.TempDir()), stalePluginWarning(t); got != want {
+		t.Errorf("hook outside a pool:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// TestIntroStalePluginWithTask checks that in a worktree of a pool the
+// warning comes before the introduction to the task, apart by an empty line.
+func TestIntroStalePluginWithTask(t *testing.T) {
+	_, fix := testkit.TaskShop(t)
+	t.Chdir(fix)
+	testkit.MustRun(t, testkit.TakeArgs()...)
+	intro := introIn(t, fix)
+	pluginOf(t, "0.0.0+00000000")
+	if got, want := introIn(t, fix), stalePluginWarning(t)+"\n"+intro; got != want {
+		t.Errorf("hook in the worktree of the task:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// TestIntroPluginOutsidePool checks that outside the pools the hook of the
+// plugin this program builds prints nothing.
+func TestIntroPluginOutsidePool(t *testing.T) {
+	testkit.TaskShop(t)
+	p, err := claude.Build(integration.Gentry(testkit.Executable(t)), buildinfo.Version())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pluginOf(t, p.Version)
+	if got := introIn(t, t.TempDir()); got != "" {
+		t.Errorf("hook outside a pool with the plugin of this program:\n%s\nwant nothing", got)
+	}
+}
+
+// TestIntroStalePluginWithoutStore checks that with no state store the hook
+// warns of a stale plugin and creates no state store.
+func TestIntroStalePluginWithoutStore(t *testing.T) {
+	home := testkit.EmptyHome(t)
+	pluginOf(t, "0.0.0+00000000")
+	if got, want := introIn(t, t.TempDir()), stalePluginWarning(t); got != want {
+		t.Errorf("hook with no state store:\n%s\nwant:\n%s", got, want)
+	}
+	if testkit.FileExists(filepath.Join(home, "state", "state.db")) {
+		t.Error("the hook created the state store")
 	}
 }

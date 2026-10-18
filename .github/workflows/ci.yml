@@ -145,12 +145,12 @@ jobs:
         if: matrix.suite == 'architecture'
         run: go test -count=1 ./tests/architecture
 
-      # CI runs the acceptance tests on a build of gentry for the tests only,
-      # the program the operator runs; the run in the process of the test,
-      # which gives the same output, exit code and changes, is the faster one
-      # on the operator's machine. The tag acceptance adds the entries of the
-      # agent and of the tools; with -buildvcs=false the version is that of
-      # the test binary.
+      # CI runs the acceptance tests only on a built gentry, in processes of
+      # its own, as the commands run in fact. The run in the process of the
+      # test gives the same output, exit code and changes and is the faster
+      # one on the operator's machine. The tag acceptance adds the entries of
+      # the agent and of the tools; with -buildvcs=false the version is that
+      # of the test binary.
       - name: build for the acceptance tests
         if: matrix.suite == 'acceptance'
         run: |

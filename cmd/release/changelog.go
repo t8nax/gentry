@@ -18,6 +18,11 @@ const (
 	journalSecurity = "Безопасность"
 )
 
+// journalSubsections are the subsections of a section of a version that the
+// page of the release shows, in the order the page and the message to the
+// group show them.
+var journalSubsections = []string{journalBreaking, journalNew, journalChanged, journalFixed, journalSecurity}
+
 // sectionHeading returns the pattern of the heading of the section of a
 // version in the journal: ## X.Y.Z — YYYY-MM-DD; its group is the date.
 func sectionHeading(v version) *regexp.Regexp {

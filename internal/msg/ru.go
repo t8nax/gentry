@@ -819,7 +819,7 @@ var ru = catalog{
 		ReleaseContentLine:              "Строка: %d",
 		ReleaseContentError:             "Ошибка: %s",
 		ReleaseContentUnknownSection:    "неизвестный раздел «%s»",
-		ReleaseContentSections:          "Допустимые разделы:\n  Перед обновлением\n  Новое",
+		ReleaseContentSections:          "Допустимые разделы:\n  Перед обновлением\n  Новое\n  Сообщение в группу",
 		ReleaseContentRepeated:          "раздел «%s» повторяется",
 		ReleaseContentOutside:           "текст вне раздела",
 		ReleaseContentOutsideCard:       "текст вне карточки",
@@ -866,6 +866,18 @@ var ru = catalog{
 		ReleaseMonthOctober:             "октября",
 		ReleaseMonthNovember:            "ноября",
 		ReleaseMonthDecember:            "декабря",
+
+		// The message about a release to the group in Telegram (GEN-62).
+		ReleaseContentNoticeUnknown:     "неизвестный подраздел «%s»",
+		ReleaseContentNoticeSubsections: "Допустимые подразделы:\n  Несовместимые изменения\n  Новое\n  Изменено\n  Исправлено\n  Безопасность",
+		ReleaseContentNoticeRepeated:    "подраздел «%s» повторяется",
+		ReleaseContentNoticeOutside:     "текст вне пункта: пункт начинается с «* », его продолжение — с отступа",
+		ReleaseContentNoNotice:          "нет раздела «Сообщение в группу»",
+		ReleaseContentNoticeExtra:       "подраздела «%s» нет в журнале изменений этой версии",
+		ReleaseContentNoticeMissing:     "нет подраздела «%s», хотя в журнале он есть",
+		ReleaseContentNoticeEmpty:       "в подразделе «%s» нет пунктов",
+		ReleaseContentNoticeLong:        "сообщение в группу длиннее допустимого: %d из %d знаков, нужно сократить пункты",
+		ReleaseNoticeDetails:            "Подробности — на странице выпуска:",
 	},
 	plurals: map[Key][]string{
 		FlowRounds: {"не более %d возврата", "не более %d возвратов", "не более %d возвратов"},

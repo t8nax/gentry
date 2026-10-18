@@ -115,7 +115,7 @@ func TestRefusal(t *testing.T) {
 // TestRunUsage checks that a wrong command line exits with code 2 and the
 // usage.
 func TestRunUsage(t *testing.T) {
-	for _, args := range [][]string{nil, {"check"}, {"build", "0.1.0"}, {"publish", "0.1.0"}, {"pages"}, {"pages", "a", "b"}} {
+	for _, args := range [][]string{nil, {"check"}, {"build", "0.1.0"}, {"publish", "0.1.0"}, {"pages"}, {"pages", "a", "b"}, {"notice"}, {"notice", "0.1.0", "b"}} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code != 2 || stderr.String() != usage || stdout.Len() != 0 {
 			t.Errorf("run(%q) = %d, stdout %q, stderr %q; want 2 and the usage", args, code, stdout.String(), stderr.String())
@@ -191,6 +191,13 @@ func TestContentRefusal(t *testing.T) {
 			file, msg.Text(msg.ReleaseContentLine, 12), msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentOutsideCard)),
 		}},
 		{contentInvalidError{reason: reasonNoNew}, []string{file, msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoNew))}},
+		{contentInvalidError{line: 3, reason: reasonNoticeUnknown, subject: "Акции"}, []string{
+			file, msg.Text(msg.ReleaseContentLine, 3),
+			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoticeUnknown, "Акции")), msg.Text(msg.ReleaseContentNoticeSubsections),
+		}},
+		{contentInvalidError{reason: reasonNoticeLong, length: 4100}, []string{
+			file, msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoticeLong, 4100, noticeLimit)),
+		}},
 	} {
 		tc.err.file = "releases/0.4.0.md"
 		if got, want := refusal(fmt.Errorf("site: %w", &tc.err)), strings.Join(tc.want, "\n"); got != want {

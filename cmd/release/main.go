@@ -18,9 +18,16 @@
 //	                                 released versions from the head of main
 //	                                 into the folder: index.html, the list of
 //	                                 the releases, and <version>/index.html
+//	release notice <version>         prints the message about the release of
+//	                                 the version to the group in Telegram,
+//	                                 HTML of Telegram, from its section in
+//	                                 CHANGELOG.md and the text for the group
+//	                                 in the content of its page,
+//	                                 releases/<version>.md, of the commit
 //
 // The checks of a release build the site of the pages too, with the page of
-// the new version, and refuse when a content of a page is written wrong.
+// the new version, and the message to the group, and refuse when a content
+// of a page is written wrong or missing.
 //
 // A refusal exits with code 1 and its text on the standard error; a wrong
 // command line exits with code 2. The texts of the refusals and the words of
@@ -42,6 +49,7 @@ const usage = `usage:
   release check <version>
   release build <version> <folder>
   release pages <folder>
+  release notice <version>
 `
 
 func main() {
@@ -63,6 +71,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = build(".", args[1], args[2])
 	case len(args) == 2 && args[0] == "pages":
 		err = pages(".", args[1])
+	case len(args) == 2 && args[0] == "notice":
+		var text string
+		if text, err = notice(".", args[1]); err == nil {
+			_, err = io.WriteString(stdout, text)
+		}
 	default:
 		io.WriteString(stderr, usage)
 		return 2
@@ -130,7 +143,8 @@ func refusal(err error) string {
 
 // contentRefusal returns the text of the refusal of a content of a page
 // written wrong: the file, the line when the error is of one, the error and,
-// for an unknown section or subheading, the ones a content may have.
+// for an unknown section, subheading or subsection of the text for the
+// group, the ones a content may have.
 func contentRefusal(e *contentInvalidError) string {
 	lines := []string{msg.Text(msg.ReleaseContentInvalid, e.file)}
 	if e.line > 0 {
@@ -162,6 +176,22 @@ func contentRefusal(e *contentInvalidError) string {
 		reason = msg.Text(msg.ReleaseContentTableColumns)
 	case reasonNoNew:
 		reason = msg.Text(msg.ReleaseContentNoNew)
+	case reasonNoticeUnknown:
+		reason, allowed = msg.Text(msg.ReleaseContentNoticeUnknown, e.subject), msg.Text(msg.ReleaseContentNoticeSubsections)
+	case reasonNoticeRepeated:
+		reason = msg.Text(msg.ReleaseContentNoticeRepeated, e.subject)
+	case reasonNoticeOutside:
+		reason = msg.Text(msg.ReleaseContentNoticeOutside)
+	case reasonNoNotice:
+		reason = msg.Text(msg.ReleaseContentNoNotice)
+	case reasonNoticeExtra:
+		reason = msg.Text(msg.ReleaseContentNoticeExtra, e.subject)
+	case reasonNoticeMissing:
+		reason = msg.Text(msg.ReleaseContentNoticeMissing, e.subject)
+	case reasonNoticeEmpty:
+		reason = msg.Text(msg.ReleaseContentNoticeEmpty, e.subject)
+	case reasonNoticeLong:
+		reason = msg.Text(msg.ReleaseContentNoticeLong, e.length, noticeLimit)
 	}
 	lines = append(lines, msg.Text(msg.ReleaseContentError, reason))
 	if allowed != "" {

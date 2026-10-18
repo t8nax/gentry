@@ -898,3 +898,20 @@ const (
 	ReleaseMonthNovember            Key = "release.month_november"
 	ReleaseMonthDecember            Key = "release.month_december"
 )
+
+// Texts of the message about a release to the group in Telegram, which the
+// program of release builds from the text for the group in the content of
+// the page and the workflow Release sends: the refusals of the text for the
+// group and the line of the message before the address of the page (GEN-62).
+const (
+	ReleaseContentNoticeUnknown     Key = "release.content_notice_unknown"
+	ReleaseContentNoticeSubsections Key = "release.content_notice_subsections"
+	ReleaseContentNoticeRepeated    Key = "release.content_notice_repeated"
+	ReleaseContentNoticeOutside     Key = "release.content_notice_outside"
+	ReleaseContentNoNotice          Key = "release.content_no_notice"
+	ReleaseContentNoticeExtra       Key = "release.content_notice_extra"
+	ReleaseContentNoticeMissing     Key = "release.content_notice_missing"
+	ReleaseContentNoticeEmpty       Key = "release.content_notice_empty"
+	ReleaseContentNoticeLong        Key = "release.content_notice_long"
+	ReleaseNoticeDetails            Key = "release.notice_details"
+)

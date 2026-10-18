@@ -50,7 +50,8 @@ const detached = "HEAD"
 // version is greater than the latest release; main has changed more than the
 // journal since it; the journal of the commit of the release has the
 // section of the version; the site of the pages of the released versions
-// and of the new one builds from the commit. It returns the section of the
+// and of the new one builds from the commit; the message about the new
+// version to the group builds from it. It returns the section of the
 // version: main.go adds the line with the address of the page of the
 // release to it.
 func check(dir, value string) (string, error) {
@@ -97,6 +98,11 @@ func check(dir, value string) (string, error) {
 	// The site is published whole: a content of a page of a past release
 	// written wrong would fail the publication after the release.
 	if _, err := site(dir, append(releasedVersions(tags), v)); err != nil {
+		return "", err
+	}
+	// The message to the group is built after the release is created: a
+	// text for the group missing or written wrong would fail its build.
+	if _, err := noticeOf(dir, v); err != nil {
 		return "", err
 	}
 	return text, nil

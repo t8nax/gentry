@@ -84,7 +84,7 @@ func TestReleaseOnlyChangelogChanged(t *testing.T) {
 	r := newRepo(t)
 	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section020)}))
 	r.tag("0.2.0")
-	r.commit(withContents(map[string]string{changelogFile: changelog(section021, section020)}))
+	r.commit(map[string]string{changelogFile: changelog(section021, section020)})
 	wantRefusal(t, r.check("0.2.1"), "После последнего выпуска в main нет изменений, кроме журнала изменений.", "Последний выпуск: 0.2.0")
 	r.wantTags("v0.2.0")
 }
@@ -238,11 +238,12 @@ func TestReleaseSectionWithoutDate(t *testing.T) {
 }
 
 // TestReleaseFirstNotes checks the text of the first release, with no tag v*
-// before it and only fixes in its section, so with no content of its page:
-// the section, then an empty line and the line with the address of the page.
+// before it and only fixes in its section, so with only the text for the
+// group in the content of its page: the section, then an empty line and the
+// line with the address of the page.
 func TestReleaseFirstNotes(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(fixes("0.1.0", "2026-10-17", "Первый выпуск магазина.", "Исправлен поиск по каталогу."))})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(fixes("0.1.0", "2026-10-17", "Первый выпуск магазина.", "Исправлен поиск по каталогу."))}))
 	res := r.check("0.1.0")
 	want := testkit.Lines("Первый выпуск магазина.", "", "### Исправлено", "* Исправлен поиск по каталогу.", "", "Страница выпуска: https://t8nax.github.io/gentry/0.1.0/")
 	if res.code != 0 || res.stdout != want {

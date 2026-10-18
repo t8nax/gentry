@@ -19,6 +19,9 @@ import (
 // tools lists the tools `gentry setup` supports.
 var tools = []string{claude.Tool}
 
+// toolTitles are the names of the tools for the operator.
+var toolTitles = map[string]string{claude.Tool: "Claude Code"}
+
 // setupSwitched is the action of a setup that moved the plugin from the
 // directory of another data root.
 const setupSwitched = "switched"
@@ -43,38 +46,55 @@ func runSetup(args []string, env Env) int {
 		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), helpHint(msg.HintCommandHelp, "setup")))
 	}
 
-	dir, err := home.Integration(claude.Tool)
+	out, bad := setupTool(f.args[0], *switchFlag)
+	if bad != nil {
+		return fail(env, *bad)
+	}
+	// The subagents laid out name the tools of the previous plugin: once it
+	// changes, the operator lays them out anew in each project. setup does
+	// not do it itself.
+	x := setupExtra{projects: connectedProjects()}
+	return emit(env, out, func(p *page, out contract.SetupOutput) { setupText(p, out, x) })
+}
+
+// setupTool builds the integration with the tool in the data root and
+// registers it in the tool, as gentry setup does; gentry update builds the
+// integrations anew by it. The plugin is moved from an existing directory of
+// another data root only if switchDir is set.
+func setupTool(tool string, switchDir bool) (contract.SetupOutput, *failure) {
+	refuse := func(f failure) (contract.SetupOutput, *failure) { return contract.SetupOutput{}, &f }
+	dir, err := home.Integration(tool)
 	if err != nil {
-		return fail(env, homeUnknown())
+		return refuse(homeUnknown())
 	}
 	program, err := claude.Program()
 	if err != nil {
-		return fail(env, toolNotFound(claude.Tool, "claude", "Claude Code"))
+		return refuse(toolNotFound(claude.Tool, "claude", toolTitles[claude.Tool]))
 	}
 	// The plugin serves every session of the tool, whatever the data root of
 	// this call: it is moved from an existing directory of another data root
 	// only by --switch, and before anything is written.
 	registered, err := claude.Registered(program)
 	if err != nil {
-		return fail(env, setupToolError(err))
+		return refuse(setupToolError(err))
 	}
 	previous := ""
 	if registered != "" && !claude.SamePath(registered, dir) {
-		if _, err := os.Stat(registered); !errors.Is(err, fs.ErrNotExist) && !*switchFlag {
-			return fail(env, pluginElsewhere(claude.Tool, registered, dir))
+		if _, err := os.Stat(registered); !errors.Is(err, fs.ErrNotExist) && !switchDir {
+			return refuse(pluginElsewhere(claude.Tool, registered, dir))
 		}
 		previous = registered
 	}
 	exe, err := executable()
 	if err != nil {
-		return fail(env, internal(err))
+		return refuse(internal(err))
 	}
 	p, err := claude.Build(integration.Gentry(exe), buildinfo.Version())
 	if err != nil {
-		return fail(env, internal(err))
+		return refuse(internal(err))
 	}
 	if err := claude.Write(dir, p); err != nil {
-		return fail(env, ioError(dir, err))
+		return refuse(ioError(dir, err))
 	}
 	// Once written, dir may turn out to be the directory registered, reached
 	// by another path: then nothing is switched.
@@ -83,7 +103,7 @@ func runSetup(args []string, env Env) int {
 	}
 	r, err := claude.Register(program, dir, p.Version)
 	if err != nil {
-		return fail(env, setupToolError(err))
+		return refuse(setupToolError(err))
 	}
 
 	// The tools of the agent are allowed once for every session.
@@ -101,11 +121,7 @@ func runSetup(args []string, env Env) int {
 	if previous != "" {
 		out.Action, out.PreviousDir = setupSwitched, &previous
 	}
-	// The subagents laid out name the tools of the previous plugin: once it
-	// changes, the operator lays them out anew in each project. setup does
-	// not do it itself.
-	x := setupExtra{projects: connectedProjects()}
-	return emit(env, out, func(p *page, out contract.SetupOutput) { setupText(p, out, x) })
+	return out, nil
 }
 
 // setupExtra is what the text of setup has apart from the contract: whether

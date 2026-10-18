@@ -474,9 +474,41 @@ func runAgentsDeploy(args []string, env Env) int {
 	}
 	defer p.close()
 
-	worktrees := p.of(id)
-	sort.SliceStable(worktrees, func(i, j int) bool {
-		a, b := worktrees[i], worktrees[j]
+	d, bad := deployOf(r, p, id)
+	if bad != nil {
+		return fail(env, *bad)
+	}
+	conflicts, err := agents.Check(agentsLayout, d.targets)
+	if err != nil {
+		return fail(env, layoutFailure(err))
+	}
+	if len(conflicts) > 0 {
+		return fail(env, agentsConflict(conflicts))
+	}
+	res, err := agents.Sync(agentsLayout, d.targets, p.paths())
+	if err != nil {
+		return fail(env, layoutFailure(err))
+	}
+	return emit(env, d.output(res, p), func(p *page, out contract.AgentsDeployOutput) { agentsDeployText(p, out, d.laid) })
+}
+
+// A deploy is the layout of the pool of a project: its worktrees, the main
+// one first, then by path, and the subagents each must have.
+type deploy struct {
+	project   string
+	worktrees []state.Worktree
+	targets   []agents.Target
+	laid      map[string]bool // the worktrees whose subagents are known
+}
+
+// deployOf works out the layout of the pool of project id in p: a worktree
+// with a task by the snapshot of its flow, a free one by the active flow of
+// r. A worktree of a flow with problems or of a snapshot that cannot be read
+// is no target.
+func deployOf(r *process.Repo, p *layoutPool, id string) (deploy, *failure) {
+	d := deploy{project: id, worktrees: p.of(id), laid: map[string]bool{}}
+	sort.SliceStable(d.worktrees, func(i, j int) bool {
+		a, b := d.worktrees[i], d.worktrees[j]
 		if a.Main != b.Main {
 			return a.Main
 		}
@@ -484,46 +516,41 @@ func runAgentsDeploy(args []string, env Env) int {
 	})
 	active, activeOK, err := activeAgents(r, id)
 	if err != nil {
-		return fail(env, flowFailure(err, flow.PlacesOf(r, id)))
+		f := flowFailure(err, flow.PlacesOf(r, id))
+		return deploy{}, &f
 	}
-	var targets []agents.Target
-	laid := map[string]bool{} // worktrees whose subagents are known
-	for _, w := range worktrees {
+	for _, w := range d.worktrees {
 		list, ok := active, activeOK
 		if t, held := p.held[w.Path]; held {
 			if list, ok, err = p.taskAgents(t); err != nil {
-				return fail(env, stateFailure(err))
+				f := stateFailure(err)
+				return deploy{}, &f
 			}
 		}
 		if ok {
-			targets = append(targets, agents.Target{Path: w.Path, Agents: list})
-			laid[w.Path] = true
+			d.targets = append(d.targets, agents.Target{Path: w.Path, Agents: list})
+			d.laid[w.Path] = true
 		}
 	}
-	conflicts, err := agents.Check(agentsLayout, targets)
-	if err != nil {
-		return fail(env, layoutFailure(err))
-	}
-	if len(conflicts) > 0 {
-		return fail(env, agentsConflict(conflicts))
-	}
-	res, err := agents.Sync(agentsLayout, targets, p.paths())
-	if err != nil {
-		return fail(env, layoutFailure(err))
-	}
+	return d, nil
+}
+
+// output is the result res of the layout d as the contract has it: every
+// worktree of the pool in the order of d.
+func (d deploy) output(res agents.Result, p *layoutPool) contract.AgentsDeployOutput {
 	changes := map[string]agents.Change{}
 	for _, c := range res.Worktrees {
 		changes[c.Worktree] = c
 	}
-	out := contract.AgentsDeployOutput{Project: id, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}}
-	for _, w := range worktrees {
+	out := contract.AgentsDeployOutput{Project: d.project, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}}
+	for _, w := range d.worktrees {
 		c, ok := changes[w.Path]
 		if !ok {
 			c = agents.Change{Worktree: w.Path}
 		}
 		out.Worktrees = append(out.Worktrees, changeJSON(c, p))
 	}
-	return emit(env, out, func(p *page, out contract.AgentsDeployOutput) { agentsDeployText(p, out, laid) })
+	return out
 }
 
 // agentsDeployText prints the layout of the pool of a project as a table of

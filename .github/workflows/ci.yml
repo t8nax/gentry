@@ -71,7 +71,7 @@ jobs:
       - name: unit tests
         if: matrix.suite == 'unit'
         run: |
-          packages=$(go list ./... | grep -v '/tests/')
+          packages=$(go list ./... | grep -v '^github.com/t8nax/gentry/tests/')
           # shellcheck disable=SC2086 # a word per package
           go test -short $packages
 

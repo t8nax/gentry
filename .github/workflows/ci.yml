@@ -121,12 +121,16 @@ jobs:
           go vet ./...
           go vet -tags acceptance ./cmd/gentry
 
-      # The unit and integration tests: the packages of the code, in short
-      # mode. The package contract lies outside cmd and internal; the
-      # packages under tests run in the jobs of their suites.
+      # The unit and integration tests: every package of the module but those
+      # under tests, which run in the jobs of their suites, in short mode. A
+      # new package of the code, such as contract outside cmd and internal,
+      # runs here with no change of the workflow.
       - name: unit tests
         if: matrix.suite == 'unit'
-        run: go test -short ./cmd/... ./internal/... ./contract/...
+        run: |
+          packages=$(go list ./... | grep -v '/tests/')
+          # shellcheck disable=SC2086 # a word per package
+          go test -short $packages
 
       - uses: actions/cache/save@v6
         if: matrix.suite == 'unit' && steps.go-cache-restore.outputs.cache-hit != 'true'

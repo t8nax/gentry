@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1346,6 +1347,12 @@ func readFile(t *testing.T, p string) string {
 }
 
 // copyFile copies the program from to the file to.
+//
+// The file is written holding syscall.ForkLock for reading, which a fork
+// waits for: no program the tests run in parallel is forked while the file
+// is open for writing. On Linux a child forked then would hold the
+// descriptor until its exec, and a run of the program in that time fails
+// with ETXTBSY, «text file busy» (golang/go#22315).
 func copyFile(t *testing.T, from, to string) {
 	t.Helper()
 	b, err := os.ReadFile(from)
@@ -1355,7 +1362,10 @@ func copyFile(t *testing.T, from, to string) {
 	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(to, b, 0o755); err != nil {
+	syscall.ForkLock.RLock()
+	err = os.WriteFile(to, b, 0o755)
+	syscall.ForkLock.RUnlock()
+	if err != nil {
 		t.Fatal(err)
 	}
 }

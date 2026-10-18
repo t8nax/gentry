@@ -1,6 +1,7 @@
 // Package release_test holds the acceptance tests of the release: the checks
-// of the button Release, the build of a release into a folder and the build
-// of the site of the pages of the releases, made by the program of release
+// of the button Release, the build of a release into a folder, the build of
+// the site of the pages of the releases and the build of the message about
+// a release to the group in Telegram, made by the program of release
 // of the module, which the workflows run, on a temporary git repository; the
 // build of the workflows; and the journal of changes of the module.
 //
@@ -16,6 +17,9 @@
 //	                                 released versions from the head of the
 //	                                 repository into the folder: index.html,
 //	                                 the list, and <version>/index.html
+//	release notice <version>         prints the message about the release
+//	                                 to the group in Telegram, HTML of
+//	                                 Telegram
 //
 // A refusal exits with code 1 and its text on the standard error.
 package release_test

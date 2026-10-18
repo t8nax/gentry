@@ -68,20 +68,26 @@ func clearOld(program string) error {
 	return os.Rename(old, program+"."+hex.EncodeToString(suffix)+".old")
 }
 
-// Replace puts the program downloaded in place of program. No step leaves
-// the folder without the program: the new one comes next to it as
-// <program>.new and takes its place by a rename over it. On Windows a
-// running program cannot be replaced but can be renamed: it goes to
-// <program>.old, the new one takes its place, its name given back if that
-// fails, and <program>.old stays only while a process holds it. A failure is
-// a WriteError, and the program is left as it was.
+// rename renames a file; the tests make it fail.
+var rename = os.Rename
+
+// Replace puts the program downloaded in place of program: the new one comes
+// next to it as <program>.new and takes its place by a rename over it, so on
+// Linux and macOS no step leaves the folder without the program. On Windows
+// a running program cannot be replaced but can be renamed: it goes to
+// <program>.old, and the new one takes its place by a second rename; between
+// the two the folder has no program for a moment. If the second rename
+// fails, the program gets its name back. <program>.old stays only while a
+// process holds it. A failure is a WriteError, and the program is left as it
+// was, unless its name could not be given back: then the WriteError tells
+// that too, and the program is <program>.old.
 func Replace(downloaded, program string) error {
 	staged := program + ".new"
 	if err := stage(downloaded, staged); err != nil {
 		os.Remove(staged)
 		return &WriteError{Program: program, Err: err}
 	}
-	err := os.Rename(staged, program)
+	err := rename(staged, program)
 	if err == nil {
 		return nil
 	}
@@ -94,14 +100,14 @@ func Replace(downloaded, program string) error {
 		os.Remove(staged)
 		return &WriteError{Program: program, Err: err}
 	}
-	if err := os.Rename(program, Old(program)); err != nil {
+	if err := rename(program, Old(program)); err != nil {
 		os.Remove(staged)
 		return &WriteError{Program: program, Err: err}
 	}
-	if err := os.Rename(staged, program); err != nil {
-		os.Rename(Old(program), program)
+	if err := rename(staged, program); err != nil {
+		restore := rename(Old(program), program)
 		os.Remove(staged)
-		return &WriteError{Program: program, Err: err}
+		return &WriteError{Program: program, Err: err, Restore: restore}
 	}
 	os.Remove(Old(program))
 	return nil

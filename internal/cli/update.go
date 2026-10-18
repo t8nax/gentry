@@ -557,11 +557,18 @@ func updateFailure(err error) failure {
 			details: map[string]any{"file": ce.File, "expected": ce.Want, "actual": ce.Got},
 		}
 	case errors.As(err, &we):
+		// A program that could not get its name back is told on the line of
+		// the reason: the operator finds it at .old.
+		reason, details := we.Err.Error(), map[string]any{"path": we.Program}
+		if we.Restore != nil {
+			reason += "; " + we.Restore.Error()
+			details["restore"] = we.Restore.Error()
+		}
 		return failure{
 			exit:    contract.ExitError,
 			code:    contract.CodeIOError,
-			message: msg.Text(msg.ErrProgramWrite, we.Program, we.Err),
-			details: map[string]any{"path": we.Program},
+			message: msg.Text(msg.ErrProgramWrite, we.Program, reason),
+			details: details,
 		}
 	}
 	return internal(err)

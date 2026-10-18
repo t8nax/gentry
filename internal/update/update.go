@@ -161,9 +161,17 @@ func (e *ChecksumError) Error() string {
 type WriteError struct {
 	Program string
 	Err     error
+	// Restore is why the program renamed aside could not get its name
+	// back: it is <program>.old; nil if it has its name.
+	Restore error
 }
 
-func (e *WriteError) Error() string { return e.Program + ": " + e.Err.Error() }
+func (e *WriteError) Error() string {
+	if e.Restore != nil {
+		return e.Program + ": " + e.Err.Error() + "; " + e.Restore.Error()
+	}
+	return e.Program + ": " + e.Err.Error()
+}
 func (e *WriteError) Unwrap() error { return e.Err }
 
 // A Client downloads the releases of the address Releases.

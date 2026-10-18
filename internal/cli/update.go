@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"time"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
@@ -126,10 +128,17 @@ func installedProgram() (string, *failure) {
 	return filepath.Join(root, "bin", update.Program()), nil
 }
 
+// versionTimeout limits the run of the program installed that names its
+// version: the update holds the lock meanwhile, and a program that hangs
+// must not stop every update.
+const versionTimeout = 10 * time.Second
+
 // versionOf returns the version the program names; false if it does not
-// run.
+// run in versionTimeout.
 func versionOf(program string) (string, bool) {
-	b, err := exec.Command(program, "version", "--json").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
+	defer cancel()
+	b, err := exec.CommandContext(ctx, program, "version", "--json").Output()
 	if err != nil {
 		return "", false
 	}

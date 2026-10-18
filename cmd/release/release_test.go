@@ -196,7 +196,12 @@ func TestContentRefusal(t *testing.T) {
 			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoticeUnknown, "Акции")), msg.Text(msg.ReleaseContentNoticeSubsections),
 		}},
 		{contentInvalidError{reason: reasonNoticeLong, length: 4100}, []string{
-			file, msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoticeLong, 4100, noticeLimit)),
+			file, msg.Text(msg.ReleaseContentLength, 4100), msg.Text(msg.ReleaseContentLimit, noticeLimit),
+			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoticeLong)),
+		}},
+		{contentInvalidError{line: 7, reason: reasonNoticeOutside}, []string{
+			file, msg.Text(msg.ReleaseContentLine, 7),
+			msg.Text(msg.ReleaseContentError, msg.Text(msg.ReleaseContentNoticeOutside)), msg.Text(msg.ReleaseContentNoticeItemRule),
 		}},
 	} {
 		tc.err.file = "releases/0.4.0.md"

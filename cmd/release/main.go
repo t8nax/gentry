@@ -142,9 +142,11 @@ func refusal(err error) string {
 }
 
 // contentRefusal returns the text of the refusal of a content of a page
-// written wrong: the file, the line when the error is of one, the error and,
-// for an unknown section, subheading or subsection of the text for the
-// group, the ones a content may have.
+// written wrong: the file, the line when the error is of one, the length and
+// the limit of a message to the group that is too long, the error and, for
+// an unknown section, subheading or subsection of the text for the group,
+// the ones a content may have, for text out of an item, the rule of an
+// item.
 func contentRefusal(e *contentInvalidError) string {
 	lines := []string{msg.Text(msg.ReleaseContentInvalid, e.file)}
 	if e.line > 0 {
@@ -181,7 +183,7 @@ func contentRefusal(e *contentInvalidError) string {
 	case reasonNoticeRepeated:
 		reason = msg.Text(msg.ReleaseContentNoticeRepeated, e.subject)
 	case reasonNoticeOutside:
-		reason = msg.Text(msg.ReleaseContentNoticeOutside)
+		reason, allowed = msg.Text(msg.ReleaseContentNoticeOutside), msg.Text(msg.ReleaseContentNoticeItemRule)
 	case reasonNoNotice:
 		reason = msg.Text(msg.ReleaseContentNoNotice)
 	case reasonNoticeExtra:
@@ -193,7 +195,8 @@ func contentRefusal(e *contentInvalidError) string {
 	case reasonNoticeEmptyItem:
 		reason = msg.Text(msg.ReleaseContentNoticeEmptyItem)
 	case reasonNoticeLong:
-		reason = msg.Text(msg.ReleaseContentNoticeLong, e.length, noticeLimit)
+		reason = msg.Text(msg.ReleaseContentNoticeLong)
+		lines = append(lines, msg.Text(msg.ReleaseContentLength, e.length), msg.Text(msg.ReleaseContentLimit, noticeLimit))
 	}
 	lines = append(lines, msg.Text(msg.ReleaseContentError, reason))
 	if allowed != "" {

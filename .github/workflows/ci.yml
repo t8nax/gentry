@@ -210,8 +210,9 @@ jobs:
         with:
           fetch-depth: 0  # tags give the version Go stamps into the binary
 
-      # Restores the cache of Go and does not save it: the key is that of the
-      # jobs of the tests on Linux, which save it with what they build.
+      # Restores the cache of Go and does not save it: under the same key only
+      # the job ubuntu / acceptance saves it, with the builds of the six
+      # platforms of the area release, made with the same flags as here.
       - uses: ./.github/actions/go
 
       - name: cross-build

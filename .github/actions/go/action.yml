@@ -2,9 +2,10 @@
 # cache. setup-go runs with no cache of its own, which every job would save,
 # and the cache is only restored here; the workflow saves it from one job,
 # with the outputs paths and key. The paths and the key are those that
-# setup-go makes (src/cache-restore.ts and src/cache-utils.ts of
-# actions/setup-go), so that the caches it has saved still serve: the
-# version of an entry of the cache is a hash of its paths, in their order.
+# setup-go makes, so that the caches it has saved still serve: the key as
+# src/cache-restore.ts of actions/setup-go makes it, the paths as
+# src/package-managers.ts names them, in their order, for the version of an
+# entry of the cache is a hash of its paths.
 name: Go
 description: Sets up the Go of go.mod and restores the cache of Go.
 

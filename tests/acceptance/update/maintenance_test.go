@@ -2,7 +2,10 @@ package update_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -121,9 +124,14 @@ func TestToolList(t *testing.T) {
 }
 
 // TestSetupToolUnknown checks that a call of the tool setup is the error of
-// MCP of an unknown tool and builds no plugin.
+// MCP of an unknown tool and builds no plugin: the fake Claude Code has no
+// plugin of Gentry and the data root no integration of Claude Code.
 func TestSetupToolUnknown(t *testing.T) {
 	root := testkit.EmptyHome(t)
+	state := filepath.Join(root, "claude-state.json")
+	t.Setenv(testkit.ClaudeProgramEnv, claudeProgram(t))
+	t.Setenv(fakeClaudeStateEnv, state)
+	t.Setenv(testkit.ClaudeConfigEnv, filepath.Join(root, "claude-config"))
 	r, ok := serveMCP(t, `"method":"tools/call","params":{"name":"setup","arguments":{"tool":"claude"}}`)[2]
 	if !ok || r.Error == nil || r.Error.Code != -32602 || !strings.Contains(r.Error.Message, "unknown tool") {
 		t.Errorf("tools/call setup: %+v (result %s), want the error -32602 of an unknown tool", r, r.Result)
@@ -131,6 +139,47 @@ func TestSetupToolUnknown(t *testing.T) {
 	if p := filepath.Join(root, "integrations", "claude"); testkit.FileExists(p) {
 		t.Errorf("the call built the plugin in %s", p)
 	}
+	b, err := os.ReadFile(state)
+	if errors.Is(err, fs.ErrNotExist) {
+		return
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st claudeState
+	if err := json.Unmarshal(b, &st); err != nil {
+		t.Fatalf("the state of the fake Claude Code: %v\n%s", err, b)
+	}
+	if slices.ContainsFunc(st.Plugins, func(p claudePlugin) bool { return p.ID == pluginID }) {
+		t.Errorf("the call registered the plugin %s in Claude Code: %s", pluginID, b)
+	}
+}
+
+// TestUpdateHelp checks the help of update: its description and that of
+// the flag --json.
+func TestUpdateHelp(t *testing.T) {
+	code, stdout, stderr := testkit.Run("update", "--help")
+	if code != 0 {
+		t.Fatalf("update --help: exit code %d, stdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	ls := lines(stdout)
+	const first = "Обновить Gentry до последнего выпуска и пересоздать подключённые интеграции с ИИ-инструментами."
+	if len(ls) == 0 || ls[0] != first {
+		t.Errorf("update --help:\n%s\nwant the first line «%s»", stdout, first)
+	}
+	at := slices.Index(ls, "Флаги:")
+	line := regexp.MustCompile(`^  --json +Вывести результат в формате JSON\.$`)
+	if at >= 0 {
+		for _, l := range ls[at+1:] {
+			if l == "" {
+				break
+			}
+			if line.MatchString(l) {
+				return
+			}
+		}
+	}
+	t.Errorf("the section «Флаги:» of update --help has no line of --json with «Вывести результат в формате JSON.»:\n%s", stdout)
 }
 
 // TestSetupInSession checks that gentry setup runs in a session of an AI

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/tests/testkit"
@@ -82,6 +83,40 @@ func TestUpdateRemovesFreeOld(t *testing.T) {
 	if b, err := os.ReadFile(old); err == nil && string(b) == stale {
 		t.Errorf("%s of the earlier update is still there", old)
 	}
+}
+
+// TestUpdateConcurrent checks that two updates run at once do not replace
+// the program together: one updates it, the other waits for it and then
+// finds the latest version installed, so the program of the release is
+// downloaded once.
+func TestUpdateConcurrent(t *testing.T) {
+	parallel(t)
+	s := installedStand(t, v010, true)
+	// The download of the program lasts long enough for both updates to run
+	// at once.
+	s.mock.slowProgram(3 * time.Second)
+	first, second := s.start("update"), s.start("update")
+	rs := []result{first(), second()}
+	current := []string{"Установлена последняя версия Gentry.", "Версия: " + latest}
+	var nUpdated, nCurrent int
+	for _, r := range rs {
+		if r.code != 0 {
+			t.Errorf("update: %s\nwant exit code 0", r)
+		}
+		switch ls := lines(r.stdout); {
+		case len(ls) > 0 && ls[0] == updated(v010):
+			nUpdated++
+		case len(ls) >= 2 && slices.Equal(ls[:2], current):
+			nCurrent++
+		}
+	}
+	if nUpdated != 1 || nCurrent != 1 {
+		t.Errorf("the updates run at once:\n%s\n%s\nwant one to start with «%s» and the other with:\n%s", rs[0], rs[1], updated(v010), testkit.Lines(current...))
+	}
+	if n := s.mock.served(latest + "/" + hostAsset); n != 1 {
+		t.Errorf("the mock served the program %s of %s %d times, want once; requests %q", hostAsset, latest, n, s.mock.requested())
+	}
+	s.wantVersion(latest)
 }
 
 // TestUpdateClosedInput checks that the update asks nothing: with the
@@ -396,6 +431,39 @@ func TestUpdateCurrentPluginStale(t *testing.T) {
 	})
 }
 
+// TestUpdateCurrentPluginStaleAgents checks that with the latest version
+// installed the update of a stale plugin lays out the subagents anew, which
+// agents deploy then finds in place, says nothing of it in the text and
+// gives the project in the field agents of the JSON. A file of a subagent
+// changed by hand stands for a file the previous plugin laid out otherwise.
+func TestUpdateCurrentPluginStaleAgents(t *testing.T) {
+	parallel(t)
+	setup := func(t *testing.T) *stand {
+		s := installedStand(t, latest, true)
+		editByHand(t, reviewer(s.project("shop")))
+		s.editPlugin(func(p *claudePlugin) { p.Version = "0.0.0+00000000" })
+		return s
+	}
+	t.Run("text", func(t *testing.T) {
+		t.Parallel()
+		s := setup(t)
+		r := s.update()
+		wantCode(t, r, 0)
+		for _, o := range []string{r.stdout, r.stderr} {
+			wantNoLineWith(t, o, "убагент")
+		}
+		s.wantAgentsInPlace("shop")
+	})
+	t.Run("json", func(t *testing.T) {
+		t.Parallel()
+		s := setup(t)
+		out, res := s.updateJSON()
+		if !slices.ContainsFunc(res.Agents, func(a updateAgents) bool { return a.Project == "shop" }) {
+			t.Errorf("update --json:\n%s\nwant an element of agents for shop", out)
+		}
+	})
+}
+
 // 4. Субагенты и что сделать после обновления.
 
 // TestUpdateAgents checks that the update lays out the subagents in the
@@ -417,7 +485,9 @@ func TestUpdateAgents(t *testing.T) {
 		s := setup(t)
 		r := s.update()
 		wantCode(t, r, 0)
-		wantNoLineWith(t, r.stdout, "убагент")
+		for _, o := range []string{r.stdout, r.stderr} {
+			wantNoLineWith(t, o, "убагент")
+		}
 		for _, name := range []string{"shop", "admin"} {
 			s.wantAgentsInPlace(name)
 		}
@@ -430,8 +500,14 @@ func TestUpdateAgents(t *testing.T) {
 		var got []string
 		for _, a := range res.Agents {
 			got = append(got, a.Project)
-			if a.Changed == nil || a.Worktrees == nil {
-				t.Errorf("the element %s of agents has no result of the layout: %s", a.Project, out)
+			// The file of reviewer edited by hand is rewritten in each worktree.
+			if a.Changed == nil || !*a.Changed || len(a.Worktrees) == 0 {
+				t.Errorf("the element %s of agents is no layout that changed the worktrees: %s", a.Project, out)
+			}
+			for _, w := range a.Worktrees {
+				if !slices.Contains(w.Updated, "reviewer") {
+					t.Errorf("the worktree %s of %s has no reviewer in updated: %s", w.Path, a.Project, out)
+				}
 			}
 		}
 		if !slices.Equal(got, order) {
@@ -511,7 +587,9 @@ func TestUpdateNoProjects(t *testing.T) {
 	}
 	r := s.update()
 	wantCode(t, r, 0)
-	wantNoLineWith(t, r.stdout, "убагент")
+	for _, o := range []string{r.stdout, r.stderr} {
+		wantNoLineWith(t, o, "убагент")
+	}
 	if testkit.FileExists(s.stateStore()) {
 		t.Errorf("the update created the state store %s", s.stateStore())
 	}

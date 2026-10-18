@@ -59,6 +59,42 @@ func TestUpdateProgramNotInstalled(t *testing.T) {
 	}
 }
 
+// TestUpdateProgramElsewhereSpace checks that the hint of the refusal puts
+// the path of the program of the data root in double quotes when the path
+// has a space.
+func TestUpdateProgramElsewhereSpace(t *testing.T) {
+	parallel(t)
+	s := newStand(t)
+	s.dataIn("gentry data")
+	s.installed(v010)
+	other := filepath.Join(s.root, "elsewhere", "gentry"+exe)
+	copyFile(t, builds.programs[v010], other)
+	r := s.runIn(other, s.root, "update")
+	wantCode(t, r, 1)
+	wantLastBlock(t, r.stderr, `Обновить программу из папки данных: "`+s.program()+`" update`)
+	if code := s.errorOf(other); code != "program_elsewhere" {
+		t.Errorf("update --json: the error %q, want program_elsewhere", code)
+	}
+}
+
+// TestUpdateSymlink checks that the program of the data root run through a
+// symbolic link in another folder is the program of the data root: the
+// update installs the latest release.
+func TestUpdateSymlink(t *testing.T) {
+	parallel(t)
+	s := installedStand(t, v010, false)
+	link := filepath.Join(s.root, "elsewhere", "gentry"+exe)
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(s.program(), link); err != nil {
+		t.Skipf("the system makes no symbolic link: %v", err)
+	}
+	r := s.runIn(link, s.root, "update")
+	wantCode(t, r, 0)
+	s.wantVersion(latest)
+}
+
 // TestUpdateNotRelease checks that a build from the sources with no tag is
 // not replaced: the refusal names its version and the script of
 // installation, and the mock is asked nothing.
@@ -72,6 +108,44 @@ func TestUpdateNotRelease(t *testing.T) {
 	wantStderr(t, r,
 		"Установлена сборка не из выпуска.",
 		"Версия: "+builds.sourceVersion,
+		"",
+		"Поставить выпуск скриптом установки: "+installCommand)
+	s.wantError("not_release")
+	s.wantProgram(before)
+	s.wantNoRequests()
+}
+
+// TestUpdateDevBuild checks that a build with no information of the
+// version, which names 0.0.0-dev, is not replaced.
+func TestUpdateDevBuild(t *testing.T) {
+	parallel(t)
+	s := newStand(t)
+	s.installedFile(builds.dev)
+	before := s.programSum()
+	r := s.update()
+	wantCode(t, r, 1)
+	wantStderr(t, r,
+		"Установлена сборка не из выпуска.",
+		"Версия: "+devVersion,
+		"",
+		"Поставить выпуск скриптом установки: "+installCommand)
+	s.wantError("not_release")
+	s.wantProgram(before)
+	s.wantNoRequests()
+}
+
+// TestUpdateDirtyBuild checks that a build on the tag of a release with
+// uncommitted changes, which names 0.3.0+dirty, is not replaced.
+func TestUpdateDirtyBuild(t *testing.T) {
+	parallel(t)
+	s := newStand(t)
+	s.installedFile(builds.dirty)
+	before := s.programSum()
+	r := s.update()
+	wantCode(t, r, 1)
+	wantStderr(t, r,
+		"Установлена сборка не из выпуска.",
+		"Версия: "+dirtyVersion,
 		"",
 		"Поставить выпуск скриптом установки: "+installCommand)
 	s.wantError("not_release")
@@ -119,7 +193,7 @@ func TestUpdatePluginSwitched(t *testing.T) {
 
 // TestUpdatePluginElsewhereNoIntegration checks that the update refuses when
 // Claude Code serves the plugin of another data root, though this one has
-// no integration.
+// no integration, and asks the mock nothing.
 func TestUpdatePluginElsewhereNoIntegration(t *testing.T) {
 	parallel(t)
 	s := installedStand(t, v010, false)
@@ -128,6 +202,7 @@ func TestUpdatePluginElsewhereNoIntegration(t *testing.T) {
 	before := s.programSum()
 	s.wantError("plugin_elsewhere")
 	s.wantProgram(before)
+	s.wantNoRequests()
 }
 
 // 6. Ошибки при обновлении.

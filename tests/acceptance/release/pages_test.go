@@ -745,16 +745,12 @@ func TestReleasesList(t *testing.T) {
 	}
 }
 
-// TestReleasesListInstall checks that the section «Как установить» of the
-// list of the releases stays as it was: the commands of installation and
-// the next step to connect an AI tool, and no gentry update on the list.
+// TestReleasesListInstall checks that the list of the releases names no
+// gentry update: its section «Как установить» stays as it was, which
+// TestReleasesList checks.
 func TestReleasesListInstall(t *testing.T) {
 	dir := buildSite(t, shopRepo(t, shopFiles(nil), "0.2.1", "0.3.0", "0.4.0"))
 	p := readPage(t, dir, "index.html")
-	if p.heading("Как установить") == nil {
-		t.Errorf("index.html has no heading «Как установить»: %q", p.headingTexts())
-	}
-	wantText(t, "index.html", p.bodyText(), "Как установить", installSh, installPs1, listNextStep)
 	wantNoText(t, "index.html", p.bodyText(), updateCommand)
 }
 

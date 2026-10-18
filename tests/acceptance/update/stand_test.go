@@ -114,7 +114,16 @@ var builds struct {
 	content       map[string][]byte // the bytes of the program of each release of the mock
 	source        string            // a build of a commit with no tag
 	sourceVersion string            // the version it names
+	dev           string            // a build with no information of the version: 0.0.0-dev
+	dirty         string            // a build on the tag v0.3.0 with uncommitted changes: 0.3.0+dirty
 }
+
+// The versions the builds with no information of the version and with
+// uncommitted changes name.
+const (
+	devVersion   = "0.0.0-dev"
+	dirtyVersion = v030 + "+dirty"
+)
 
 // built builds the programs of the stand, once for the package.
 func built(t *testing.T) {
@@ -204,7 +213,34 @@ func buildAll(root string) error {
 	if releaseVersion.MatchString(builds.sourceVersion) {
 		return fmt.Errorf("the build of a commit with no tag names the version %s of a release", builds.sourceVersion)
 	}
-	return nil
+	// With no information of the version control the program names 0.0.0-dev.
+	builds.dev = filepath.Join(dir, "dev", "gentry"+exe)
+	if err := goBuild(module, "./cmd/gentry", builds.dev, "-buildvcs=false"); err != nil {
+		return err
+	}
+	if got, err := versionOf(builds.dev); err != nil || got != devVersion {
+		return fmt.Errorf("the build with -buildvcs=false names the version %q (%v), want %s", got, err, devVersion)
+	}
+	// On the tag v0.3.0 with an uncommitted change it names 0.3.0+dirty.
+	if err := git("checkout", "--quiet", "v"+v030); err != nil {
+		return err
+	}
+	changelog := filepath.Join(module, "CHANGELOG.md")
+	b, err := os.ReadFile(changelog)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(changelog, append(b, "\nНезакоммиченная правка.\n"...), 0o644); err != nil {
+		return err
+	}
+	builds.dirty = filepath.Join(dir, "dirty", "gentry"+exe)
+	if err := goBuild(module, "./cmd/gentry", builds.dirty); err != nil {
+		return err
+	}
+	if got, err := versionOf(builds.dirty); err != nil || got != dirtyVersion {
+		return fmt.Errorf("the build on the tag v%s with an uncommitted change names the version %q (%v), want %s", v030, got, err, dirtyVersion)
+	}
+	return git("checkout", "--quiet", "--force", "main")
 }
 
 // fakeClaude holds the fake Claude Code, built once for the package.
@@ -273,9 +309,10 @@ func copyModule(root, dir string) error {
 }
 
 // goBuild builds the package of the module in dir into the file, as the
-// release builds Gentry.
-func goBuild(dir, pkg, file string) error {
-	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", file, pkg)
+// release builds Gentry, with the flags of go build added.
+func goBuild(dir, pkg, file string, flags ...string) error {
+	args := append([]string{"build", "-trimpath", "-ldflags", "-s -w"}, flags...)
+	cmd := exec.Command("go", append(args, "-o", file, pkg)...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -347,6 +384,7 @@ type mock struct {
 	files    map[string][]byte // by <version>/<file>
 	journals map[string]string // CHANGELOG.md on the tag, by version
 	noLatest bool              // /releases/latest answers 404
+	slow     time.Duration     // the delay before the program of the latest release is served
 	requests []string
 }
 
@@ -416,10 +454,17 @@ func (m *mock) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, "/storage/"+file, http.StatusFound)
 	case strings.HasPrefix(p, "/storage/"):
-		b, ok := m.file(strings.TrimPrefix(p, "/storage/"))
+		name := strings.TrimPrefix(p, "/storage/")
+		b, ok := m.file(name)
 		if !ok {
 			http.NotFound(w, r)
 			return
+		}
+		if name == latest+"/"+hostAsset {
+			m.mu.Lock()
+			slow := m.slow
+			m.mu.Unlock()
+			time.Sleep(slow)
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Length", fmt.Sprint(len(b)))
@@ -479,6 +524,26 @@ func (m *mock) dropLatest() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.noLatest = true
+}
+
+// slowProgram makes the mock wait d before it serves the program of the
+// platform of the stand of the latest release.
+func (m *mock) slowProgram(d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.slow = d
+}
+
+// served returns how many times the mock has served the file <version>/<file>
+// from its storage, wherever the request was redirected from.
+func (m *mock) served(name string) int {
+	n := 0
+	for _, p := range m.requested() {
+		if p == "/storage/"+name {
+			n++
+		}
+	}
+	return n
 }
 
 // corrupt changes the program of the platform of the stand in the release v
@@ -593,6 +658,16 @@ func installedStand(t *testing.T, v string, claude bool) *stand {
 	return s
 }
 
+// dataIn moves the data root of a stand with nothing installed to the folder
+// name of the stand, such as a folder with a space in its name.
+func (s *stand) dataIn(name string) {
+	s.t.Helper()
+	s.data = filepath.Join(s.root, name)
+	if err := os.MkdirAll(s.data, 0o755); err != nil {
+		s.t.Fatal(err)
+	}
+}
+
 // bin is the folder of the program; program is its path.
 func (s *stand) bin() string     { return filepath.Join(s.data, "bin") }
 func (s *stand) program() string { return filepath.Join(s.bin(), "gentry"+exe) }
@@ -698,6 +773,38 @@ func (s *stand) runEnv(program, dir string, stdin io.Reader, over map[string]str
 		s.t.Fatalf("%s: %v", cmd, err)
 	}
 	return result{code: code, stdout: crlf(out.String()), stderr: crlf(errOut.String())}
+}
+
+// start starts the installed program with args in the folder of the stand
+// and returns the function that waits for it to end and gives what it gave.
+func (s *stand) start(args ...string) func() result {
+	s.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	cmd := exec.CommandContext(ctx, s.program(), args...)
+	cmd.Dir, cmd.Env = s.root, s.environ(nil)
+	var out, errOut bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	if err := cmd.Start(); err != nil {
+		cancel()
+		s.t.Fatal(err)
+	}
+	return func() result {
+		s.t.Helper()
+		defer cancel()
+		err := cmd.Wait()
+		if ctx.Err() != nil {
+			s.t.Fatalf("gentry %s did not end in %s: it waits for something", strings.Join(args, " "), commandTimeout)
+		}
+		code := 0
+		var exit *exec.ExitError
+		switch {
+		case errors.As(err, &exit):
+			code = exit.ExitCode()
+		case err != nil:
+			s.t.Fatalf("%s: %v", cmd, err)
+		}
+		return result{code: code, stdout: crlf(out.String()), stderr: crlf(errOut.String())}
+	}
 }
 
 // crlf ends the lines of a Windows console with \n.
@@ -1027,9 +1134,14 @@ type updateBreaking struct {
 }
 
 type updateAgents struct {
-	Project   string            `json:"project"`
-	Changed   *bool             `json:"changed"`
-	Worktrees []json.RawMessage `json:"worktrees"`
+	Project   string                 `json:"project"`
+	Changed   *bool                  `json:"changed"`
+	Worktrees []updateAgentsWorktree `json:"worktrees"`
+}
+
+type updateAgentsWorktree struct {
+	Path    string   `json:"path"`
+	Updated []string `json:"updated"`
 }
 
 // updateSchema is the schema of the output of gentry update --json in the

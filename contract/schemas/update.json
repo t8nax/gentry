@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/update.json",
+  "title": "UpdateOutput",
+  "description": "Output of `gentry update --json`: the latest release of Gentry is installed in place of the program of the data root, the integrations connected are built anew by the new program and the subagents are laid out anew in the worktrees of the projects.",
+  "type": "object",
+  "properties": {
+    "action": {
+      "description": "What the update did: updated (the program of the latest release took the place of the program) or current (the latest release was installed already; the integrations were checked). The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    },
+    "previous": {
+      "description": "The version of the program before the update; only with the action updated.",
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "description": "The version of the program installed now, that of the latest release.",
+      "type": "string",
+      "minLength": 1
+    },
+    "program": {
+      "description": "The path of the program of the data root.",
+      "type": "string",
+      "minLength": 1
+    },
+    "integrations": {
+      "description": "Each integration with an AI tool connected in the data root, as gentry setup <tool> --json gives it; empty if none is connected.",
+      "type": "array",
+      "items": { "$ref": "./setup.json" }
+    },
+    "breaking": {
+      "description": "The incompatible changes of each version the update skipped, from the journal of changes, in the order of the versions; a version with none is left out. Only with the action updated.",
+      "type": "array",
+      "items": {
+        "title": "UpdateBreaking",
+        "type": "object",
+        "properties": {
+          "version": {
+            "description": "The version.",
+            "type": "string",
+            "minLength": 1
+          },
+          "lines": {
+            "description": "The incompatible changes of the version, a line each, as the journal has them.",
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "required": ["version", "lines"]
+      }
+    },
+    "changelog_error": {
+      "description": "Present if the journal of changes of the new version could not be read, with what went wrong; the update is done.",
+      "type": "string",
+      "minLength": 1
+    },
+    "page": {
+      "description": "The address of the page of the release of the new version; only with the action updated.",
+      "type": "string",
+      "minLength": 1
+    },
+    "agents": {
+      "description": "The layout of the subagents in the worktrees of each project, in the order of gentry project list; present only if the program was replaced or a plugin was built anew, and there is a project.",
+      "type": "array",
+      "items": {
+        "title": "UpdateAgents",
+        "type": "object",
+        "properties": {
+          "project": {
+            "description": "Identifier of the project.",
+            "type": "string",
+            "minLength": 1
+          },
+          "changed": {
+            "description": "Whether the layout changed any worktree.",
+            "type": "boolean"
+          },
+          "worktrees": {
+            "description": "Every worktree of the pool, the main one first, then by path, as gentry agents deploy gives them.",
+            "type": "array",
+            "items": { "$ref": "./agents-worktree.json" }
+          },
+          "conflicts": {
+            "description": "Subagents not laid out: a file of their name is there already, which git of the project tracks or Gentry did not lay out. The update is done; gentry agents deploy --project lays them out once the files are dealt with.",
+            "type": "array",
+            "items": { "$ref": "./agents-conflict.json" }
+          }
+        },
+        "required": ["project", "changed", "worktrees"]
+      }
+    }
+  },
+  "required": ["action", "version", "program", "integrations"]
+}

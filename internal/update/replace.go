@@ -1,0 +1,130 @@
+package update
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+
+	"github.com/t8nax/gentry/internal/filelock"
+)
+
+// lockName is the lock of the updates of the program, in its folder: two
+// updates at once do not replace the program together.
+const lockName = ".update.lock"
+
+// Lock takes the lock of the updates of the program and waits for another
+// update to release it until ctx is done. A folder of the program that cannot
+// be written is a WriteError: the program could not be replaced either.
+func Lock(ctx context.Context, program string) (*filelock.Lock, error) {
+	l, err := filelock.AcquireContext(ctx, filepath.Join(filepath.Dir(program), lockName))
+	if err != nil {
+		return nil, &WriteError{Program: program, Err: err}
+	}
+	return l, nil
+}
+
+// Old returns the name a running program on Windows is renamed to when it is
+// replaced.
+func Old(program string) string { return program + ".old" }
+
+// RemoveOld removes the programs earlier updates renamed on Windows,
+// <program>.old and those moved aside from it, unless a process still holds
+// them.
+func RemoveOld(program string) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	entries, err := os.ReadDir(filepath.Dir(program))
+	if err != nil {
+		return
+	}
+	base := filepath.Base(program)
+	for _, e := range entries {
+		if n := e.Name(); strings.HasPrefix(n, base+".") && strings.HasSuffix(n, ".old") && e.Type().IsRegular() {
+			os.Remove(filepath.Join(filepath.Dir(program), n))
+		}
+	}
+}
+
+// clearOld makes room for <program>.old: a free one is removed, one a
+// process still holds, such as the server of tools of a session that started
+// before an earlier update, is moved aside to <program>.<random>.old, as a
+// running program can be renamed.
+func clearOld(program string) error {
+	old := Old(program)
+	err := os.Remove(old)
+	if err == nil || errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	suffix := make([]byte, 4)
+	rand.Read(suffix)
+	return os.Rename(old, program+"."+hex.EncodeToString(suffix)+".old")
+}
+
+// Replace puts the program downloaded in place of program. No step leaves
+// the folder without the program: the new one comes next to it as
+// <program>.new and takes its place by a rename over it. On Windows a
+// running program cannot be replaced but can be renamed: it goes to
+// <program>.old, the new one takes its place, its name given back if that
+// fails, and <program>.old stays only while a process holds it. A failure is
+// a WriteError, and the program is left as it was.
+func Replace(downloaded, program string) error {
+	staged := program + ".new"
+	if err := stage(downloaded, staged); err != nil {
+		os.Remove(staged)
+		return &WriteError{Program: program, Err: err}
+	}
+	err := os.Rename(staged, program)
+	if err == nil {
+		return nil
+	}
+	if runtime.GOOS != "windows" {
+		os.Remove(staged)
+		return &WriteError{Program: program, Err: err}
+	}
+	// A running process holds the program: on Windows the update itself.
+	if err := clearOld(program); err != nil {
+		os.Remove(staged)
+		return &WriteError{Program: program, Err: err}
+	}
+	if err := os.Rename(program, Old(program)); err != nil {
+		os.Remove(staged)
+		return &WriteError{Program: program, Err: err}
+	}
+	if err := os.Rename(staged, program); err != nil {
+		os.Rename(Old(program), program)
+		os.Remove(staged)
+		return &WriteError{Program: program, Err: err}
+	}
+	os.Remove(Old(program))
+	return nil
+}
+
+// stage copies the program downloaded to the file staged, which can be run.
+func stage(downloaded, staged string) error {
+	in, err := os.Open(downloaded)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(staged, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	// The mode of a file created is cut by the umask.
+	return os.Chmod(staged, 0o755)
+}

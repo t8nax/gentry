@@ -171,8 +171,10 @@ jobs:
             go test -count=1 ./tests/acceptance/install
           fi
 
+      # What the jobs build does not depend on the result of the tests: the
+      # cache is saved when they fail too.
       - uses: actions/cache/save@v6
-        if: matrix.suite == 'acceptance' && steps.go-cache-restore.outputs.cache-hit != 'true'
+        if: "!cancelled() && matrix.suite == 'acceptance' && steps.go-cache-restore.outputs.cache-hit != 'true'"
         with:
           path: ${{ steps.go-cache.outputs.paths }}
           key: ${{ steps.go-cache.outputs.key }}

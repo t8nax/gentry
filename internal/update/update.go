@@ -211,13 +211,13 @@ func (e *CheckError) Unwrap() error { return e.Err }
 // refused.
 func (u *Updater) Run(ctx context.Context, req Request) (*Result, *Handoff, error) {
 	installed := Installed(req.Root)
-	// The new program finishes the update under the lock its predecessor
-	// holds.
-	if releases.IsRelease(req.From) {
-		return u.finish(ctx, req, installed), nil, nil
-	}
 	if err := sameProgram(req.Running, installed); err != nil {
 		return nil, nil, err
+	}
+	// The new program finishes the update under the lock its predecessor
+	// holds: only the program of the data root, which its predecessor runs.
+	if releases.IsRelease(req.From) {
+		return u.finish(ctx, req, installed), nil, nil
 	}
 	// A build that is no release is refused before the lock: a folder of
 	// the program closed for writing must not hide the refusal.

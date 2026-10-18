@@ -38,10 +38,14 @@ func runUpdate(args []string, env Env) int {
 		return fail(env, internal(err))
 	}
 	own := buildinfo.Version()
+	// The variable is for this program alone: the programs it runs, claude
+	// and git, and the program of a handoff do not get it.
+	from := os.Getenv(update.FromEnv)
+	os.Unsetenv(update.FromEnv)
 	projects := &updateProjects{}
 	defer projects.close()
 	u := update.Updater{Releases: releases.New(), Tools: updateTools(own), Projects: projects, VersionOf: releases.VersionOf}
-	r, h, err := u.Run(env.context(), update.Request{Root: root, Running: exe, Version: own, From: os.Getenv(update.FromEnv)})
+	r, h, err := u.Run(env.context(), update.Request{Root: root, Running: exe, Version: own, From: from})
 	switch {
 	case err != nil:
 		return fail(env, updateRefusal(err))

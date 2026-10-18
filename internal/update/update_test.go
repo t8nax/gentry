@@ -373,6 +373,14 @@ func TestRunFinish(t *testing.T) {
 		t.Errorf("the new program asked for the latest release (%d), or the failure is not told", s.releases.latests)
 	}
 
+	// The new program is that of the data root.
+	s = newStand(t, "0.3.0")
+	s.running = filepath.Join(s.root, "elsewhere", "gentry")
+	var e *ElsewhereError
+	if _, _, err := s.run("0.3.0", "0.1.0"); !errors.As(err, &e) {
+		t.Errorf("the update finished by a program elsewhere: %v, want ElsewhereError", err)
+	}
+
 	// An integration that fails, the projects that cannot be listed and the
 	// journal that cannot be read.
 	s = newStand(t, "0.3.0")

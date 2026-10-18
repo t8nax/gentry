@@ -20,11 +20,17 @@ import (
 const lockName = ".update.lock"
 
 // Lock takes the lock of the updates of the program and waits for another
-// update to release it until ctx is done. A folder of the program that cannot
-// be written is a WriteError: the program could not be replaced either.
+// update to release it until ctx is done, then returns ctx.Err(). A folder of
+// the program that cannot be written is a WriteError: the program could not
+// be replaced either. The file of the lock stays in the folder after the
+// update, as the locks of filelock do: the system releases the lock with the
+// process, and a file left holds no lock.
 func Lock(ctx context.Context, program string) (*filelock.Lock, error) {
 	l, err := filelock.AcquireContext(ctx, filepath.Join(filepath.Dir(program), lockName))
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, &WriteError{Program: program, Err: err}
 	}
 	return l, nil

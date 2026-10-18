@@ -134,7 +134,7 @@ func TestNoticeInvalid(t *testing.T) {
 		{
 			name:  "subsection_of_journal_missing",
 			text:  page + strings.TrimSuffix(notice040, "\n## Исправлено\n* Поиск находит товары по артикулу с дефисом.\n"),
-			error: []string{"Ошибка: нет подраздела «Исправлено», хотя в журнале он есть"},
+			error: []string{"Ошибка: нет подраздела «Исправлено», который есть в журнале изменений этой версии"},
 		},
 		{
 			name: "subsection_without_items",
@@ -146,7 +146,7 @@ func TestNoticeInvalid(t *testing.T) {
 			name: "text_outside_item",
 			text: page + notice040 + "\nПоиск стал быстрее.\n",
 			line: 73, at: "Поиск стал быстрее.",
-			error: []string{"Ошибка: текст вне пункта: пункт начинается с «* », его продолжение — с отступа"},
+			error: []string{"Ошибка: текст вне пункта: пункт начинается с «* », а его продолжение — с отступа"},
 		},
 		{
 			name: "unknown_subsection",
@@ -202,7 +202,7 @@ func TestNoticeTooLong(t *testing.T) {
 	}
 	r, res := checkShop(t, map[string]string{contentDir + "0.4.0.md": text})
 	wantRefusal(t, res, badContent, "Файл: releases/0.4.0.md",
-		"Ошибка: сообщение в группу длиннее допустимого: "+strconv.Itoa(n)+" из 4096 знаков, нужно сократить пункты")
+		"Ошибка: сообщение в группу длиннее допустимого: "+strconv.Itoa(n)+" знаков при пределе 4096")
 	r.wantTags("v0.3.0")
 }
 

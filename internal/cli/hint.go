@@ -26,6 +26,9 @@ type hint struct {
 	// agent is the text the agent gets instead, with the values of args, for
 	// a text without a command that has other words for the agent.
 	agent msg.Key
+	// program is the path of the program the command is named by instead of
+	// gentry; empty for gentry.
+	program string
 }
 
 // param is an argument or a flag of the command of a hint, named as the field
@@ -137,6 +140,15 @@ func (h hint) set(field, v string) hint {
 	panic("cli: hint " + string(h.label) + " has no field " + field)
 }
 
+// by names the command of h by the path of the program instead of gentry,
+// in every channel, the agent's too: the agent runs it in a shell, and a
+// session of an AI tool may have no gentry in PATH. Such a command is one
+// of the command line, which the agent has no tool of.
+func (h hint) by(program string) hint {
+	h.program = program
+	return h
+}
+
 // forTask names the task key in the command of h, unless it names a task
 // already: by the argument of the command if it takes one, as task show
 // does, or else by --task. A hint without a command, a hint of the help and
@@ -204,6 +216,7 @@ func (h hint) render(ch channel) (string, bool) {
 		panic("cli: hint " + string(h.label) + " names no command " + h.cmd)
 	}
 	switch {
+	case h.program != "":
 	case ch == agentChannel && (c.hidden() || isService(c)):
 		return "", false
 	case ch == agentChannel:
@@ -218,6 +231,9 @@ func (h hint) render(ch channel) (string, bool) {
 // stage exit --kind <вид> --text <текст>.
 func (h hint) commandLine(c command) string {
 	words := []string{"gentry", h.cmd}
+	if h.program != "" {
+		words[0] = shellPath(h.program)
+	}
 	for _, p := range h.params {
 		if p.flag {
 			f := c.flagOf(p.field)
@@ -231,6 +247,16 @@ func (h hint) commandLine(c command) string {
 		words = append(words, valueOr(p.value, c.argOf(p.field).name))
 	}
 	return strings.Join(words, " ")
+}
+
+// shellPath is the path of a program as a shell takes it: in double quotes
+// if it has a space, as the plugin writes the program in the command of its
+// hook; as it is otherwise.
+func shellPath(p string) string {
+	if strings.ContainsAny(p, " \t") {
+		return `"` + p + `"`
+	}
+	return p
 }
 
 // valueOr returns v, or the placeholder k if v is empty.

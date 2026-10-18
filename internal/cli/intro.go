@@ -26,64 +26,83 @@ func startSession(w io.Writer, in hook.Input) error {
 
 // introduce writes the introduction for the agent in a worktree of a pool:
 // the project and the worktree, then either how to take a task or the task
-// with its state. Anywhere else it writes nothing. It only
-// reads the state store and never creates it.
+// with its state. A plugin that does not match the program is warned of
+// before, and anywhere: in any session the plugin is loaded in, its skills
+// may describe the commands of another version. Anywhere else it writes
+// nothing more. It only reads the state store and never creates it.
 func introduce(w io.Writer, in hook.Input) error {
+	var stale strings.Builder
+	if in.Tool == claude.Tool {
+		if exe, ok := pluginStale(); ok {
+			fmt.Fprintln(&stale, msg.Text(msg.IntroPluginStale))
+			fmt.Fprintln(&stale, introHint(hintOf(msg.HintIntroPluginStale).set("tool", claude.Tool).by(exe)))
+		}
+	}
+	// The warning does not depend on the state store: it stays when the
+	// introduction cannot be read.
+	intro, err := introduction(in)
+	if err != nil && stale.Len() == 0 {
+		return err
+	}
+	if stale.Len() > 0 && intro != "" {
+		stale.WriteString("\n")
+	}
+	_, err = io.WriteString(w, stale.String()+intro)
+	return err
+}
+
+// introduction is the introduction for the agent in a worktree of a pool;
+// empty anywhere else.
+func introduction(in hook.Input) (string, error) {
 	dir := in.Dir
 	if dir == "" {
 		wd, err := os.Getwd()
 		if err != nil {
-			return err
+			return "", err
 		}
 		dir = wd
 	}
 	dir, err := paths.Canonical(dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	path, err := state.Path()
 	if err != nil {
-		return err
+		return "", err
 	}
 	st, err := state.OpenRead(path)
 	if errors.Is(err, state.ErrNotExist) {
-		return nil
+		return "", nil
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer st.Close()
 	worktrees, err := st.Worktrees()
 	if err != nil {
-		return err
+		return "", err
 	}
 	wt, ok := task.Pooled(worktrees, dir)
 	if !ok {
-		return nil
+		return "", nil
 	}
 	t, taken, err := st.TaskIn(wt.Path)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	var b strings.Builder
-	if in.Tool == claude.Tool && pluginStale() {
-		fmt.Fprintln(&b, msg.Text(msg.IntroPluginStale))
-		fmt.Fprintln(&b, introHint(hintOf(msg.HintIntroPluginStale).set("tool", claude.Tool)))
-		b.WriteString("\n")
-	}
 	fmt.Fprintln(&b, msg.Text(msg.TaskProject, wt.Project))
 	fmt.Fprintln(&b, msg.Text(msg.TaskWorktree, wt.Path))
 	if !taken {
 		fmt.Fprintln(&b, msg.Text(msg.IntroNoTask))
 		b.WriteString("\n")
 		fmt.Fprintln(&b, introHint(hintOf(msg.HintIntroTake, skillName(in.Tool, agenttext.WorkingOnTask))))
-		_, err := io.WriteString(w, b.String())
-		return err
+		return b.String(), nil
 	}
 	views, err := task.Views(st, []state.Task{t})
 	if err != nil {
-		return err
+		return "", err
 	}
 	v := views[0]
 	fmt.Fprintln(&b, msg.Text(msg.TaskHeading, t.Key(), oneLine(t.Title)))
@@ -97,8 +116,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	}
 	b.WriteString("\n")
 	fmt.Fprintln(&b, introHint(hintOf(msg.HintIntroContinue, skillName(in.Tool, agenttext.WorkingOnTask))))
-	_, err = io.WriteString(w, b.String())
-	return err
+	return b.String(), nil
 }
 
 // introHint is h for the agent: the introduction is the agent's.
@@ -144,17 +162,17 @@ func introSteps(v task.View) string {
 
 // pluginStale reports whether the Claude Code plugin whose hook runs gentry
 // differs from the one this gentry builds, as after an update of gentry
-// without `gentry setup`. Outside a hook of the plugin there is nothing to
-// compare.
-func pluginStale() bool {
+// without `gentry setup`, and returns the path of this gentry, which the
+// hint names. Outside a hook of the plugin there is nothing to compare.
+func pluginStale() (string, bool) {
 	running, ok := claude.RunningVersion()
 	if !ok {
-		return false
+		return "", false
 	}
 	exe, err := executable()
 	if err != nil {
-		return false
+		return "", false
 	}
 	p, err := claude.Build(integration.Gentry(exe), buildinfo.Version())
-	return err == nil && p.Version != running
+	return exe, err == nil && p.Version != running
 }

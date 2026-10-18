@@ -44,6 +44,12 @@ func TestHintChannels(t *testing.T) {
 		{helpHint(msg.HintUnknownCommand, ""), hintLineOf(msg.HintUnknownCommand, "gentry --help"), ""},
 		{hintOf(msg.HintStateNewer), msg.Text(msg.HintStateNewer), msg.Text(msg.HintStateNewerAgent)},
 		{hintOf(msg.HintTitle), msg.Text(msg.HintTitle), msg.Text(msg.HintTitle)},
+		// A command by the path of the program is the same in every channel:
+		// the agent runs it in a shell; a path with a space is quoted.
+		{hintOf(msg.HintIntroPluginStale).set("tool", "claude").by("/home/anna/.gentry/bin/gentry"),
+			hintLineOf(msg.HintIntroPluginStale, "/home/anna/.gentry/bin/gentry setup claude"), hintLineOf(msg.HintIntroPluginStale, "/home/anna/.gentry/bin/gentry setup claude")},
+		{hintOf(msg.HintIntroPluginStale).set("tool", "claude").by("/home/anna/Gentry data/bin/gentry"),
+			hintLineOf(msg.HintIntroPluginStale, `"/home/anna/Gentry data/bin/gentry" setup claude`), hintLineOf(msg.HintIntroPluginStale, `"/home/anna/Gentry data/bin/gentry" setup claude`)},
 	} {
 		for _, ch := range []struct {
 			channel channel

@@ -2,22 +2,31 @@ package main
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 )
 
 // The content of the page of a release is the file releases/<version>.md
-// of the repository: markdown with two sections of the first level, both
-// optional. «Перед обновлением» holds the table «Было | Стало» and text;
-// «Новое» holds the cards, each a heading of the second level, an
-// explanation and examples: a block of code alone is one window, blocks
-// under subheadings «Вкладка: <name>» in a row are tabs, two under
-// «Рядом: <caption>» in a row are a pair side by side. The names of the
+// of the repository: markdown with three sections of the first level, each
+// optional in the format. «Перед обновлением» holds the table «Было |
+// Стало» and text; «Новое» holds the cards, each a heading of the second
+// level, an explanation and examples: a block of code alone is one window,
+// blocks under subheadings «Вкладка: <name>» in a row are tabs, two under
+// «Рядом: <caption>» in a row are a pair side by side. «Сообщение в группу»
+// holds the text of the message about the release to the group in
+// Telegram, which the page does not show: subsections of the second level
+// named as the subsections of the journal, each with items «* » that have
+// text; a line goes on with an item only when it is indented and right
+// after it, unlike a list of the journal, so that a line out of an item is
+// told. The pages need no section; the version released needs «Сообщение в
+// группу», which release check and release notice check. The names of the
 // sections and of the subheadings are the format of the file, as the names
 // of the subsections of the journal are.
 const (
 	contentDir    = "releases"
 	sectionBefore = "Перед обновлением"
 	sectionNew    = "Новое"
+	sectionNotice = "Сообщение в группу"
 	subTab        = "Вкладка: "
 	subSide       = "Рядом: "
 	columnBefore  = "Было"
@@ -34,6 +43,18 @@ type content struct {
 	before []block // the section «Перед обновлением»; nil when there is none
 	hasNew bool    // the file has the section «Новое»
 	cards  []card
+	// notice is the section «Сообщение в группу»: its subsections in the
+	// order of the file; nil when there is none.
+	notice []noticeSub
+}
+
+// A noticeSub is a subsection of the text for the group: its heading, a
+// name of a subsection of the journal, the line of the heading and its
+// items, each its lines joined by a space.
+type noticeSub struct {
+	title string
+	line  int
+	items []string
 }
 
 // A card is a card of «Новое»: its heading and its blocks, the explanation
@@ -80,7 +101,7 @@ func (b block) isText() bool {
 type contentReason int
 
 const (
-	reasonUnknownSection    contentReason = iota + 1 // a section of the first level other than the two
+	reasonUnknownSection    contentReason = iota + 1 // a section of the first level other than the three
 	reasonRepeated                                   // a section twice
 	reasonOutside                                    // text before the first section
 	reasonOutsideCard                                // text in «Новое» before its first card
@@ -92,6 +113,15 @@ const (
 	reasonUnclosed                                   // a block of code not closed
 	reasonTableColumns                               // a table whose columns are not «Было» and «Стало»
 	reasonNoNew                                      // no cards of «Новое», though the journal has new
+	reasonNoticeUnknown                              // a subsection of the text for the group named as none of the journal
+	reasonNoticeRepeated                             // a subsection of the text for the group twice
+	reasonNoticeOutside                              // text in «Сообщение в группу» out of an item
+	reasonNoNotice                                   // no section «Сообщение в группу»
+	reasonNoticeExtra                                // a subsection of the text for the group the section of the journal has not
+	reasonNoticeMissing                              // no subsection of the text for the group of one of the journal with entries
+	reasonNoticeEmpty                                // a subsection of the text for the group with no items
+	reasonNoticeLong                                 // the message to the group longer than Telegram takes
+	reasonNoticeEmptyItem                            // an item of the text for the group with no text
 )
 
 // The refusals of the content of a page. main.go turns them into words.
@@ -108,6 +138,7 @@ type (
 		line    int // of the file, from 1; 0 when the error is of no line
 		reason  contentReason
 		subject string // the heading or the subheading the reason names
+		length  int    // of the message to the group that is too long
 	}
 )
 
@@ -214,6 +245,7 @@ func parseContent(file, text string) (*content, error) {
 	}
 	section := ""
 	seen := map[string]bool{}
+	itemOpen := false // the last item of «Сообщение в группу» goes on with the next line
 	for _, it := range readItems(text) {
 		if it.kind == headingItem && it.level <= 2 {
 			// A card must have its explanation before anything else: it is
@@ -225,17 +257,24 @@ func parseContent(file, text string) (*content, error) {
 		}
 		switch {
 		case it.kind == headingItem && it.level == 1:
-			if it.text != sectionBefore && it.text != sectionNew {
+			if it.text != sectionBefore && it.text != sectionNew && it.text != sectionNotice {
 				return nil, invalid(it.line, reasonUnknownSection, it.text)
 			}
 			if seen[it.text] {
 				return nil, invalid(it.line, reasonRepeated, it.text)
 			}
 			seen[it.text], section = true, it.text
-			if section == sectionBefore {
+			switch section {
+			case sectionBefore:
 				open = &container{}
-			} else {
+			case sectionNew:
 				c.hasNew = true
+			case sectionNotice:
+				c.notice, itemOpen = []noticeSub{}, false
+			}
+		case section == sectionNotice:
+			if err := c.readNotice(it, &itemOpen, invalid); err != nil {
+				return nil, err
 			}
 		case it.kind == headingItem && it.level == 2:
 			if section != sectionNew {
@@ -267,6 +306,41 @@ func parseContent(file, text string) (*content, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// readNotice reads an item of the file in the section «Сообщение в группу»
+// into the content. A subsection is a heading of the second level named as
+// a subsection of the journal; an item is a line that starts with «* » in a
+// subsection, and an indented line right after it goes on with it. An item
+// with no text, any other text, a block of code or another heading is an
+// error. open tells whether the last item goes on with the next line.
+func (c *content) readNotice(it item, open *bool, invalid func(int, contentReason, string) error) error {
+	switch {
+	case it.kind == headingItem && it.level == 2:
+		*open = false
+		if !slices.Contains(journalSubsections, it.text) {
+			return invalid(it.line, reasonNoticeUnknown, it.text)
+		}
+		if slices.ContainsFunc(c.notice, func(s noticeSub) bool { return s.title == it.text }) {
+			return invalid(it.line, reasonNoticeRepeated, it.text)
+		}
+		c.notice = append(c.notice, noticeSub{title: it.text, line: it.line})
+	case it.kind == blankItem:
+		*open = false
+	case it.kind == textItem && len(c.notice) > 0 && strings.HasPrefix(it.text, "* "):
+		text := strings.TrimSpace(it.text[2:])
+		if text == "" {
+			return invalid(it.line, reasonNoticeEmptyItem, "")
+		}
+		s := &c.notice[len(c.notice)-1]
+		s.items, *open = append(s.items, text), true
+	case it.kind == textItem && *open && (it.text[0] == ' ' || it.text[0] == '\t'):
+		s := &c.notice[len(c.notice)-1]
+		s.items[len(s.items)-1] += " " + strings.TrimSpace(it.text)
+	default:
+		return invalid(it.line, reasonNoticeOutside, "")
+	}
+	return nil
 }
 
 // onlyBlank reports whether the items are all blank.

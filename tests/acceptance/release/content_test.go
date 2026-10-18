@@ -12,6 +12,10 @@ const (
 	badContent = "Содержимое страницы выпуска записано неверно."
 )
 
+// allowedSections are the lines of the refusal of an unknown section of a
+// content that name the sections it may have.
+var allowedSections = []string{"Допустимые разделы:", "  Перед обновлением", "  Новое", "  Сообщение в группу"}
+
 // file returns the text of a file of the lines.
 func file(lines ...string) string { return strings.Join(lines, "\n") + "\n" }
 
@@ -55,7 +59,7 @@ func TestContentMissingBreaking(t *testing.T) {
 // «Новое» of a version with «Новое» in the journal, with no line.
 func TestContentNoNew(t *testing.T) {
 	before := strings.TrimSuffix(content040, content040New)
-	r, res := checkShop(t, map[string]string{contentDir + "0.4.0.md": before})
+	r, res := checkShop(t, map[string]string{contentDir + "0.4.0.md": before + "\n" + notice040})
 	wantRefusal(t, res, badContent, "Файл: releases/0.4.0.md", "Ошибка: нет раздела «Новое», хотя в журнале есть новое")
 	r.wantTags("v0.3.0")
 }
@@ -108,7 +112,7 @@ func TestContentInvalid(t *testing.T) {
 			name:  "unknown_section",
 			lines: cat([]string{"# Скидки", "", "Скидки задаются в разделе «Акции».", ""}, newSection, cardLines("Оплата заказа частями", "shop checkout --installments 3", 1)),
 			line:  1, at: "# Скидки",
-			error: []string{"Ошибка: неизвестный раздел «Скидки»", "Допустимые разделы:", "  Перед обновлением", "  Новое"},
+			error: append([]string{"Ошибка: неизвестный раздел «Скидки»"}, allowedSections...),
 		},
 		{
 			name: "repeated_section",
@@ -261,8 +265,8 @@ func TestContentInvalid(t *testing.T) {
 func TestContentPastRelease(t *testing.T) {
 	r := shopRepo(t, shopFiles(nil), "0.3.0")
 	r.commit(map[string]string{contentDir + "0.3.0.md": brokenContent()})
-	wantRefusal(t, r.check("0.4.0"), badContent, "Файл: releases/0.3.0.md", "Строка: 1",
-		"Ошибка: неизвестный раздел «Скидки»", "Допустимые разделы:", "  Перед обновлением", "  Новое")
+	wantRefusal(t, r.check("0.4.0"), append([]string{badContent, "Файл: releases/0.3.0.md", "Строка: 1",
+		"Ошибка: неизвестный раздел «Скидки»"}, allowedSections...)...)
 	r.wantTags("v0.3.0")
 }
 

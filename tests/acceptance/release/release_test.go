@@ -68,13 +68,17 @@ func TestReleaseFirst(t *testing.T) {
 	}
 }
 
+// noChanges is the refusal of a release when main has changed nothing but
+// the texts about the releases since the latest one.
+const noChanges = "После последнего выпуска в main нет изменений, кроме журнала изменений и содержимого страниц выпусков."
+
 // TestReleaseNoChanges checks that the button refuses a release when the
 // latest one is on the head of main.
 func TestReleaseNoChanges(t *testing.T) {
 	r := newRepo(t)
 	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section021, section020)}))
 	r.tag("0.2.0")
-	wantRefusal(t, r.check("0.2.1"), "После последнего выпуска в main нет изменений, кроме журнала изменений.", "Последний выпуск: 0.2.0")
+	wantRefusal(t, r.check("0.2.1"), noChanges, "Последний выпуск: 0.2.0")
 	r.wantTags("v0.2.0")
 }
 
@@ -84,8 +88,30 @@ func TestReleaseOnlyChangelogChanged(t *testing.T) {
 	r := newRepo(t)
 	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section020)}))
 	r.tag("0.2.0")
-	r.commit(withContents(map[string]string{changelogFile: changelog(section021, section020)}))
-	wantRefusal(t, r.check("0.2.1"), "После последнего выпуска в main нет изменений, кроме журнала изменений.", "Последний выпуск: 0.2.0")
+	r.commit(map[string]string{changelogFile: changelog(section021, section020)})
+	wantRefusal(t, r.check("0.2.1"), noChanges, "Последний выпуск: 0.2.0")
+	r.wantTags("v0.2.0")
+}
+
+// TestReleaseOnlyReleaseTextsChanged checks that the button refuses a
+// release when main has changed only the journal and the contents of the
+// pages of the releases, of the new version and of a past one, since the
+// latest one, and passes it after a change of the code.
+func TestReleaseOnlyReleaseTextsChanged(t *testing.T) {
+	r := newRepo(t)
+	first := withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(section020)})
+	r.commit(first)
+	r.tag("0.2.0")
+	past := contentDir + "0.2.0.md"
+	r.commit(withContents(map[string]string{
+		changelogFile: changelog(section021, section020),
+		past:          strings.Replace(first[past], "Каталог открывается быстрее.", "Каталог открывается ещё быстрее.", 1),
+	}))
+	wantRefusal(t, r.check("0.2.1"), noChanges, "Последний выпуск: 0.2.0")
+	r.commit(map[string]string{"cart.go": "package cart\n\nconst Limit = 10\n"})
+	if res := r.check("0.2.1"); res.code != 0 {
+		t.Errorf("the checks refused a release with a change of the code: %s", res)
+	}
 	r.wantTags("v0.2.0")
 }
 
@@ -238,11 +264,12 @@ func TestReleaseSectionWithoutDate(t *testing.T) {
 }
 
 // TestReleaseFirstNotes checks the text of the first release, with no tag v*
-// before it and only fixes in its section, so with no content of its page:
-// the section, then an empty line and the line with the address of the page.
+// before it and only fixes in its section, so with only the text for the
+// group in the content of its page: the section, then an empty line and the
+// line with the address of the page.
 func TestReleaseFirstNotes(t *testing.T) {
 	r := newRepo(t)
-	r.commit(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(fixes("0.1.0", "2026-10-17", "Первый выпуск магазина.", "Исправлен поиск по каталогу."))})
+	r.commit(withContents(map[string]string{"cart.go": "package cart\n", changelogFile: changelog(fixes("0.1.0", "2026-10-17", "Первый выпуск магазина.", "Исправлен поиск по каталогу."))}))
 	res := r.check("0.1.0")
 	want := testkit.Lines("Первый выпуск магазина.", "", "### Исправлено", "* Исправлен поиск по каталогу.", "", "Страница выпуска: https://t8nax.github.io/gentry/0.1.0/")
 	if res.code != 0 || res.stdout != want {

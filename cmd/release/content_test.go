@@ -145,6 +145,61 @@ func TestParseContentSections(t *testing.T) {
 	}
 }
 
+// TestParseContentNotice checks the reading of the text for the group: the
+// subsections in the order of the file, their items, an item on two lines,
+// a subsection with no items, and the sections of the page around it.
+func TestParseContentNotice(t *testing.T) {
+	text := lines(
+		"# Новое",
+		"",
+		"## Каталог",
+		"",
+		"Пояснение.",
+		"",
+		"# Сообщение в группу",
+		"",
+		"## Исправлено",
+		"* Поиск находит товары",
+		"  с дефисом.",
+		"",
+		"* Скидка считается\tверно.",
+		"",
+		"## Новое",
+		"",
+		"## Несовместимые изменения",
+		"* Команда `shop discount`",
+		"\tудалена.",
+		"",
+		"# Перед обновлением",
+		"",
+		"Текст.",
+	)
+	c, err := parseContent("releases/0.4.0.md", text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []noticeSub{
+		{title: journalFixed, line: 9, items: []string{"Поиск находит товары с дефисом.", "Скидка считается\tверно."}},
+		{title: journalNew, line: 15},
+		{title: journalBreaking, line: 17, items: []string{"Команда `shop discount` удалена."}},
+	}
+	if !reflect.DeepEqual(c.notice, want) {
+		t.Errorf("notice = %+v, want %+v", c.notice, want)
+	}
+	if len(c.cards) != 1 || len(c.before) != 1 {
+		t.Errorf("%d cards and %d blocks of «Перед обновлением» around the notice, want 1 and 1", len(c.cards), len(c.before))
+	}
+	for name, text := range map[string]string{"no section": lines("# Новое"), "empty section": lines("# Сообщение в группу")} {
+		c, err := parseContent("releases/0.4.0.md", text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (c.notice != nil) != (name == "empty section") || len(c.notice) != 0 {
+			t.Errorf("%s: notice = %#v", name, c.notice)
+		}
+	}
+}
+
 // TestParseContentInvalid checks each error of a content: its line, its
 // reason and what it names; the first error in the order of the file is
 // told.
@@ -192,6 +247,18 @@ func TestParseContentInvalid(t *testing.T) {
 		{"table of other columns", lines("# Перед обновлением", "", "| Команда | Замена |", "| --- | --- |"), 3, reasonTableColumns, ""},
 		{"table of three columns", lines("# Перед обновлением", "| Было | Стало | Ещё |"), 2, reasonTableColumns, ""},
 		{"the first error in the file", lines("# Новое", "## Каталог", "### Пример", "# Скидки"), 2, reasonNoExplanation, "Каталог"},
+		{"repeated notice", lines("# Сообщение в группу", "# Сообщение в группу"), 2, reasonRepeated, "Сообщение в группу"},
+		{"unknown subsection of the notice", lines("# Сообщение в группу", "", "## Акции", "* Скидки."), 3, reasonNoticeUnknown, "Акции"},
+		{"repeated subsection of the notice", lines("# Сообщение в группу", "## Новое", "* Корзина.", "## Новое", "* Оплата."), 4, reasonNoticeRepeated, "Новое"},
+		{"text before the subsections of the notice", lines("# Сообщение в группу", "", "Текст.", "## Новое"), 3, reasonNoticeOutside, ""},
+		{"item before the subsections of the notice", lines("# Сообщение в группу", "* Корзина.", "## Новое"), 2, reasonNoticeOutside, ""},
+		{"text in a subsection of the notice", lines("# Сообщение в группу", "## Новое", "* Корзина.", "", "Текст."), 5, reasonNoticeOutside, ""},
+		{"line with no indent after an item", lines("# Сообщение в группу", "## Новое", "* Корзина", "сохраняется."), 4, reasonNoticeOutside, ""},
+		{"indented line after a blank line", lines("# Сообщение в группу", "## Новое", "* Корзина.", "", "  сохраняется."), 5, reasonNoticeOutside, ""},
+		{"example in the notice", lines("# Сообщение в группу", "## Новое", "* Корзина.", "```", "a", "```"), 4, reasonNoticeOutside, ""},
+		{"subheading in the notice", lines("# Сообщение в группу", "## Новое", "### Вкладка: А"), 3, reasonNoticeOutside, ""},
+		{"item with no text", lines("# Сообщение в группу", "## Новое", "* Корзина.", "* "), 4, reasonNoticeEmptyItem, ""},
+		{"item of blanks", lines("# Сообщение в группу", "## Новое", "*   ", "  сохраняется."), 3, reasonNoticeEmptyItem, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseContent("releases/0.4.0.md", tc.text)

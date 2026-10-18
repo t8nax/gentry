@@ -259,8 +259,8 @@ func (h hint) commandLine(c command) string {
 }
 
 // shellPath is the path of a program as a shell takes it: in double quotes
-// if it has a space, as the plugin writes the program in the command of its
-// hook; as it is otherwise.
+// if it has a space or a tab, without which the shell would split it; as it
+// is otherwise, for the operator to read and copy.
 func shellPath(p string) string {
 	if strings.ContainsAny(p, " \t") {
 		return `"` + p + `"`

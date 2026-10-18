@@ -127,12 +127,12 @@ func updateTools(own string) []update.Tool {
 			Dir:       dir,
 			Elsewhere: func() (string, error) { return a.elsewhere(dir) },
 			Current:   func() (contract.SetupOutput, bool) { return a.current(tool, dir, own) },
-			Setup: func() (contract.SetupOutput, error) {
+			Setup: func() (contract.SetupOutput, bool, error) {
 				out, bad := setupTool(tool, false)
 				if bad != nil {
-					return out, &failureError{*bad}
+					return out, false, &failureError{*bad}
 				}
-				return out, nil
+				return out, out.Action != claude.Unchanged, nil
 			},
 		})
 	}

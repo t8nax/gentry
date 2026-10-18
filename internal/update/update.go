@@ -47,9 +47,6 @@ const (
 	Current = "current" // the latest release was installed already
 )
 
-// unchanged is the action of setup that changed nothing in the tool.
-const unchanged = "unchanged"
-
 // A Request is an update asked for.
 type Request struct {
 	Root    string // the data root
@@ -72,8 +69,9 @@ type Tool struct {
 	// Current returns the integration if the tool serves the plugin this
 	// program builds from Dir already; nothing is written.
 	Current func() (contract.SetupOutput, bool)
-	// Setup builds the integration anew, as gentry setup does.
-	Setup func() (contract.SetupOutput, error)
+	// Setup builds the integration anew, as gentry setup does, and reports
+	// whether that changed the plugin in the tool.
+	Setup func() (out contract.SetupOutput, changed bool, err error)
 }
 
 // ErrToolNotFound means the program of an AI tool is not found.
@@ -367,7 +365,7 @@ func (u *Updater) current(ctx context.Context, req Request, installed string) *R
 			r.Integrations = append(r.Integrations, out)
 			continue
 		}
-		if out, ok := u.setup(r, t); ok && out.Action != unchanged {
+		if u.setup(r, t) {
 			rebuilt = true
 		}
 	}
@@ -377,16 +375,16 @@ func (u *Updater) current(ctx context.Context, req Request, installed string) *R
 	return r
 }
 
-// setup builds the integration with the tool anew and returns it; false if
-// it failed, which does not stop the others.
-func (u *Updater) setup(r *Result, t Tool) (contract.SetupOutput, bool) {
-	out, err := t.Setup()
+// setup builds the integration with the tool anew and reports whether that
+// changed the plugin in the tool; a failure does not stop the others.
+func (u *Updater) setup(r *Result, t Tool) bool {
+	out, changed, err := t.Setup()
 	if err != nil {
 		r.Tools = append(r.Tools, ToolFailure{Tool: t.Name, Err: err})
-		return out, false
+		return false
 	}
 	r.Integrations = append(r.Integrations, out)
-	return out, true
+	return changed
 }
 
 // layout lays out the subagents of each project, in the order of gentry

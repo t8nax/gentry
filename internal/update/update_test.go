@@ -72,7 +72,7 @@ type fakeTool struct {
 	registered  string
 	checkErr    error
 	current     bool
-	setupAction string
+	setupAction string // "unchanged" changes nothing in the tool
 	setupErr    error
 	setups      int
 }
@@ -91,14 +91,14 @@ func (s *stand) tool(f *fakeTool, connected bool) {
 		Dir:       dir,
 		Elsewhere: func() (string, error) { return f.registered, f.checkErr },
 		Current: func() (contract.SetupOutput, bool) {
-			return contract.SetupOutput{Tool: "claude", Dir: dir, Action: unchanged, Enabled: true}, f.current
+			return contract.SetupOutput{Tool: "claude", Dir: dir, Action: "unchanged", Enabled: true}, f.current
 		},
-		Setup: func() (contract.SetupOutput, error) {
+		Setup: func() (contract.SetupOutput, bool, error) {
 			f.setups++
 			if f.setupErr != nil {
-				return contract.SetupOutput{}, f.setupErr
+				return contract.SetupOutput{}, false, f.setupErr
 			}
-			return contract.SetupOutput{Tool: "claude", Dir: dir, Action: f.setupAction, Enabled: true}, nil
+			return contract.SetupOutput{Tool: "claude", Dir: dir, Action: f.setupAction, Enabled: true}, f.setupAction != "unchanged", nil
 		},
 	})
 }
@@ -325,7 +325,7 @@ func TestRunCurrent(t *testing.T) {
 	}{
 		{"plugin matches", &fakeTool{current: true}, true, 0, false},
 		{"plugin built anew", &fakeTool{setupAction: "updated"}, true, 1, true},
-		{"setup changed nothing", &fakeTool{setupAction: unchanged}, true, 1, false},
+		{"setup changed nothing", &fakeTool{setupAction: "unchanged"}, true, 1, false},
 		{"no integration", &fakeTool{}, false, 0, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {

@@ -352,3 +352,17 @@ func TestUpdateElsewhere(t *testing.T) {
 		t.Errorf("update --json: %s\nwant the hint of the installation", stdout)
 	}
 }
+
+// TestUpdateAdapters checks that each AI tool of setup has the adapter the
+// update needs of it: without one the tool would drop out of the update.
+func TestUpdateAdapters(t *testing.T) {
+	for _, tool := range tools {
+		a, ok := updateAdapters[tool]
+		if !ok || a.program == "" || a.elsewhere == nil || a.current == nil {
+			t.Errorf("the AI tool %s has no adapter of update: %+v", tool, a)
+		}
+	}
+	if got := updateTools("0.3.0"); len(got) != len(tools) {
+		t.Errorf("updateTools gives %d tools, want %d, those of setup", len(got), len(tools))
+	}
+}

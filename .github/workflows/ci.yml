@@ -55,9 +55,39 @@ jobs:
           fetch-depth: 0  # tags give the version Go stamps into the binary
 
       - uses: actions/setup-go@v7
+        id: go
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.mod
+          cache: false
+
+      # The jobs of one OS share the cache of Go: the modules and the build
+      # cache. Saved by setup-go, it would be saved by the job that ends
+      # first, an almost empty one such as the architecture tests, and every
+      # job would build the rest anew until the key changes. So each job only
+      # restores it, and the job of the unit tests, which builds the most,
+      # saves it. The paths and the key are those of setup-go, so that the
+      # caches it has saved still serve.
+      - name: cache of Go
+        id: go-cache
+        env:
+          GO_VERSION: ${{ steps.go.outputs.go-version }}
+          GO_MOD_HASH: ${{ hashFiles('go.mod') }}
+        run: |
+          {
+            echo "paths<<EOF"
+            go env GOMODCACHE GOCACHE
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+          arch=$(echo "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')
+          image=""
+          if [ "$RUNNER_OS" = Linux ]; then image="$ImageOS-"; fi
+          echo "key=setup-go-$RUNNER_OS-$arch-${image}go-$GO_VERSION-$GO_MOD_HASH" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@v6
+        id: go-cache-restore
+        with:
+          path: ${{ steps.go-cache.outputs.paths }}
+          key: ${{ steps.go-cache.outputs.key }}
 
       # The checks that are not tests run in the jobs with checks: the format
       # and the generated code do not depend on the OS and are checked on
@@ -97,6 +127,12 @@ jobs:
       - name: unit tests
         if: matrix.suite == 'unit'
         run: go test -short ./cmd/... ./internal/... ./contract/...
+
+      - uses: actions/cache/save@v6
+        if: matrix.suite == 'unit' && steps.go-cache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.go-cache.outputs.paths }}
+          key: ${{ steps.go-cache.outputs.key }}
 
       - name: architecture tests
         if: matrix.suite == 'architecture'

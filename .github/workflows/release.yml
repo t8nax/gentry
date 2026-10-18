@@ -17,6 +17,16 @@
 # releases and publishes it on GitHub Pages, as the button Publish pages,
 # pages.yml, does: the release comes first, and a failure of the pages
 # leaves it.
+#
+# After the pages are published the workflow sends the message about the
+# release to the group of Gentry in Telegram, from the bot of the group by
+# the Bot API. The program of release builds the message in the job that
+# publishes, from the section of the version in CHANGELOG.md and the text
+# for the group in releases/<version>.md, which the checks check; the last
+# job sends it with the secrets TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID. A
+# failure of the sending leaves the release and the pages, and «Re-run
+# failed jobs» sends the message again. The button Publish pages sends no
+# message.
 name: Выпуск
 
 on:
@@ -98,6 +108,28 @@ jobs:
         run: |
           . .github/release.sh
           release check "$VERSION" > "$RUNNER_TEMP/notes.md"
+
+      # The message about the release to the group in Telegram, built from
+      # the commit of the release in this job, which runs the code of the
+      # commit and has no secrets of the bot: the job that sends it has them
+      # and runs no code of the commit. It is built before the release is
+      # created, so its failure leaves no release.
+      - name: release notice
+        run: |
+          . .github/release.sh
+          release notice "$VERSION" > "$RUNNER_TEMP/notice.html"
+
+      # The message is kept 30 days, as long as GitHub lets the jobs of a run
+      # be rerun: «Re-run failed jobs» of the job that sends it downloads it
+      # within them. overwrite lets a rerun of this job upload the message
+      # again under the same name.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: notice
+          path: ${{ runner.temp }}/notice.html
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: true
 
       # Go stamps the version into the programs from the tag of the commit:
       # the tag is made here for the build only, and the build checks that
@@ -182,3 +214,51 @@ jobs:
     steps:
       - id: deploy
         uses: actions/deploy-pages@v5
+
+  # The message about the release to the group of Gentry in Telegram, sent
+  # after the pages are published, so the address of the page in it opens.
+  # The job has the secrets of the bot and of the group, so it gets no
+  # checkout of the code and may only read: it downloads the message the job
+  # that publishes has built and sends it as it is. A failure here, such as
+  # a refusal of Telegram, fails the job and leaves the release and the
+  # pages; «Re-run failed jobs» sends the message again within the 30 days
+  # it is kept. When the publication of the pages fails, the job is skipped,
+  # and the rerun of the publication runs it after. Telegram has no key
+  # against a repeat: a rerun after a message that did arrive, such as one
+  # whose answer was lost, sends it once more.
+  notify:
+    name: telegram
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: notice
+          path: ${{ runner.temp }}/notice
+
+      # The secrets come through the environment of this step only. The
+      # token is a part of the address of the Bot API: the shell does not
+      # trace the commands, so the address with the token is not printed,
+      # and GitHub masks the secrets in the log too. The answer of Telegram
+      # goes to a file: on a failure the step prints it whole, with the
+      # reason of a refusal, and fails; on a message sent it prints only ok
+      # and the number of the message. With the shell bash a pipe fails when
+      # any of its commands fails: a failure of jq fails the step too.
+      - name: send
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if ! jq -n --arg chat "$TELEGRAM_CHAT_ID" --rawfile text "$RUNNER_TEMP/notice/notice.html" \
+              '{chat_id: $chat, text: $text, parse_mode: "HTML", link_preview_options: {is_disabled: true}}' |
+            curl --silent --show-error --fail-with-body \
+              -H 'Content-Type: application/json' --data @- \
+              "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > "$RUNNER_TEMP/answer.json"; then
+            cat "$RUNNER_TEMP/answer.json" >&2
+            exit 1
+          fi
+          jq '{ok, message_id: .result.message_id}' "$RUNNER_TEMP/answer.json"

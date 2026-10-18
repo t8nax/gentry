@@ -20,6 +20,10 @@ const (
 	installURL = repoURL + "/releases/latest/download/"
 )
 
+// updateCommand is the command that installs the latest release in place
+// of the program of an installed Gentry.
+const updateCommand = "gentry update"
+
 // pageURL returns the address of the page of the release of the version.
 func pageURL(v version) string { return siteURL + v.String() + "/" }
 
@@ -49,29 +53,33 @@ func (r release) hasBefore() bool {
 
 // The words of the pages, from the catalog of messages.
 type words struct {
-	Badge, Before, New, Update                string
-	Unix, Windows, InstallSh, InstallPs1      string
-	NextStep, ListNextStep                    template.HTML
+	Badge, Before, New, Update           string
+	Unix, Windows, InstallSh, InstallPs1 string
+	// The page of a version names the update of an installed Gentry,
+	// then for those who have none yet the installation of the list.
+	UpdateCommand, NotInstalled               string
+	ListNextStep                              template.HTML
 	All, Files, Changelog, ListTitle, Install string
 }
 
 func pageWords() words {
 	return words{
-		Badge:        msg.Text(msg.ReleasePageBadge),
-		Before:       msg.Text(msg.ReleasePageBefore),
-		New:          msg.Text(msg.ReleasePageNew),
-		Update:       msg.Text(msg.ReleasePageUpdate),
-		Unix:         msg.Text(msg.ReleasePageUnix),
-		Windows:      msg.Text(msg.ReleasePageWindows),
-		InstallSh:    "curl -fsSL " + installURL + "install.sh | sh",
-		InstallPs1:   "irm " + installURL + "install.ps1 | iex",
-		NextStep:     inline(msg.Text(msg.ReleasePageNextStep)),
-		ListNextStep: inline(msg.Text(msg.ReleaseListNextStep)),
-		All:          msg.Text(msg.ReleasePageAll),
-		Files:        msg.Text(msg.ReleasePageFiles),
-		Changelog:    msg.Text(msg.ReleasePageChangelog),
-		ListTitle:    msg.Text(msg.ReleaseListTitle),
-		Install:      msg.Text(msg.ReleaseListInstall),
+		Badge:         msg.Text(msg.ReleasePageBadge),
+		Before:        msg.Text(msg.ReleasePageBefore),
+		New:           msg.Text(msg.ReleasePageNew),
+		Update:        msg.Text(msg.ReleasePageUpdate),
+		Unix:          msg.Text(msg.ReleasePageUnix),
+		Windows:       msg.Text(msg.ReleasePageWindows),
+		InstallSh:     "curl -fsSL " + installURL + "install.sh | sh",
+		InstallPs1:    "irm " + installURL + "install.ps1 | iex",
+		UpdateCommand: updateCommand,
+		NotInstalled:  msg.Text(msg.ReleasePageNotInstalled),
+		ListNextStep:  inline(msg.Text(msg.ReleaseListNextStep)),
+		All:           msg.Text(msg.ReleasePageAll),
+		Files:         msg.Text(msg.ReleasePageFiles),
+		Changelog:     msg.Text(msg.ReleasePageChangelog),
+		ListTitle:     msg.Text(msg.ReleaseListTitle),
+		Install:       msg.Text(msg.ReleaseListInstall),
 	}
 }
 

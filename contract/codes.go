@@ -17,7 +17,7 @@ const (
 	CodeMissingArgument        = "missing_argument"          // details: command, argument
 	CodeInvalidArgument        = "invalid_argument"          // details: command, argument, value
 	CodeHomeUnknown            = "home_unknown"              // the data root cannot be found: no GENTRY_HOME, no user home
-	CodeIOError                = "io_error"                  // reading or writing files failed; details: path
+	CodeIOError                = "io_error"                  // reading or writing files failed; details: path, and restore if gentry update could not give the program renamed to <program>.old its name back (the failure of that)
 	CodeToolNotFound           = "tool_not_found"            // the AI tool program is not found; details: tool, program
 	CodeToolFailed             = "tool_failed"               // a command of the AI tool failed; details: tool, command, output
 	CodePluginElsewhere        = "plugin_elsewhere"          // the plugin in the AI tool is served from an existing directory of another data root; setup --switch moves it; details: tool, registered, dir
@@ -76,6 +76,14 @@ const (
 	CodeAttemptNotFound        = "attempt_not_found"         // the task has no attempt of that number; details: task, attempt, attempts (their number)
 	CodeAgentsConflict         = "agents_conflict"           // subagents cannot be laid out: files of their names are there and Gentry did not lay them out; details: conflicts (AgentsConflict)
 	CodeAgentsBusy             = "agents_busy"               // another command of Gentry lays out subagents in the worktrees of the repository too long; details: path (the info/exclude)
+	CodeProgramElsewhere       = "program_elsewhere"         // gentry update runs a program other than that of the folder bin of the data root, which alone it updates; details: program (the one running), installed (the program of the data root, absent if there is none)
+	CodeNotRelease             = "not_release"               // the program is no build of a release, its version is not X.Y.Z, and gentry update does not replace it; details: version
+	CodeNewerThanRelease       = "newer_than_release"        // the version of the program is greater than that of the latest release, and gentry update does not replace it; details: version, latest
+	CodeReleaseNotFound        = "release_not_found"         // there is no release to download: none is the latest, or the release has no checksums.txt; details: version (absent for the latest)
+	CodeDownloadFailed         = "download_failed"           // a file of a release did not download; details: url, error
+	CodeChecksumMismatch       = "checksum_mismatch"         // the program downloaded does not have the sum checksums.txt of the release gives it; details: file, expected, actual
+	CodeIntegrationFailed      = "integration_failed"        // the new program is installed, but an integration with an AI tool could not be built anew; details: integrations (each: tool, error, the reason in a line, and code, that of the failure of the integration), update (UpdateOutput), and agents if the subagents failed too
+	CodeAgentsFailed           = "agents_failed"             // the subagents of a project could not be laid out after an update; details: agents (each: project, reason, in a line, and code, that of the failure of the layout), update (UpdateOutput)
 	CodeInternal               = "internal"                  // a failure inside Gentry
 )
 

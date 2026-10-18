@@ -13,7 +13,7 @@ import (
 
 // jsonReaders are the functions that read Env.json: Run sets it, the others
 // print the output in its form.
-var jsonReaders = []string{"Run", "emit", "warn", "fail"}
+var jsonReaders = []string{"Run", "emit", "emitFailed", "warn", "fail"}
 
 // TestOneOutput checks the sources of the package: JSON is printed only by
 // emit and fail, and no command reads --json itself, so that no command

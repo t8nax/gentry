@@ -44,8 +44,8 @@ type exception struct {
 var table = []layer{
 	{"entry", []string{"cmd/gentry", "internal/cli", "cmd/release"}},
 	{"adapters", []string{"internal/adapter/claude", "internal/integration", "internal/hook", "internal/agenttext", "internal/mcp"}},
-	{"scenarios", []string{"internal/task", "internal/project", "internal/flow", "internal/agents"}},
-	{"storage", []string{"internal/state", "internal/process", "internal/git", "internal/paths", "internal/filelock", "internal/home", "internal/caller", "internal/buildinfo", "internal/checks"}},
+	{"scenarios", []string{"internal/task", "internal/project", "internal/flow", "internal/agents", "internal/update"}},
+	{"storage", []string{"internal/state", "internal/process", "internal/git", "internal/paths", "internal/filelock", "internal/home", "internal/caller", "internal/buildinfo", "internal/checks", "internal/releases", "internal/changelog"}},
 	{"common", []string{"contract", "internal/msg"}},
 }
 

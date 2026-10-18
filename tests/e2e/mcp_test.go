@@ -131,7 +131,7 @@ func TestMCPServer(t *testing.T) {
 	for _, tool := range tools {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	for _, want := range []string{"task_take", "task_stage_show", "task_step_add", "task_stage_exit", "task_note_add", "task_decision_add", "flow_apply", "setup"} {
+	for _, want := range []string{"task_take", "task_stage_show", "task_step_add", "task_stage_exit", "task_note_add", "task_decision_add", "flow_apply"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("no tool %s: %v", want, names)
 		}

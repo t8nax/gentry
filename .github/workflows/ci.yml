@@ -24,7 +24,8 @@ jobs:
   # Free runs at most 5 jobs on macOS at once, and a run with a fifth one
   # there would take them all, so that another run waited for it. The
   # timeout leaves room over the longest suite, the acceptance tests on
-  # Linux with the area release, and for the slower runners of Windows.
+  # Linux with the areas update and release, and for the slower runners of
+  # Windows.
   test:
     name: ${{ matrix.os }} / ${{ matrix.title || matrix.suite }}
     strategy:
@@ -59,8 +60,8 @@ jobs:
       # job would build the rest anew until the key changes. So each job only
       # restores it, and the job of the acceptance tests saves it: it builds
       # the dependencies of its OS, sqlite among them, as the unit tests do,
-      # and on Linux the builds of gentry for the six platforms of the area
-      # release too.
+      # the programs of the releases of the area update, and on Linux the
+      # builds of gentry for the six platforms of the area release too.
       - uses: ./.github/actions/go
         id: go
 
@@ -128,25 +129,32 @@ jobs:
           go build -tags acceptance -buildvcs=false -o "$bin" ./cmd/gentry
           echo "ACCEPTANCE_BINARY=$bin" >> "$GITHUB_ENV"
 
-      # The areas install and release run no gentry commands: on the build
-      # their tests skip, so the second command runs them in the process of
-      # the test; without it they would run nowhere. The area release runs
-      # on Linux only, where the button Release runs: on Windows and macOS it
-      # adds nothing, and its builds of the six platforms take most of the
-      # time of the job. Both commands are one step, so that the time of the
-      # suite reads as the time of the step; the second runs when the first
-      # fails too, and the step fails when either does.
+      # The areas install and release run no gentry commands, and the cases
+      # of gentry update in the area update run the programs of releases the
+      # area builds itself, each with a data root of its own, not the gentry
+      # of the job: on the build their tests skip, so the second command runs
+      # them in the process of the test; without it they would run nowhere.
+      # The areas install and update run on every OS: their cases of Windows
+      # only (a running program renamed to .old) and of Linux and macOS only
+      # (a folder closed for writing, a symbolic link) skip elsewhere by
+      # themselves. The area release runs on Linux only, where the button
+      # Release runs: on Windows and macOS it adds nothing, and its builds of
+      # the six platforms take most of the time of the job. Both commands are
+      # one step, so that the time of the suite reads as the time of the
+      # step; the second runs when the first fails too, and the step fails
+      # when either does.
       - name: acceptance tests
         id: acceptance
         if: matrix.suite == 'acceptance'
         run: |
           status=0
           GENTRY_TEST_BINARY="$ACCEPTANCE_BINARY" go test -count=1 ./tests/acceptance/... || status=$?
+          areas="./tests/acceptance/install ./tests/acceptance/update"
           if [ "$RUNNER_OS" = Linux ]; then
-            go test -count=1 ./tests/acceptance/install ./tests/acceptance/release || status=$?
-          else
-            go test -count=1 ./tests/acceptance/install || status=$?
+            areas="$areas ./tests/acceptance/release"
           fi
+          # shellcheck disable=SC2086 # a word per area
+          go test -count=1 $areas || status=$?
           exit "$status"
 
       # What the job builds does not depend on the result of the tests: the

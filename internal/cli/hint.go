@@ -26,6 +26,9 @@ type hint struct {
 	// agent is the text the agent gets instead, with the values of args, for
 	// a text without a command that has other words for the agent.
 	agent msg.Key
+	// program is the path of the program the command is named by instead of
+	// gentry; empty for gentry.
+	program string
 }
 
 // param is an argument or a flag of the command of a hint, named as the field
@@ -43,6 +46,9 @@ var hintSpecs = map[msg.Key]hint{
 	msg.HintPluginElsewhere:       {cmd: "setup", params: []param{arg("tool"), flag("switch")}},
 	msg.HintToolNotFound:          {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintIntroPluginStale:      {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintUpdateSetup:           {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintIntegrationSetup:      {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintUpdateProgram:         {cmd: "update"},
 	msg.HintProjectUnpooled:       {cmd: "worktree add", params: []param{arg("path")}},
 	msg.HintProjectClone:          {cmd: "worktree add", params: []param{flag("project")}},
 	msg.HintProjectNotFound:       {cmd: "project list"},
@@ -126,6 +132,14 @@ func (h hint) on(cmd string) hint {
 	return h
 }
 
+// instead returns h with the command cmd alone in place of its own and its
+// arguments and flags: the same words for another command, such as the hint
+// of setup to install the tool and repeat gentry update.
+func (h hint) instead(cmd string) hint {
+	h.cmd, h.params = cmd, nil
+	return h
+}
+
 // set gives the param field of h the value v.
 func (h hint) set(field, v string) hint {
 	for i, p := range h.params {
@@ -135,6 +149,21 @@ func (h hint) set(field, v string) hint {
 		}
 	}
 	panic("cli: hint " + string(h.label) + " has no field " + field)
+}
+
+// by names the command of h by the path of the program instead of gentry,
+// in every channel, the agent's too: the agent runs it in a shell, and a
+// session of an AI tool may have no gentry in PATH. Such a command is one
+// of the command line, which the agent has no tool of.
+func (h hint) by(program string) hint {
+	h.program = program
+	return h
+}
+
+// forProject names the project id in the command of h by --project.
+func (h hint) forProject(id string) hint {
+	h.params = append(h.params, param{field: "project", flag: true, value: id})
+	return h
 }
 
 // forTask names the task key in the command of h, unless it names a task
@@ -204,6 +233,7 @@ func (h hint) render(ch channel) (string, bool) {
 		panic("cli: hint " + string(h.label) + " names no command " + h.cmd)
 	}
 	switch {
+	case h.program != "":
 	case ch == agentChannel && (c.hidden() || isService(c)):
 		return "", false
 	case ch == agentChannel:
@@ -218,6 +248,9 @@ func (h hint) render(ch channel) (string, bool) {
 // stage exit --kind <вид> --text <текст>.
 func (h hint) commandLine(c command) string {
 	words := []string{"gentry", h.cmd}
+	if h.program != "" {
+		words[0] = shellPath(h.program)
+	}
 	for _, p := range h.params {
 		if p.flag {
 			f := c.flagOf(p.field)
@@ -231,6 +264,16 @@ func (h hint) commandLine(c command) string {
 		words = append(words, valueOr(p.value, c.argOf(p.field).name))
 	}
 	return strings.Join(words, " ")
+}
+
+// shellPath is the path of a program as a shell takes it: in double quotes
+// if it has a space or a tab, without which the shell would split it; as it
+// is otherwise, for the operator to read and copy.
+func shellPath(p string) string {
+	if strings.ContainsAny(p, " \t") {
+		return `"` + p + `"`
+	}
+	return p
 }
 
 // valueOr returns v, or the placeholder k if v is empty.

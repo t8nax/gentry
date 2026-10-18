@@ -61,3 +61,21 @@ func warn(env Env, text func(p *page)) {
 	text(p)
 	fmt.Fprint(env.Stderr, p.String())
 }
+
+// emitFailed prints the output of a command that did its work and then
+// failed in part, as an update after its program is replaced: the text
+// that text builds from out, then the failure f. With --json the failure is
+// the output, with out in its details under key.
+func emitFailed[T any](env Env, out T, text func(p *page, out T), f failure, key string) int {
+	if env.json {
+		if f.details == nil {
+			f.details = map[string]any{}
+		}
+		f.details[key] = out
+		return fail(env, f)
+	}
+	p := &page{ch: channelOf(env)}
+	text(p, out)
+	fmt.Fprint(env.Stdout, p.String())
+	return fail(env, f)
+}

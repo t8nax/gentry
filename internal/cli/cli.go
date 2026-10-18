@@ -443,6 +443,11 @@ func commands() []command {
 			run:   runSetup,
 		},
 		{
+			name: "update", section: msg.HelpSectionMaint, summary: msg.CmdUpdateSummary, desc: msg.CmdUpdateDesc,
+			flags: []flagSpec{jsonFlag},
+			run:   runUpdate,
+		},
+		{
 			name: "version", section: msg.HelpSectionMaint, summary: msg.CmdVersionSummary, desc: msg.CmdVersionDesc,
 			flags: []flagSpec{{name: "json", desc: descText(msg.FlagVersionJSON)}},
 			run:   runVersion,

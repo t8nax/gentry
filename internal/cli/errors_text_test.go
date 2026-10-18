@@ -52,11 +52,7 @@ func TestUsageFailureText(t *testing.T) {
 			"Программа claude не найдена.",
 			"",
 			msg.Text(msg.HintToolNotFound, "Claude Code")+": gentry setup claude",
-		), lines(
-			"Программа claude не найдена.",
-			"",
-			msg.Text(msg.HintToolNotFound, "Claude Code")+": setup (tool: claude)",
-		)},
+		), "Программа claude не найдена.\n"},
 		{"plugin of another data folder", pluginElsewhere("claude", "/home/dev/.gentry-old/claude", "/home/dev/.gentry/claude"), lines(
 			"Плагин Gentry в Claude Code подключён из другой папки данных.",
 			"Папка плагина: /home/dev/.gentry-old/claude",
@@ -67,8 +63,6 @@ func TestUsageFailureText(t *testing.T) {
 			"Плагин Gentry в Claude Code подключён из другой папки данных.",
 			"Папка плагина: /home/dev/.gentry-old/claude",
 			"Папка плагина этой команды: /home/dev/.gentry/claude",
-			"",
-			hintLineOf(msg.HintPluginElsewhere, "setup (tool: claude, switch)"),
 		)},
 		{"newer state store", stateFailure(&state.NewerError{Path: "/home/dev/.gentry/state/state.db", Schema: 9, Supported: 8}), lines(
 			"Хранилище состояния создано более новой версией Gentry: схема 9, поддерживается до 8.",

@@ -878,7 +878,7 @@ const (
 	ReleasePageHint                 Key = "release.page_hint"
 	ReleasePageUnix                 Key = "release.page_unix"
 	ReleasePageWindows              Key = "release.page_windows"
-	ReleasePageNextStep             Key = "release.page_next_step"
+	ReleasePageNotInstalled         Key = "release.page_not_installed"
 	ReleasePageAll                  Key = "release.page_all"
 	ReleasePageFiles                Key = "release.page_files"
 	ReleasePageChangelog            Key = "release.page_changelog"
@@ -897,6 +897,34 @@ const (
 	ReleaseMonthOctober             Key = "release.month_october"
 	ReleaseMonthNovember            Key = "release.month_november"
 	ReleaseMonthDecember            Key = "release.month_december"
+)
+
+// Keys of gentry update.
+const (
+	CmdUpdateSummary      Key = "cmd.update.summary"
+	CmdUpdateDesc         Key = "cmd.update.desc"
+	UpdateUpdated         Key = "update.updated"
+	UpdateNewSessions     Key = "update.new_sessions"
+	UpdateCurrent         Key = "update.current"
+	UpdateNoIntegrations  Key = "update.no_integrations"
+	UpdateBreaking        Key = "update.breaking"
+	UpdateChangelogFailed Key = "update.changelog_failed"
+	HintUpdateSetup       Key = "hint.update_setup"
+	ErrProgramElsewhere   Key = "err.program_elsewhere"
+	UpdateNotInstalled    Key = "update.not_installed"
+	HintUpdateProgram     Key = "hint.update_program"
+	HintInstallGentry     Key = "hint.install_gentry"
+	ErrNotRelease         Key = "err.not_release"
+	HintInstallRelease    Key = "hint.install_release"
+	ErrNewerThanRelease   Key = "err.newer_than_release"
+	ErrReleaseNotFound    Key = "err.release_not_found"
+	UpdateLatest          Key = "update.latest"
+	HintReleases          Key = "hint.releases"
+	ErrDownloadFailed     Key = "err.download_failed"
+	ErrChecksumMismatch   Key = "err.checksum_mismatch"
+	ErrProgramWrite       Key = "err.program_write"
+	ErrIntegrationFailed  Key = "err.integration_failed"
+	HintIntegrationSetup  Key = "hint.integration_setup"
 )
 
 // Texts of the message about a release to the group in Telegram, which the

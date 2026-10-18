@@ -47,7 +47,8 @@ func stalePlugin(t *testing.T) {
 }
 
 // TestHookBudget checks the session start hook against its time and output
-// limits outside any project and in a worktree with a task.
+// limits outside any project and in a worktree with a task, with a stale
+// plugin: outside a project the hook warns of it.
 func TestHookBudget(t *testing.T) {
 	bin := buildGentry(t)
 	shop := takenShop(t, bin)
@@ -72,6 +73,11 @@ func TestHookBudget(t *testing.T) {
 		}
 		if place.name == "worktree with a task" && !strings.Contains(string(out), msg.Text(msg.IntroSteps, 0, 2)) {
 			t.Fatalf("no introduction to the task:\n%s", out)
+		}
+		// Outside a pool the hook warns of the stale plugin too: the budget
+		// is that of the warning.
+		if place.name == "outside a project" && !strings.HasPrefix(string(out), msg.Text(msg.IntroPluginStale)+"\n") {
+			t.Fatalf("no warning about the plugin outside a project:\n%s", out)
 		}
 
 		const warmup, runs = 3, 30

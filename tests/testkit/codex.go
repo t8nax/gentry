@@ -55,19 +55,26 @@ var fakeCodex struct {
 	err     error
 }
 
+// moduleDir is the root of the module under test, found by the file of
+// testkit, not by the current directory: the tests run in the worktrees of
+// the shop, outside the module.
+var moduleDir = func() string {
+	_, file, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(file), "..", "..")
+}()
+
 // FakeCodex returns the fake Codex of tests/testkit/fakecodex, built once for
-// the package. The packages that use it keep the settings of the go command
-// by KeepGo in their TestMain.
+// the package, whatever the current directory. The packages that use it
+// keep the settings of the go command by KeepGo in their TestMain.
 func FakeCodex(t *testing.T) string {
 	t.Helper()
-	root := ModuleRoot(t)
 	fakeCodex.once.Do(func() {
 		if fakeCodex.dir, fakeCodex.err = os.MkdirTemp("", "gentry-codex-"); fakeCodex.err != nil {
 			return
 		}
 		fakeCodex.program = filepath.Join(fakeCodex.dir, "codex"+exe)
 		cmd := exec.Command("go", "build", "-o", fakeCodex.program, "./tests/testkit/fakecodex")
-		cmd.Dir = root
+		cmd.Dir = moduleDir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			fakeCodex.err = errors.New("go build ./tests/testkit/fakecodex: " + err.Error() + "\n" + string(out))
 		}

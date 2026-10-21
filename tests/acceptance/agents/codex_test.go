@@ -44,6 +44,12 @@ func specReviewer(t *testing.T) {
 	testkit.MustRun(t, "flow", "apply")
 }
 
+// str returns v as a string; "" if it is none.
+func str(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
 // readTOML returns the file of TOML p.
 func readTOML(t *testing.T, p string) map[string]any {
 	t.Helper()
@@ -155,9 +161,16 @@ func TestAgentsUnconnectedFormat(t *testing.T) {
 	if !strings.Contains(before, "# Gentry:") {
 		t.Fatalf("stand: %s has no mark of Gentry:\n%s", reviewerFile(a), before)
 	}
+	// A new instruction of reviewer: a file laid out anew would have it.
+	const changed = "Проверить изменения заказа и тексты для оператора.\n"
+	testkit.WriteFiles(t, testkit.ShopPlaces().Shared, map[string]string{"reviewer.md": changed})
+	testkit.MustRun(t, "flow", "apply")
 	testkit.MustRun(t, "agents", "deploy", "--project", "shop")
 	if !testkit.FileExists(reviewerFile(a)) || read(t, reviewerFile(a)) != before {
 		t.Errorf("%s changed", reviewerFile(a))
+	}
+	if doc := readTOML(t, codexFile(a, "reviewer")); !strings.HasSuffix(str(doc["developer_instructions"]), "\n\n"+changed) {
+		t.Errorf("%s has not the new instruction of reviewer: %q", codexFile(a, "reviewer"), doc["developer_instructions"])
 	}
 	for _, rel := range []string{".claude/agents/reviewer.md", ".codex/agents/reviewer.toml"} {
 		if gitShows(t, a, rel) {
@@ -237,6 +250,9 @@ func TestCodexAgentFile(t *testing.T) {
 			t.Errorf("the first line of %s: %q, want the mark of Gentry", p, first)
 		}
 		doc := readTOML(t, p)
+		if keys, err := toml.TopKeys(read(t, p)); err != nil || strings.Join(keys, ",") != "name,description,model,developer_instructions" || len(doc) != 4 {
+			t.Errorf("%s: the keys %q (%v), want name, description, model, developer_instructions, in this order, and no other", p, keys, err)
+		}
 		want := map[string]any{
 			"name":                   "reviewer",
 			"description":            "ревью изменений заказа — корректность и тесты",
@@ -256,6 +272,14 @@ func TestCodexAgentFile(t *testing.T) {
 	})
 	t.Run("special_characters", func(t *testing.T) {
 		testkit.ToolsShopFlow(t, false, true)
+		// The lines of the capabilities of reviewer are stated by the case
+		// reviewer: here they are those of its file before the change.
+		specReviewer(t)
+		testkit.MustRun(t, "agents", "deploy", "--project", "shop")
+		lines, ok := strings.CutSuffix(str(readTOML(t, codexFile(testkit.MustWd(t), "reviewer"))["developer_instructions"]), reviewerInstruction)
+		if !ok {
+			t.Fatalf("stand: the instruction of reviewer does not end with its instruction")
+		}
 		const purpose = `ревью "заказа" и путей C:\shop\cart`
 		const instruction = "Первый абзац с \"\"\" и ''' внутри.\n\nВторой абзац: \\n — не перевод строки.\n\nТретий абзац.\n"
 		testkit.WriteFiles(t, testkit.ShopPlaces().Shared, map[string]string{
@@ -269,7 +293,7 @@ func TestCodexAgentFile(t *testing.T) {
 		if doc["description"] != purpose {
 			t.Errorf("description = %q, want %q", doc["description"], purpose)
 		}
-		if want := reviewerCan + "\n" + reviewerCannot + "\n\n" + instruction; doc["developer_instructions"] != want {
+		if want := lines + instruction; doc["developer_instructions"] != want {
 			t.Errorf("developer_instructions = %q, want %q", doc["developer_instructions"], want)
 		}
 	})

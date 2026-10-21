@@ -90,3 +90,11 @@ func TestParseInvalid(t *testing.T) {
 		}
 	}
 }
+
+// TestTopKeys checks the order of the keys of the root table.
+func TestTopKeys(t *testing.T) {
+	got, err := TopKeys("# mark\nname = \"r\"\ndescription = \"d\"\nmodel = \"m\"\ndeveloper_instructions = \"\"\"\nx = 1\n\"\"\"\n[features]\nshell_tool = false\n")
+	if err != nil || !reflect.DeepEqual(got, []string{"name", "description", "model", "developer_instructions"}) {
+		t.Errorf("TopKeys: %q, %v", got, err)
+	}
+}

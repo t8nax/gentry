@@ -75,24 +75,23 @@ func TestUpdateCodex(t *testing.T) {
 			return s
 		}
 		s := both(t)
+		// The versions of the plugins the new program builds are those of the
+		// manifests in the folders of the integrations, which the update
+		// writes anew: they are not those of the program of 0.1.0.
+		claudeManifest := filepath.Join(s.integration(), "gentry", ".claude-plugin", "plugin.json")
+		claudeBefore, codexBefore := manifestVersion(t, claudeManifest), s.codexManifestVersion()
 		wantCode(t, s.update(), 0)
-		claudeVersion := s.plugin().Version
-		codex, _ := s.codexPlugin()
+		claudeAfter, codexAfter := manifestVersion(t, claudeManifest), s.codexManifestVersion()
+		if claudeAfter == claudeBefore || codexAfter == codexBefore {
+			t.Errorf("the plugins of the integrations are not built anew: Claude Code %s, Codex %s, as before the update", claudeAfter, codexAfter)
+		}
+		if v := s.plugin().Version; v != claudeAfter {
+			t.Errorf("the plugin of Gentry in Claude Code has the version %s, the new program builds %s", v, claudeAfter)
+		}
+		if codex, _ := s.codexPlugin(); codex.Version != codexAfter {
+			t.Errorf("the plugin of Gentry in Codex has the version %s, the new program builds %s", codex.Version, codexAfter)
+		}
 		hs := s.gentryHandlers()
-		setup := s.gentry("setup", "claude", "--json")
-		var claudeSetup struct {
-			PluginVersion string `json:"plugin_version"`
-		}
-		if setup.code != 0 || json.Unmarshal([]byte(setup.stdout), &claudeSetup) != nil {
-			t.Fatalf("setup claude --json after the update: %s", setup)
-		}
-		_, codexSetup, _ := s.setupCodexJSON()
-		if claudeVersion != claudeSetup.PluginVersion {
-			t.Errorf("the plugin of Gentry in Claude Code has the version %s, the new program builds %s", claudeVersion, claudeSetup.PluginVersion)
-		}
-		if codex.Version != codexSetup.PluginVersion {
-			t.Errorf("the plugin of Gentry in Codex has the version %s, the new program builds %s", codex.Version, codexSetup.PluginVersion)
-		}
 		if len(hs) != 1 {
 			t.Fatalf("the handlers of Gentry after the update: %+v, want one", hs)
 		}
@@ -120,9 +119,8 @@ func TestUpdateCodexCurrent(t *testing.T) {
 		r := s.update()
 		wantCode(t, r, 0)
 		wantLine(t, r.stdout, newSessions)
-		p, _ := s.codexPlugin()
-		if _, res, _ := s.setupCodexJSON(); p.Version != res.PluginVersion {
-			t.Errorf("the plugin of Gentry in Codex has the version %s after the update, the program builds %s", p.Version, res.PluginVersion)
+		if p, _ := s.codexPlugin(); p.Version != s.codexManifestVersion() {
+			t.Errorf("the plugin of Gentry in Codex has the version %s after the update, the program builds %s", p.Version, s.codexManifestVersion())
 		}
 	})
 	t.Run("hook_untrusted", func(t *testing.T) {
@@ -253,9 +251,21 @@ func TestUpdateWithoutCodex(t *testing.T) {
 	s.wantVersion(latest)
 }
 
+// setupBlocks runs gentry setup codex on the stand after the update, in the
+// same state, and returns the blocks of its output: the update prints the
+// warnings and the hints of setup codex, whose words TestSetupCodexWarnings
+// states.
+func (s *stand) setupBlocks() [][]string {
+	s.t.Helper()
+	r := s.gentry("setup", "codex")
+	wantCode(s.t, r, 0)
+	return blocksOf(r.stdout)
+}
+
 // TestUpdateCodexWarnings checks the warnings of Codex the update prints
 // along with those of Claude Code, without the lines of fields and of the
-// settings changed.
+// settings changed. The lines of Codex are those setup codex prints in the
+// same state.
 func TestUpdateCodexWarnings(t *testing.T) {
 	parallel(t)
 	t.Run("hook_untrusted", func(t *testing.T) {
@@ -265,10 +275,18 @@ func TestUpdateCodexWarnings(t *testing.T) {
 		s.set(testkit.FakeCodexFailEnv, "app-server")
 		r := s.update()
 		wantCode(t, r, 0)
-		wantLine(t, r.stdout, hookUntrusted)
+		// setup codex: the result; the hook not trusted and its reason; the
+		// hint.
+		bs := s.setupBlocks()
+		if len(bs) != 3 || len(bs[1]) != 2 {
+			t.Fatalf("setup codex after the update: %q\nwant the result, the warning of the hook with its reason, the hint", bs)
+		}
+		warning, reason := bs[1][0], bs[1][1]
+		label, _, _ := strings.Cut(reason, ": ")
+		wantLine(t, r.stdout, warning)
 		for _, l := range lines(r.stdout) {
-			if strings.HasPrefix(l, "Причина:") {
-				t.Errorf("stdout has the line %q:\n%s", l, r.stdout)
+			if strings.HasPrefix(l, label+":") {
+				t.Errorf("stdout has the line of the reason %q:\n%s", l, r.stdout)
 			}
 		}
 	})
@@ -280,7 +298,12 @@ func TestUpdateCodexWarnings(t *testing.T) {
 		s.disableCodexPlugin()
 		r := s.update()
 		wantCode(t, r, 0)
-		wantOrdered(t, r.stdout, "Плагин Gentry отключён в Claude Code.", codexDisabled)
+		// setup codex: the result; the plugin disabled; the hint.
+		bs := s.setupBlocks()
+		if len(bs) != 3 || len(bs[1]) != 1 {
+			t.Fatalf("setup codex after the update: %q\nwant the result, the warning of the plugin disabled, the hint", bs)
+		}
+		wantOrdered(t, r.stdout, "Плагин Gentry отключён в Claude Code.", bs[1][0])
 	})
 	t.Run("no_settings_lines", func(t *testing.T) {
 		parallel(t)
@@ -313,7 +336,13 @@ func TestUpdateCodexHints(t *testing.T) {
 	s.set(testkit.FakeCodexFailEnv, "app-server")
 	r := s.update()
 	wantCode(t, r, 0)
-	wantLastBlock(t, r.stdout, "Включить плагин: claude plugin enable gentry@gentry", codexEnableHint, hookTrustHint)
+	// setup codex: the result; the plugin disabled; the hook not trusted; the
+	// hints to enable the plugin and to trust the hook, in this order.
+	bs := s.setupBlocks()
+	if len(bs) != 4 || len(bs[3]) != 2 {
+		t.Fatalf("setup codex after the update: %q\nwant the result, two warnings and the block of two hints", bs)
+	}
+	wantLastBlock(t, r.stdout, append([]string{"Включить плагин: claude plugin enable gentry@gentry"}, bs[3]...)...)
 }
 
 // specReviewer writes the subagent reviewer of the specification into the

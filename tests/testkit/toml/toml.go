@@ -38,6 +38,8 @@ type parser struct {
 	defined map[string]bool
 	// inline are the tables and arrays given inline, which cannot be extended.
 	inline []any
+	// order are the keys of the root table in the order of the text.
+	order []string
 }
 
 func (p *parser) line() int {
@@ -313,6 +315,9 @@ func (p *parser) keyValue(table map[string]any) error {
 		return fmt.Errorf("key %s defined twice", strings.Join(keys, "."))
 	}
 	t[last] = v
+	if sameRef(table, p.root) && !slices.Contains(p.order, keys[0]) {
+		p.order = append(p.order, keys[0])
+	}
 	return nil
 }
 
@@ -853,4 +858,15 @@ func Delete(doc map[string]any, keys ...string) {
 	if m, isMap := parent.(map[string]any); ok && isMap {
 		delete(m, keys[len(keys)-1])
 	}
+}
+
+// TopKeys reads a TOML document and returns the keys of its root table
+// given before any table header, in the order of the text.
+func TopKeys(text string) ([]string, error) {
+	p := &parser{src: []rune(text), root: map[string]any{}, defined: map[string]bool{}}
+	p.table = p.root
+	if err := p.document(); err != nil {
+		return nil, fmt.Errorf("toml: line %d: %w", p.line(), err)
+	}
+	return p.order, nil
 }

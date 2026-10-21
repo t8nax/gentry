@@ -623,14 +623,38 @@ func TestUpdateAgentsTask(t *testing.T) {
 // connected (GEN-70).
 func TestUpdateAgentsWithoutIntegrations(t *testing.T) {
 	parallel(t)
-	s := installedStand(t, v020, false)
-	s.project("shop")
-	out, _ := s.updateJSON()
-	var fields map[string]json.RawMessage
-	json.Unmarshal([]byte(out), &fields)
-	if _, ok := fields["agents"]; ok {
-		t.Errorf("update --json:\n%s\nwant no field agents", out)
-	}
+	t.Run("text", func(t *testing.T) {
+		t.Parallel()
+		s := installedStand(t, v020, false)
+		shop := s.project("shop")
+		// The worktree has no files of subagents, as a layout would add them:
+		// the update does not lay them out and says nothing of it.
+		dirs := []string{filepath.Join(shop, ".claude"), filepath.Join(shop, ".codex")}
+		for _, d := range dirs {
+			os.RemoveAll(d)
+		}
+		r := s.update()
+		wantCode(t, r, 0)
+		for _, o := range []string{r.stdout, r.stderr} {
+			wantNoLineWith(t, o, "убагент")
+		}
+		for _, d := range dirs {
+			if testkit.FileExists(d) {
+				t.Errorf("the update laid out the subagents in %s with no AI tool connected", d)
+			}
+		}
+	})
+	t.Run("json", func(t *testing.T) {
+		t.Parallel()
+		s := installedStand(t, v020, false)
+		s.project("shop")
+		out, _ := s.updateJSON()
+		var fields map[string]json.RawMessage
+		json.Unmarshal([]byte(out), &fields)
+		if _, ok := fields["agents"]; ok {
+			t.Errorf("update --json:\n%s\nwant no field agents", out)
+		}
+	})
 }
 
 // TestUpdateAgentsUnchanged checks that with the same version and the plugin

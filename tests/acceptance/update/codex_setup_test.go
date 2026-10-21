@@ -16,36 +16,14 @@ import (
 )
 
 // GEN-70, 1. Подключение к Codex: gentry setup codex of the installed program
-// with the fake Codex of the stand. Each text of the section «Тексты» is
-// stated in the case it belongs to; the other cases build it from the
-// constants below or check the fields of the JSON.
-
-// The texts of setup codex, as the specification gives them.
-const (
-	codexInstalled1   = "Gentry подключён к Codex."
-	codexInstalled2   = "Плагин начнёт работать со следующей сессии."
-	codexUpdated1     = "Плагин Gentry в Codex обновлён."
-	codexUpdated2     = "Изменения вступят в силу со следующей сессии."
-	codexUnchanged    = "Gentry уже подключён к Codex."
-	codexDisabled     = "Плагин Gentry отключён в Codex."
-	codexEnableHint   = `Включить плагин в настройках Codex: plugins."gentry@gentry".enabled = true`
-	hookUntrusted     = "Хук запуска сессии записан, но не доверен в Codex."
-	hookReason        = "Причина: "
-	hookTrustHint     = "Доверить хук в Codex: /hooks"
-	hooksUnread       = "Хук запуска сессии не записан: настройки хуков Codex не прочитаны."
-	hooksUnwritten    = "Хук запуска сессии не записан: настройки хуков Codex не записаны."
-	hooksFileLine     = "Настройки хуков: "
-	hooksFixHint      = "Исправить настройки хуков Codex и повторить: gentry setup codex"
-	hooksManaged      = "Хуки выключены администратором Codex: агент не получит вводных сведений в начале сессии."
-	sandboxProfile    = "Песочница Codex задана профилем разрешений: папка данных Gentry в ней не открыта."
-	distrustedHeading = "Рабочие копии, которым оператор не доверил в Codex, оставлены как есть:"
-	agentsDeployHint  = "Разложить субагентов в рабочие копии каждого проекта: gentry agents deploy --project <идентификатор>"
-)
-
-// trustHint is the hint to trust the worktrees of the record key.
-func trustHint(key string) string {
-	return `Доверить рабочие копии в настройках Codex: projects."` + key + `".trust_level = "trusted"`
-}
+// with the fake Codex of the stand.
+//
+// Each text of the section «Тексты» is stated word for word in one test
+// only: that of the case whose subject is the text or the layout of the
+// output by blocks (TestSetupCodexText, TestSetupCodexWarnings), or, for a
+// text no such case has, the case it belongs to. The other cases check the
+// exit code, the code of the error or the fields of the JSON, or find a line
+// by the layout of the blocks and by the data it names.
 
 // codexSkills are the skills of the plugin of Gentry.
 var codexSkills = []string{"canceling-task", "editing-flow", "working-on-task"}
@@ -177,6 +155,59 @@ func lineAfter(out, want string) (string, bool) {
 	return ls[i+1], true
 }
 
+// blocksOf returns the blocks of the output: its lines apart by empty lines.
+func blocksOf(out string) [][]string {
+	var bs [][]string
+	var cur []string
+	for _, l := range lines(out) {
+		if l == "" {
+			if cur != nil {
+				bs = append(bs, cur)
+			}
+			cur = nil
+			continue
+		}
+		cur = append(cur, l)
+	}
+	if cur != nil {
+		bs = append(bs, cur)
+	}
+	return bs
+}
+
+// wantPathsBlock checks that the output has a block of a heading and the
+// paths, each indented by two spaces, in any order: the block of the
+// worktrees not trusted. Its heading is stated by TestSetupCodexWarnings.
+func wantPathsBlock(t *testing.T, out string, paths ...string) {
+	t.Helper()
+	for _, b := range blocksOf(out) {
+		if len(b) != len(paths)+1 || strings.HasPrefix(b[0], " ") {
+			continue
+		}
+		ok := true
+		for _, p := range paths {
+			ok = ok && slices.Contains(b[1:], "  "+p)
+		}
+		if ok {
+			return
+		}
+	}
+	t.Errorf("output has no block of a heading and the paths %q, each indented by two spaces:\n%s", paths, out)
+}
+
+// trustHints returns how many lines of the last block of the output name
+// the record of trust key: the hints to trust the worktrees of the record.
+// The words of the hint are stated by TestSetupCodexWarnings.
+func trustHints(out, key string) int {
+	n := 0
+	for _, l := range lastBlock(out) {
+		if strings.Contains(l, `projects."`+key+`".trust_level`) {
+			n++
+		}
+	}
+	return n
+}
+
 // lastBlock returns the lines of the last block of the output, after its
 // last empty line.
 func lastBlock(out string) []string {
@@ -196,10 +227,10 @@ func TestSetupCodexInstalls(t *testing.T) {
 		parallel(t)
 		s := installedStand(t, latest, false)
 		s.useCodex()
-		r := s.gentry("setup", "codex")
-		wantCode(t, r, 0)
-		if ls := lines(r.stdout); len(ls) < 2 || ls[0] != codexInstalled1 || ls[1] != codexInstalled2 {
-			t.Errorf("stdout:\n%s\nwant the first lines «%s» and «%s»", r.stdout, codexInstalled1, codexInstalled2)
+		// The lines of the first connection are stated by
+		// TestSetupCodexText/first_connection; here the action of the JSON.
+		if out, res, _ := s.setupCodexJSON(); res.Action != "installed" {
+			t.Errorf("setup codex --json: %s\nwant action installed", out)
 		}
 		p, ok := s.codexPlugin()
 		if !ok || !p.Installed || !p.Enabled {
@@ -463,18 +494,17 @@ func TestSetupCodexHookTrust(t *testing.T) {
 	})
 	t.Run("untrusted", func(t *testing.T) {
 		parallel(t)
-		s := installedStand(t, latest, false)
-		s.useCodex()
-		s.set(testkit.FakeCodexFailEnv, "app-server")
-		r := s.gentry("setup", "codex")
-		wantCode(t, r, 0)
-		wantBlock(t, r.stdout, hookUntrusted)
-		if l, ok := lineAfter(r.stdout, hookUntrusted); !ok || !strings.HasPrefix(l, hookReason) || !strings.Contains(l, "simulated failure of codex app-server") {
-			t.Errorf("stdout:\n%s\nwant «%s» with the output of Codex after «%s»", r.stdout, hookReason, hookUntrusted)
+		failing := func(t *testing.T) *stand {
+			s := installedStand(t, latest, false)
+			s.useCodex()
+			s.set(testkit.FakeCodexFailEnv, "app-server")
+			return s
 		}
-		wantInLastBlock(t, r.stdout, hookTrustHint)
-		out, res, _ := s.setupCodexJSON()
-		if res.HookTrust != "untrusted" || res.HookError == nil || !strings.Contains(*res.HookError, "simulated failure") || res.HooksFeature != "on" {
+		// The block of the warning, its reason and its hint are stated by
+		// TestSetupCodexWarnings; here the exit code and the JSON.
+		wantCode(t, failing(t).gentry("setup", "codex"), 0)
+		out, res, _ := failing(t).setupCodexJSON()
+		if res.HookTrust != "untrusted" || res.HookError == nil || !strings.Contains(*res.HookError, "simulated failure of codex app-server") || res.HooksFeature != "on" {
 			t.Errorf("setup codex --json: %s\nwant hook_trust untrusted, hook_error with the output of Codex, hooks_feature on", out)
 		}
 	})
@@ -486,20 +516,25 @@ func TestSetupCodexManagedHooks(t *testing.T) {
 	parallel(t)
 	t.Run("managed_hooks_only", func(t *testing.T) {
 		parallel(t)
-		s := installedStand(t, latest, false)
-		s.useCodex()
-		s.requirements(`{"allowManagedHooksOnly": true}`)
+		managed := func(t *testing.T) *stand {
+			s := installedStand(t, latest, false)
+			s.useCodex()
+			s.requirements(`{"allowManagedHooksOnly": true}`)
+			return s
+		}
+		s := managed(t)
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
 		if hs := s.gentryHandlers(); len(hs) != 1 {
 			t.Errorf("the handlers of Gentry: %+v, want one", hs)
 		}
-		wantLine(t, r.stdout, hooksManaged)
-		wantNoLineWith(t, r.stdout, hookUntrusted)
+		// The text of the case, which no case of the layout of the output
+		// has; the warning of the hook not trusted is absent by hook_trust.
+		wantLine(t, r.stdout, "Хуки выключены администратором Codex: агент не получит вводных сведений в начале сессии.")
 		if v, ok := toml.At(s.codexConfig(), "hooks", "state"); ok {
 			t.Errorf("setup codex trusted the hook: hooks.state %v", v)
 		}
-		if out, res, _ := s.setupCodexJSON(); res.HooksFeature != "managed_off" || res.HookTrust != "skipped" {
+		if out, res, _ := managed(t).setupCodexJSON(); res.HooksFeature != "managed_off" || res.HookTrust != "skipped" {
 			t.Errorf("setup codex --json: %s\nwant hooks_feature managed_off, hook_trust skipped", out)
 		}
 	})
@@ -554,16 +589,19 @@ func TestSetupCodexSandbox(t *testing.T) {
 	})
 	t.Run("profile", func(t *testing.T) {
 		parallel(t)
-		s := installedStand(t, latest, false)
-		s.useCodex()
-		s.writeCodexConfig("default_permissions = \"strict\"\n")
-		r := s.gentry("setup", "codex")
-		wantCode(t, r, 0)
+		profile := func(t *testing.T) *stand {
+			s := installedStand(t, latest, false)
+			s.useCodex()
+			s.writeCodexConfig("default_permissions = \"strict\"\n")
+			return s
+		}
+		s := profile(t)
+		wantCode(t, s.gentry("setup", "codex"), 0)
 		if v, ok := toml.At(s.codexConfig(), "sandbox_workspace_write", "writable_roots"); ok {
 			t.Errorf("writable_roots changed: %v", v)
 		}
-		wantLine(t, r.stdout, sandboxProfile)
-		if out, res, _ := s.setupCodexJSON(); res.Sandbox != "profile" {
+		// The line of the warning is stated by TestSetupCodexWarnings.
+		if out, res, _ := profile(t).setupCodexJSON(); res.Sandbox != "profile" {
 			t.Errorf("setup codex --json: %s\nwant sandbox profile", out)
 		}
 	})
@@ -628,8 +666,11 @@ func TestSetupCodexTrust(t *testing.T) {
 	t.Run("missing_folder", func(t *testing.T) {
 		parallel(t)
 		s := installedStand(t, latest, false)
-		s.project("shop", "gone")
-		gone := s.worktree("shop", "gone")
+		a := s.project("shop")
+		// The copy gone is a clone of its own: its record of trust would be
+		// its own, not that of A.
+		gone := s.clone("shop", "gone")
+		s.mustIn(a, "worktree", "add", gone)
 		if err := os.RemoveAll(gone); err != nil {
 			t.Fatal(err)
 		}
@@ -657,37 +698,38 @@ func TestSetupCodexTrust(t *testing.T) {
 // set untrusted are left as they are and named.
 func TestSetupCodexDistrusted(t *testing.T) {
 	parallel(t)
-	s := installedStand(t, latest, false)
-	a := s.project("shop", "b")
-	b := s.worktree("shop", "b")
-	s.useCodex()
-	s.editCodexConfig(func(cfg map[string]any) {
-		toml.Set(cfg, map[string]any{"trust_level": "untrusted"}, "projects", a)
-	})
+	distrusted := func(t *testing.T) (*stand, string, string) {
+		s := installedStand(t, latest, false)
+		a := s.project("shop", "b")
+		s.useCodex()
+		s.editCodexConfig(func(cfg map[string]any) {
+			toml.Set(cfg, map[string]any{"trust_level": "untrusted"}, "projects", a)
+		})
+		return s, a, s.worktree("shop", "b")
+	}
+	s, a, b := distrusted(t)
 	r := s.gentry("setup", "codex")
 	wantCode(t, r, 0)
 	cfg := s.codexConfig()
 	if projects := testkit.CodexProjects(cfg); len(projects) != 1 || projects[a] != "untrusted" {
 		t.Errorf("the records of trust of Codex: %v, want only %s untrusted", projects, a)
 	}
-	// The block of the worktrees not trusted, each with an indent of two
-	// spaces.
-	wantBlock(t, r.stdout, distrustedHeading, "  "+a, "  "+b)
-	if l, ok := lineAfter(r.stdout, "  "+b); !ok || l != "" {
-		t.Errorf("the block of the worktrees not trusted does not end after %s:\n%s", b, r.stdout)
-	}
+	// The words of the block and of the hint are stated by
+	// TestSetupCodexWarnings: here the block of A and B, in any order, and one
+	// hint, of the record of A.
+	wantPathsBlock(t, r.stdout, a, b)
 	n := 0
 	for _, l := range lastBlock(r.stdout) {
-		if strings.HasPrefix(l, "Доверить рабочие копии в настройках Codex:") {
+		if strings.Contains(l, `projects."`) {
 			n++
 		}
 	}
-	wantInLastBlock(t, r.stdout, trustHint(a))
-	if n != 1 {
-		t.Errorf("the last block has %d hints to trust the worktrees, want one:\n%s", n, r.stdout)
+	if trustHints(r.stdout, a) != 1 || n != 1 {
+		t.Errorf("the last block of the output:\n%s\nwant one hint to trust the worktrees, of the record %s", r.stdout, a)
 	}
-	out, res, fields := s.setupCodexJSON()
-	wantSamePaths(t, "worktrees_distrusted of "+out, res.WorktreesDistrusted, a, b)
+	s2, a2, b2 := distrusted(t)
+	out, res, fields := s2.setupCodexJSON()
+	wantSamePaths(t, "worktrees_distrusted of "+out, res.WorktreesDistrusted, a2, b2)
 	if string(fields["worktrees_trusted"]) != "[]" {
 		t.Errorf("setup codex --json: %s\nwant worktrees_trusted []", out)
 	}
@@ -709,11 +751,11 @@ func TestSetupCodexSettingsInvalid(t *testing.T) {
 		config, hooks := fileState(t, s.codexConfigFile()), fileState(t, s.codexHooksFile())
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 1)
-		wantStderr(t, r,
-			"Настройки Codex не прочитаны.",
-			"Настройки: "+s.codexConfigFile(),
-			"",
-			"Исправить настройки Codex и повторить: gentry setup codex")
+		// The words of the hint, the same for worktree add, are stated by
+		// TestWorktreeAddCodexText/settings_warning of the area pool.
+		if ls := lines(r.stderr); len(ls) != 4 || ls[0] != "Настройки Codex не прочитаны." || ls[1] != "Настройки: "+s.codexConfigFile() || ls[2] != "" || ls[3] == "" {
+			t.Errorf("stderr:\n%s\nwant «Настройки Codex не прочитаны.», «Настройки: %s», an empty line and the hint", r.stderr, s.codexConfigFile())
+		}
 		code, details := s.setupError("codex")
 		if code != "settings_invalid" || details["tool"] != "codex" || details["reason"] != "unreadable" || !samePath(str(details["path"]), s.codexConfigFile()) {
 			t.Errorf("setup codex --json: the error %s with %v, want settings_invalid with tool codex, reason unreadable, path %s", code, details, s.codexConfigFile())
@@ -786,36 +828,48 @@ const brokenHooks = "{ это не JSON\n"
 // codex cannot read or write are left as they are and do not stop it.
 func TestSetupCodexHooksFile(t *testing.T) {
 	parallel(t)
+	// The texts of the settings of the hooks have no case of the layout of
+	// the output: the cases of this test state them.
 	t.Run("unreadable", func(t *testing.T) {
 		parallel(t)
-		s := installedStand(t, latest, false)
-		s.useCodex()
-		writeFile(t, s.codexHooksFile(), brokenHooks)
+		unread := func(t *testing.T) *stand {
+			s := installedStand(t, latest, false)
+			s.useCodex()
+			writeFile(t, s.codexHooksFile(), brokenHooks)
+			return s
+		}
+		s := unread(t)
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
 		wantFileState(t, s.codexHooksFile(), brokenHooks)
 		if p, ok := s.codexPlugin(); !ok || !p.Installed {
 			t.Errorf("the plugin of Gentry is not installed in Codex: %+v", p)
 		}
-		wantBlock(t, r.stdout, hooksUnread, hooksFileLine+s.codexHooksFile())
-		wantInLastBlock(t, r.stdout, hooksFixHint)
-		if out, res, _ := s.setupCodexJSON(); res.HookTrust != "failed" {
+		wantBlock(t, r.stdout,
+			"Хук запуска сессии не записан: настройки хуков Codex не прочитаны.",
+			"Настройки хуков: "+s.codexHooksFile())
+		wantInLastBlock(t, r.stdout, "Исправить настройки хуков Codex и повторить: gentry setup codex")
+		if out, res, _ := unread(t).setupCodexJSON(); res.HookTrust != "failed" {
 			t.Errorf("setup codex --json: %s\nwant hook_trust failed", out)
 		}
 	})
 	t.Run("unwritable", func(t *testing.T) {
 		skipAsRoot(t)
 		parallel(t)
-		s := installedStand(t, latest, false)
-		s.useCodex()
 		const hooks = "{\"hooks\": {}}\n"
-		writeFile(t, s.codexHooksFile(), hooks)
-		readOnly(t, s.codexHooksFile())
+		unwritable := func(t *testing.T) *stand {
+			s := installedStand(t, latest, false)
+			s.useCodex()
+			writeFile(t, s.codexHooksFile(), hooks)
+			readOnly(t, s.codexHooksFile())
+			return s
+		}
+		s := unwritable(t)
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
 		wantFileState(t, s.codexHooksFile(), hooks)
-		wantLine(t, r.stdout, hooksUnwritten)
-		if out, res, _ := s.setupCodexJSON(); res.HookTrust != "unwritten" {
+		wantLine(t, r.stdout, "Хук запуска сессии не записан: настройки хуков Codex не записаны.")
+		if out, res, _ := unwritable(t).setupCodexJSON(); res.HookTrust != "unwritten" {
 			t.Errorf("setup codex --json: %s\nwant hook_trust unwritten", out)
 		}
 	})
@@ -862,7 +916,12 @@ func TestSetupCodexText(t *testing.T) {
 		s.writeCodexConfig("[features]\nhooks = false\n")
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
-		if want := testkit.Lines(codexInstalled1, codexInstalled2, "", agentsDeployHint); r.stdout != want {
+		want := testkit.Lines(
+			"Gentry подключён к Codex.",
+			"Плагин начнёт работать со следующей сессии.",
+			"",
+			"Разложить субагентов в рабочие копии каждого проекта: gentry agents deploy --project <идентификатор>")
+		if r.stdout != want {
 			t.Errorf("stdout:\n%s\nwant:\n%s", r.stdout, want)
 		}
 		cfg := s.codexConfig()
@@ -890,7 +949,7 @@ func TestSetupCodexText(t *testing.T) {
 		s := stale(t)
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
-		if want := testkit.Lines(codexUpdated1, codexUpdated2); r.stdout != want {
+		if want := testkit.Lines("Плагин Gentry в Codex обновлён.", "Изменения вступят в силу со следующей сессии."); r.stdout != want {
 			t.Errorf("stdout:\n%s\nwant:\n%s", r.stdout, want)
 		}
 		if out, res, _ := stale(t).setupCodexJSON(); res.Action != "updated" {
@@ -903,7 +962,7 @@ func TestSetupCodexText(t *testing.T) {
 		s.connectCodex()
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
-		if want := testkit.Lines(codexUnchanged); r.stdout != want {
+		if want := testkit.Lines("Gentry уже подключён к Codex."); r.stdout != want {
 			t.Errorf("stdout:\n%s\nwant:\n%s", r.stdout, want)
 		}
 		if out, res, _ := s.setupCodexJSON(); res.Action != "unchanged" {
@@ -921,14 +980,17 @@ func TestSetupCodexText(t *testing.T) {
 		s := hooksOff(t)
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
-		if want := testkit.Lines(codexUnchanged); r.stdout != want {
-			t.Errorf("stdout:\n%s\nwant:\n%s", r.stdout, want)
+		// The words of the line of the plugin unchanged are stated by the
+		// case unchanged: here the output is that one line, as the JSON
+		// tells the action unchanged.
+		if ls := lines(r.stdout); len(ls) != 1 || ls[0] == "" {
+			t.Errorf("stdout:\n%s\nwant one line, that of the plugin unchanged", r.stdout)
 		}
 		if v, _ := toml.At(s.codexConfig(), "features", "hooks"); v != true {
 			t.Errorf("features.hooks: %v, want true", v)
 		}
-		if out, res, _ := hooksOff(t).setupCodexJSON(); res.HooksFeature != "enabled" {
-			t.Errorf("setup codex --json: %s\nwant hooks_feature enabled", out)
+		if out, res, _ := hooksOff(t).setupCodexJSON(); res.HooksFeature != "enabled" || res.Action != "unchanged" {
+			t.Errorf("setup codex --json: %s\nwant hooks_feature enabled, action unchanged", out)
 		}
 	})
 }
@@ -954,35 +1016,50 @@ func TestSetupCodexWarnings(t *testing.T) {
 	s.set(testkit.FakeCodexFailEnv, "app-server")
 	r := s.gentry("setup", "codex")
 	wantCode(t, r, 0)
-	want := []string{
-		codexUnchanged,
-		"",
-		codexDisabled,
-		"",
-		hookUntrusted,
-		hookReason,
-		"",
-		sandboxProfile,
-		"",
-		distrustedHeading,
-		"  " + a,
-		"  " + b,
-		"",
-		codexEnableHint,
-		hookTrustHint,
-		trustHint(key),
+	// The line of the result, the plugin unchanged, is stated by
+	// TestSetupCodexText/unchanged; here it is the first block, of one line.
+	// The paths of the block of the worktrees not trusted come in any order.
+	const reason = "Причина: "
+	want := [][]string{
+		nil,
+		{"Плагин Gentry отключён в Codex."},
+		{"Хук запуска сессии записан, но не доверен в Codex.", reason},
+		{"Песочница Codex задана профилем разрешений: папка данных Gentry в ней не открыта."},
+		{"Рабочие копии, которым оператор не доверил в Codex, оставлены как есть:", "  " + a, "  " + b},
+		{
+			`Включить плагин в настройках Codex: plugins."gentry@gentry".enabled = true`,
+			"Доверить хук в Codex: /hooks",
+			`Доверить рабочие копии в настройках Codex: projects."` + key + `".trust_level = "trusted"`,
+		},
 	}
-	ls := lines(r.stdout)
-	ok := len(ls) == len(want)
-	for i := 0; ok && i < len(want); i++ {
-		if want[i] == hookReason {
-			ok = strings.HasPrefix(ls[i], hookReason) && len(ls[i]) > len(hookReason)
-		} else {
-			ok = ls[i] == want[i]
+	got := blocksOf(r.stdout)
+	same := func(i int) bool {
+		g, w := got[i], want[i]
+		switch {
+		case i == 0:
+			return len(g) == 1
+		case len(g) != len(w):
+			return false
+		case i == 4:
+			return g[0] == w[0] && (slices.Equal(g[1:], w[1:]) || slices.Equal(g[1:], []string{w[2], w[1]}))
 		}
+		for j := range w {
+			if w[j] == reason {
+				if !strings.HasPrefix(g[j], reason) || len(g[j]) == len(reason) {
+					return false
+				}
+			} else if g[j] != w[j] {
+				return false
+			}
+		}
+		return true
 	}
-	if !ok {
-		t.Errorf("stdout:\n%s\nwant:\n%s", r.stdout, strings.Replace(testkit.Lines(want...), hookReason+"\n", hookReason+"<причина>\n", 1))
+	ok := len(got) == len(want)
+	for i := 0; ok && i < len(want); i++ {
+		ok = same(i)
+	}
+	if !ok || strings.Contains(r.stdout, "\n\n\n") {
+		t.Errorf("stdout:\n%s\nwant the blocks, apart by an empty line:\n%q", r.stdout, want)
 	}
 }
 
@@ -1034,12 +1111,33 @@ func TestSetupCodexUpdatesPlugin(t *testing.T) {
 	s.connectCodex()
 	s.staleCodexPlugin()
 	out, res, _ := s.setupCodexJSON()
-	if p, ok := s.codexPlugin(); !ok || p.Version != res.PluginVersion {
-		t.Errorf("the plugin of Gentry in Codex: %+v, want the version %s of the program", p, res.PluginVersion)
+	if p, ok := s.codexPlugin(); !ok || p.Version != s.codexManifestVersion() {
+		t.Errorf("the plugin of Gentry in Codex: %+v, want the version %s of the plugin of the program", p, s.codexManifestVersion())
 	}
 	if res.Action != "updated" {
 		t.Errorf("setup codex --json: %s\nwant action updated", out)
 	}
+}
+
+// codexManifestVersion returns the version of the plugin of Gentry the
+// program built in the marketplace of the data root,
+// integrations/codex: that of its .codex-plugin/plugin.json.
+func (s *stand) codexManifestVersion() string {
+	s.t.Helper()
+	return manifestVersion(s.t, filepath.Join(s.codexPluginDir(), ".codex-plugin", "plugin.json"))
+}
+
+// manifestVersion returns the field version of the manifest of a plugin.
+func manifestVersion(t *testing.T, p string) string {
+	t.Helper()
+	var m struct {
+		Version string `json:"version"`
+	}
+	b := readFile(t, p)
+	if err := json.Unmarshal([]byte(b), &m); err != nil || m.Version == "" {
+		t.Fatalf("%s has no version: %v\n%s", p, err, b)
+	}
+	return m.Version
 }
 
 // TestSetupClaudeJSON checks that setup claude --json has none of the fields
@@ -1064,19 +1162,24 @@ func TestSetupClaudeJSON(t *testing.T) {
 // disabled, with the hint to enable it.
 func TestSetupCodexDisabled(t *testing.T) {
 	parallel(t)
-	s := installedStand(t, latest, false)
-	s.connectCodex()
-	s.staleCodexPlugin()
-	s.disableCodexPlugin()
+	disabled := func(t *testing.T) *stand {
+		s := installedStand(t, latest, false)
+		s.connectCodex()
+		s.staleCodexPlugin()
+		s.disableCodexPlugin()
+		return s
+	}
+	s := disabled(t)
 	r := s.gentry("setup", "codex")
 	wantCode(t, r, 0)
 	if enabled, ok := s.codexPluginEnabled(); !ok || enabled {
 		t.Errorf("plugins.%q.enabled after setup codex: %v (%v), want false", testkit.CodexPluginID, enabled, ok)
 	}
-	wantBlock(t, r.stdout, codexDisabled)
-	wantInLastBlock(t, r.stdout, codexEnableHint)
-	if out, res, _ := s.setupCodexJSON(); res.Enabled == nil || *res.Enabled {
-		t.Errorf("setup codex --json: %s\nwant enabled false", out)
+	// The block of the plugin disabled and its hint are stated by
+	// TestSetupCodexWarnings; here the JSON of the same state, on a stand of
+	// its own: the plugin of another version installed anew stays disabled.
+	if out, res, _ := disabled(t).setupCodexJSON(); res.Enabled == nil || *res.Enabled || res.Action != "updated" {
+		t.Errorf("setup codex --json: %s\nwant enabled false, action updated", out)
 	}
 }
 
@@ -1172,7 +1275,9 @@ func TestSetupCodexElsewhere(t *testing.T) {
 		if root := s.codexMarketplace(); !samePath(root, s.codexIntegration()) {
 			t.Errorf("the marketplace gentry is %q, want %s", root, s.codexIntegration())
 		}
-		want := []string{"Плагин Gentry в Codex переключён на папку данных этой команды.", codexUpdated2, "Прежняя папка плагина: " + previous}
+		// The text of the switch has no case of the layout of the output:
+		// this case states it.
+		want := []string{"Плагин Gentry в Codex переключён на папку данных этой команды.", "Изменения вступят в силу со следующей сессии.", "Прежняя папка плагина: " + previous}
 		if ls := lines(r.stdout); len(ls) < 3 || !slices.Equal(ls[:3], want) {
 			t.Errorf("stdout:\n%s\nwant the first lines:\n%s", r.stdout, testkit.Lines(want...))
 		}
@@ -1197,33 +1302,53 @@ func TestSetupCodexElsewhere(t *testing.T) {
 }
 
 // TestSetupAgentsHint checks the hint of setup to lay out the subagents in
-// each project after the plugin changed.
+// each project after the plugin changed. Its words are stated by
+// TestSetupCodexText/first_connection; here the hint is the last block, one
+// line, the same in setup claude and setup codex, which neither prints
+// once its plugin is unchanged.
 func TestSetupAgentsHint(t *testing.T) {
 	parallel(t)
+	// hintOf returns the last block of the output of a first connection,
+	// which must be one line after the blocks before it.
+	hintOf := func(t *testing.T, r result) string {
+		t.Helper()
+		wantCode(t, r, 0)
+		last := lastBlock(r.stdout)
+		if len(blocksOf(r.stdout)) < 2 || len(last) != 1 {
+			t.Fatalf("stdout:\n%s\nwant the last block of one line, the hint", r.stdout)
+		}
+		return last[0]
+	}
 	t.Run("codex_first", func(t *testing.T) {
 		parallel(t)
 		s := installedStand(t, latest, false)
 		s.project("shop")
 		s.useCodex()
-		r := s.gentry("setup", "codex")
-		wantCode(t, r, 0)
-		wantInLastBlock(t, r.stdout, agentsDeployHint)
+		codex := hintOf(t, s.gentry("setup", "codex"))
+		if claude := hintOf(t, s.gentry("setup", "claude")); codex != claude {
+			t.Errorf("the hint of setup codex %q is not that of setup claude %q", codex, claude)
+		}
 	})
 	t.Run("claude_first", func(t *testing.T) {
 		parallel(t)
 		s := installedStand(t, latest, false)
 		s.project("shop")
-		r := s.gentry("setup", "claude")
-		wantCode(t, r, 0)
-		wantInLastBlock(t, r.stdout, agentsDeployHint)
+		claude := hintOf(t, s.gentry("setup", "claude"))
+		s.useCodex()
+		if codex := hintOf(t, s.gentry("setup", "codex")); claude != codex {
+			t.Errorf("the hint of setup claude %q is not that of setup codex %q", claude, codex)
+		}
 	})
 	t.Run("codex_repeat", func(t *testing.T) {
 		parallel(t)
 		s := installedStand(t, latest, false)
 		s.project("shop")
-		s.connectCodex()
+		s.useCodex()
+		hint := hintOf(t, s.gentry("setup", "codex"))
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
-		wantNoLineWith(t, r.stdout, "Разложить субагентов")
+		if slices.Contains(lines(r.stdout), hint) {
+			t.Errorf("stdout of a repeat:\n%s\nhas the hint «%s»", r.stdout, hint)
+		}
 	})
 }

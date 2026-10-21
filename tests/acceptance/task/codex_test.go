@@ -18,25 +18,43 @@ import (
 // ИИ-инструменте. Codex is connected by gentry setup codex with the fake
 // Codex before the shop is connected.
 
-// The warning of the hook of Codex about a worktree not trusted, as the
-// specification gives it.
-const (
-	codexUntrusted1 = "Рабочая копия не доверена в Codex: субагенты флоу в этой сессии недоступны."
-	codexUntrusted2 = "Сообщить оператору."
-)
+// Each warning of the hook of Codex is stated word for word in one test: that
+// of the plugin by TestIntroCodexPlugin/stale_in_pool, that of the worktree
+// by TestIntroCodexTrust/untrusted. The other cases take the warning from the
+// output of the hook in a state with it, before the introduction.
 
-// codexStaleWarning is the warning of the hook of Codex about the plugin,
-// with its hint: setup codex with the full path of the program the commands
-// run on. The words are those of the hook of Claude Code, which
-// TestIntroStalePlugin states.
-func codexStaleWarning(t *testing.T) string {
+// staleWarning makes the plugin of Codex stale and returns the warning of
+// the hook in the worktree a about it, a trusted.
+func staleWarning(t *testing.T, a string) string {
 	t.Helper()
-	return testkit.Lines(msg.Text(msg.IntroPluginStale), msg.Text(msg.HintIntroPluginStale)+": "+testkit.Executable(t)+" setup codex")
+	trustA(t, a, "trusted")
+	intro := codexIntro(t, a)
+	testkit.StaleCodexPlugin(t, testkit.CodexHome())
+	return warningOf(t, codexIntro(t, a), intro)
 }
 
-// codexUntrustedWarning is the warning of the hook of Codex about a worktree
-// not trusted.
-var codexUntrustedWarning = testkit.Lines(codexUntrusted1, codexUntrusted2)
+// untrustedWarning returns the warning of the hook in the worktree a with
+// the record of a untrusted.
+func untrustedWarning(t *testing.T, a string) string {
+	t.Helper()
+	trustA(t, a, "untrusted")
+	return warningOf(t, codexIntro(t, a), introIn(t, a))
+}
+
+// warningOf returns the warning of the output of the hook: the lines before
+// the empty line and the introduction intro, or the whole output outside
+// the pools, where intro is "".
+func warningOf(t *testing.T, out, intro string) string {
+	t.Helper()
+	if intro == "" {
+		return out
+	}
+	w, ok := strings.CutSuffix(out, "\n"+intro)
+	if !ok || w == "" {
+		t.Fatalf("the hook of Codex:\n%s\nwant a warning, an empty line and the introduction:\n%s", out, intro)
+	}
+	return w
+}
 
 // codexIntro runs the session start hook for a session of Codex in dir, with
 // the input Codex gives it, and returns the introduction.
@@ -115,23 +133,27 @@ func TestIntroCodexPlugin(t *testing.T) {
 		trustA(t, a, "trusted")
 		intro := codexIntro(t, a)
 		testkit.StaleCodexPlugin(t, testkit.CodexHome())
-		want := codexStaleWarning(t) + "\n" + intro
+		// The words of the warning are those of the hook of Claude Code, which
+		// TestIntroStalePlugin states; the hint names setup codex with the
+		// full path of the program the commands run on.
+		want := testkit.Lines(msg.Text(msg.IntroPluginStale), msg.Text(msg.HintIntroPluginStale)+": "+testkit.Executable(t)+" setup codex") + "\n" + intro
 		if got := codexIntro(t, a); got != want {
 			t.Errorf("hook in the worktree:\n%s\nwant:\n%s", got, want)
 		}
 	})
 	t.Run("stale_outside", func(t *testing.T) {
 		testkit.ToolsShopFlow(t, false, true)
-		testkit.StaleCodexPlugin(t, testkit.CodexHome())
-		if got, want := codexIntro(t, t.TempDir()), codexStaleWarning(t); got != want {
-			t.Errorf("hook outside the pools:\n%s\nwant:\n%s", got, want)
+		want := staleWarning(t, testkit.MustWd(t))
+		if got := codexIntro(t, t.TempDir()); got != want {
+			t.Errorf("hook outside the pools:\n%s\nwant the warning only:\n%s", got, want)
 		}
 	})
 	t.Run("missing", func(t *testing.T) {
 		testkit.ToolsShopFlow(t, false, true)
+		want := staleWarning(t, testkit.MustWd(t))
 		removeCodexPlugin(t)
-		if got, want := codexIntro(t, t.TempDir()), codexStaleWarning(t); got != want {
-			t.Errorf("hook outside the pools without the plugin:\n%s\nwant:\n%s", got, want)
+		if got := codexIntro(t, t.TempDir()); got != want {
+			t.Errorf("hook outside the pools without the plugin:\n%s\nwant the warning only:\n%s", got, want)
 		}
 	})
 	t.Run("matches", func(t *testing.T) {
@@ -148,7 +170,10 @@ func TestIntroCodexTrust(t *testing.T) {
 	t.Run("untrusted", func(t *testing.T) {
 		shop, _ := testkit.ToolsTaskShop(t, false, true)
 		trustA(t, shop, "untrusted")
-		want := testkit.Lines(codexUntrusted1, codexUntrusted2) + "\n" + introIn(t, shop)
+		want := testkit.Lines(
+			"Рабочая копия не доверена в Codex: субагенты флоу в этой сессии недоступны.",
+			"Сообщить оператору.",
+		) + "\n" + introIn(t, shop)
 		if got := codexIntro(t, shop); got != want {
 			t.Errorf("hook in the worktree:\n%s\nwant:\n%s", got, want)
 		}
@@ -156,9 +181,10 @@ func TestIntroCodexTrust(t *testing.T) {
 	t.Run("no_record", func(t *testing.T) {
 		testkit.ToolsShopFlow(t, false, true)
 		a := testkit.MustWd(t)
+		warning := untrustedWarning(t, a)
 		trustA(t, a, "")
-		if got := codexIntro(t, a); !strings.HasPrefix(got, codexUntrustedWarning+"\n") {
-			t.Errorf("hook in the worktree:\n%s\nwant it to start with:\n%s", got, codexUntrustedWarning)
+		if got := codexIntro(t, a); !strings.HasPrefix(got, warning+"\n") {
+			t.Errorf("hook in the worktree:\n%s\nwant it to start with the warning of the worktree not trusted:\n%s", got, warning)
 		}
 	})
 	t.Run("inherits", func(t *testing.T) {
@@ -172,9 +198,11 @@ func TestIntroCodexTrust(t *testing.T) {
 	t.Run("both_warnings", func(t *testing.T) {
 		testkit.ToolsShopFlow(t, false, true)
 		a := testkit.MustWd(t)
+		// The warnings each alone, then both.
+		untrusted := untrustedWarning(t, a)
+		stale := staleWarning(t, a)
 		trustA(t, a, "untrusted")
-		testkit.StaleCodexPlugin(t, testkit.CodexHome())
-		want := codexStaleWarning(t) + codexUntrustedWarning + "\n" + introIn(t, a)
+		want := stale + untrusted + "\n" + introIn(t, a)
 		if got := codexIntro(t, a); got != want {
 			t.Errorf("hook in the worktree:\n%s\nwant:\n%s", got, want)
 		}
@@ -190,9 +218,11 @@ func TestIntroCodexTrust(t *testing.T) {
 	t.Run("claude_tool", func(t *testing.T) {
 		testkit.ToolsShopFlow(t, false, true)
 		a := testkit.MustWd(t)
+		trustA(t, a, "trusted")
+		trusted := introIn(t, a)
 		trustA(t, a, "untrusted")
-		if got := introIn(t, a); strings.Contains(got, codexUntrusted1) {
-			t.Errorf("hook of Claude Code:\n%s\nwant no warning about the trust in Codex", got)
+		if got := introIn(t, a); got != trusted {
+			t.Errorf("hook of Claude Code with the worktree not trusted in Codex:\n%s\nwant that with the worktree trusted, with no warning about the trust in Codex:\n%s", got, trusted)
 		}
 	})
 }

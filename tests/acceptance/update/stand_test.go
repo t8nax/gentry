@@ -606,6 +606,9 @@ type stand struct {
 	mock          *mock
 	releaseURL    string            // GENTRY_RELEASES_URL
 	extra         map[string]string // variables the case sets for the programs
+	codexHome     string            // CODEX_HOME
+	codexProgram  string            // GENTRY_CODEX: a program that does not exist, or the fake Codex
+	codexLog      string            // the log of the fake Codex, FAKECODEX_LOG
 }
 
 // parallel skips the case on a built gentry, as the cases of the stand run
@@ -637,6 +640,9 @@ func newStand(t *testing.T) *stand {
 		claudeProgram: claudeProgram(t),
 		mock:          newMock(t),
 		extra:         map[string]string{},
+		codexHome:     filepath.Join(root, "codex-home"),
+		codexProgram:  filepath.Join(root, "no-codex", "codex"+exe),
+		codexLog:      filepath.Join(root, "codex.log"),
 	}
 	s.releaseURL = s.mock.releases()
 	for _, d := range []string{s.home, s.data} {
@@ -690,23 +696,29 @@ func (s *stand) installedFile(from string) {
 func (s *stand) set(name, value string) { s.extra[name] = value }
 
 // environ is the environment of the programs of the stand: that of the test
-// with the home, the data root, the address of the releases and the fake
-// Claude Code of the stand, and the variables the case sets.
+// with the home, the data root, the address of the releases, the fake Claude
+// Code and the Codex of the stand, and the variables the case sets.
 func (s *stand) environ(over map[string]string) []string {
 	vars := map[string]string{
-		"HOME":                   s.home,
-		"USERPROFILE":            s.home,
-		testkit.HomeEnv:          s.data,
-		releasesEnv:              s.releaseURL,
-		testkit.ClaudeProgramEnv: s.claudeProgram,
-		fakeClaudeStateEnv:       s.claudeState,
-		testkit.ClaudeConfigEnv:  s.claudeConfig,
-		testkit.PluginRootEnv:    "",
-		testkit.ClaudeCodeEnv:    "",
-		testkit.SessionEnv:       "",
-		fakeClaudeFailEnv:        "",
-		"XDG_CONFIG_HOME":        "",
-		testkit.BinaryEnv:        "",
+		"HOME":                           s.home,
+		"USERPROFILE":                    s.home,
+		testkit.HomeEnv:                  s.data,
+		releasesEnv:                      s.releaseURL,
+		testkit.ClaudeProgramEnv:         s.claudeProgram,
+		fakeClaudeStateEnv:               s.claudeState,
+		testkit.ClaudeConfigEnv:          s.claudeConfig,
+		testkit.PluginRootEnv:            "",
+		testkit.ClaudeCodeEnv:            "",
+		testkit.SessionEnv:               "",
+		fakeClaudeFailEnv:                "",
+		"XDG_CONFIG_HOME":                "",
+		testkit.BinaryEnv:                "",
+		testkit.CodexHomeEnv:             s.codexHome,
+		testkit.CodexProgramEnv:          s.codexProgram,
+		testkit.FakeCodexLogEnv:          s.codexLog,
+		testkit.CodexThreadEnv:           "",
+		testkit.FakeCodexFailEnv:         "",
+		testkit.FakeCodexRequirementsEnv: "",
 	}
 	for k, v := range s.extra {
 		vars[k] = v
@@ -896,9 +908,9 @@ func flowTestdata() string {
 
 // project connects a project of its own repository by the installed program
 // and applies the flow of the flow testdata to it, which lays out its
-// subagent reviewer; each of the worktrees named is added to its pool. It
-// returns the main worktree, <root>/<name>; a worktree w is
-// <root>/<name>-<w>.
+// subagent reviewer in the format of each AI tool connected; each of the
+// worktrees named is added to its pool. It returns the main worktree,
+// <root>/<name>; a worktree w is <root>/<name>-<w>.
 func (s *stand) project(name string, worktrees ...string) string {
 	s.t.Helper()
 	dir := gittest.Repo(s.t, filepath.Join(s.root, name))
@@ -922,8 +934,11 @@ func (s *stand) project(name string, worktrees ...string) string {
 		pool = append(pool, s.worktree(name, w))
 	}
 	for _, w := range pool {
-		if !testkit.FileExists(reviewer(w)) {
+		if testkit.FileExists(s.integration()) && !testkit.FileExists(reviewer(w)) {
 			s.t.Fatalf("stand: no subagent reviewer in %s", w)
+		}
+		if testkit.FileExists(s.codexIntegration()) && !testkit.FileExists(codexReviewer(w)) {
+			s.t.Fatalf("stand: no subagent reviewer of Codex in %s", w)
 		}
 	}
 	return dir

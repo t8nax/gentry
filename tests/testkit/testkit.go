@@ -81,9 +81,9 @@ const (
 var binary string
 
 // Main points the data root and the user's home at a temporary directory, so
-// no test can touch the operator's data, and runs the tests. Claude Code is a
-// program that does not exist: the commands under test must not call it.
-// Call it from TestMain.
+// no test can touch the operator's data, and runs the tests. Claude Code and
+// Codex are programs that do not exist: the commands under test must not
+// call them unless a test points them at a fake one. Call it from TestMain.
 //
 // With BinaryEnv set, Main checks that its gentry is a build for the tests,
 // as it states. The commands inherit the environment and the current
@@ -116,6 +116,16 @@ func Main(m *testing.M) int {
 	}
 	work = filepath.Join(canonical, "work")
 	layers.dir = filepath.Join(canonical, "layers")
+	// Codex is a program that does not exist, as Claude Code is, and the
+	// settings of Codex are in the shop of the test, so that a layer keeps
+	// them; the tests run outside a session of Codex.
+	os.Setenv(CodexProgramEnv, filepath.Join(dir, "no-codex", "codex"+exe))
+	os.Setenv(CodexHomeEnv, filepath.Join(work, "codex"))
+	os.Setenv(FakeCodexLogEnv, filepath.Join(work, "codex.log"))
+	os.Unsetenv(CodexThreadEnv)
+	os.Unsetenv(FakeCodexFailEnv)
+	os.Unsetenv(FakeCodexRequirementsEnv)
+	defer RemoveFakeCodex()
 	// The check runs a command of the gentry, so it runs in the environment
 	// of the tests, not of the operator.
 	if p := os.Getenv(BinaryEnv); p != "" {

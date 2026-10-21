@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/tests/testkit"
 )
 
@@ -198,15 +199,48 @@ func TestSetupInSession(t *testing.T) {
 	testkit.WantRun(t, 0, stdout, stderr, "setup", "claude")
 }
 
-// TestSetupHelp checks that the help of setup says that gentry update builds
-// the plugin anew itself.
+// TestSetupHelp checks the help of setup, common to the AI tools (GEN-70,
+// «справка setup общая»): its description is one line, and the flag
+// --switch names the AI tool, on two lines with the indent of the help.
 func TestSetupHelp(t *testing.T) {
 	code, stdout, _ := testkit.Run("setup", "--help")
 	want := []string{
-		"Подключить Gentry к ИИ-инструменту: сформировать и зарегистрировать плагин.",
-		"После gentry update плагин пересоздаётся сам; после скрипта установки команду нужно повторить.",
+		"Подключить Gentry к ИИ-инструменту: сформировать и установить плагин и настроить ИИ-инструмент для работы с Gentry.",
+		"",
 	}
-	if ls := lines(stdout); code != 0 || len(ls) < 2 || !slices.Equal(ls[:2], want) {
-		t.Errorf("setup --help: exit code %d, stdout:\n%s\nwant the first lines:\n%s", code, stdout, testkit.Lines(want...))
+	ls := lines(stdout)
+	if code != 0 || len(ls) < 2 || !slices.Equal(ls[:2], want) {
+		t.Errorf("setup --help: exit code %d, stdout:\n%s\nwant the description of one line:\n%s", code, stdout, want[0])
+	}
+	first := regexp.MustCompile(`^  --switch +Переключить на папку данных этой команды плагин Gentry в ИИ-инструменте,$`)
+	i := slices.IndexFunc(ls, first.MatchString)
+	if i < 0 || i+1 >= len(ls) || strings.TrimLeft(ls[i+1], " ") != "подключённый из другой папки данных." ||
+		len(ls[i+1])-len(strings.TrimLeft(ls[i+1], " ")) != strings.Index(ls[i], "Переключить") {
+		t.Errorf("setup --help:\n%s\nwant the flag --switch with «Переключить на папку данных этой команды плагин Gentry в ИИ-инструменте,» and «подключённый из другой папки данных.» under it", stdout)
+	}
+}
+
+// TestSetupHelpTools checks that the help of setup names the AI tools it
+// connects: claude and codex (GEN-70, «справка setup»).
+func TestSetupHelpTools(t *testing.T) {
+	code, stdout, _ := testkit.Run("setup", "--help")
+	ls := lines(stdout)
+	i := slices.IndexFunc(ls, func(l string) bool {
+		return strings.HasSuffix(l, "ИИ-инструмент для подключения.")
+	})
+	if code != 0 || i < 0 || i+1 >= len(ls) || strings.TrimSpace(ls[i+1]) != "Допустимые значения: claude, codex" {
+		t.Errorf("setup --help: exit code %d, stdout:\n%s\nwant the argument «ИИ-инструмент для подключения.» with «Допустимые значения: claude, codex» under it", code, stdout)
+	}
+}
+
+// TestSetupUnknownTool checks that setup refuses an AI tool it does not know
+// as before (GEN-70, «неизвестный ИИ-инструмент»).
+func TestSetupUnknownTool(t *testing.T) {
+	code, _, stderr := testkit.Run("setup", "cursor")
+	if ls := lines(stderr); code != 2 || len(ls) == 0 || ls[0] != "Неизвестный ИИ-инструмент «cursor»." {
+		t.Errorf("setup cursor: exit code %d, stderr:\n%s\nwant exit code 2 and «Неизвестный ИИ-инструмент «cursor».»", code, stderr)
+	}
+	if code, c := testkit.ErrorCode(t, "setup", "cursor"); code != 2 || c != contract.CodeInvalidArgument {
+		t.Errorf("setup cursor --json: exit code %d, the error %s, want 2 and invalid_argument", code, c)
 	}
 }

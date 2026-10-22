@@ -157,7 +157,7 @@ func TestHintText(t *testing.T) {
 	}{
 		{msg.HintUnknownCommand, nil, "Посмотреть перечень команд"},
 		{msg.HintPluginEnable, nil, "Включить плагин: claude plugin enable gentry@gentry"},
-		{msg.HintPluginElsewhere, nil, "Переключить плагин всех сессий Claude Code на папку данных этой команды"},
+		{msg.HintPluginElsewhere, []any{"Claude Code"}, "Переключить плагин всех сессий Claude Code на папку данных этой команды"},
 		{msg.HintStateNewer, nil, "Обновите Gentry."},
 		{msg.HintStateNewerAgent, nil, "Сообщить оператору и попросить перезапустить сессию."},
 		{msg.HintActions, nil, "Посмотреть перечень действий"},

@@ -11,6 +11,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
+	"github.com/t8nax/gentry/internal/adapter/codex"
 	"github.com/t8nax/gentry/internal/agents"
 	"github.com/t8nax/gentry/internal/buildinfo"
 	"github.com/t8nax/gentry/internal/home"
@@ -107,6 +108,7 @@ type updateAdapter struct {
 // updateAdapters are the adapters of the tools of setup for the update.
 var updateAdapters = map[string]updateAdapter{
 	claude.Tool: {program: "claude", elsewhere: claudeElsewhere, current: claudeCurrent},
+	codex.Tool:  {program: "codex", elsewhere: codexElsewhere, current: codexCurrent},
 }
 
 // updateTools returns the AI tools of setup for the update, each by its
@@ -128,11 +130,11 @@ func updateTools(own string) []update.Tool {
 			Elsewhere: func() (string, error) { return a.elsewhere(dir) },
 			Current:   func() (contract.SetupOutput, bool) { return a.current(tool, dir, own) },
 			Setup: func() (contract.SetupOutput, bool, error) {
-				out, bad := setupTool(tool, false)
+				out, _, bad := setupTool(tool, false)
 				if bad != nil {
 					return out, false, &failureError{*bad}
 				}
-				return out, out.Action != claude.Unchanged, nil
+				return out, pluginChanged(out), nil
 			},
 		})
 	}
@@ -183,6 +185,45 @@ func claudeCurrent(tool, dir, own string) (contract.SetupOutput, bool) {
 	return contract.SetupOutput{Tool: tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled}, true
 }
 
+// codexElsewhere returns the existing directory of another data root Codex
+// serves the plugin of Gentry from, as setup refuses it; "" if it serves
+// none, or that of dir, or one that is no more. Settings of Codex that
+// cannot be read or written refuse first, with the hint to repeat the
+// update.
+func codexElsewhere(dir string) (string, error) {
+	registered, err := codex.Elsewhere(dir)
+	var se *codex.SettingsError
+	switch {
+	case errors.As(err, &se):
+		f := settingsInvalid(codex.Tool, se.Path, se.Reason)
+		f.hints = []hint{hintOf(msg.HintCodexSettingsFix).instead("update")}
+		return "", &failureError{f}
+	case errors.Is(err, codex.ErrNotFound):
+		return "", update.ErrToolNotFound
+	case err != nil:
+		return "", &failureError{codexFailure(err, dir)}
+	}
+	return registered, nil
+}
+
+// codexCurrent returns the integration with Codex in dir if it is as setup
+// codex would make it: then nothing is written or installed.
+func codexCurrent(tool, dir, own string) (contract.SetupOutput, bool) {
+	root, err := home.Root()
+	if err != nil {
+		return contract.SetupOutput{}, false
+	}
+	exe, err := executable()
+	if err != nil {
+		return contract.SetupOutput{}, false
+	}
+	r, ok := codex.Current(codex.SetupRequest{Dir: dir, Root: root, Exe: exe, Version: own, Worktrees: poolPaths()})
+	if !ok {
+		return contract.SetupOutput{}, false
+	}
+	return codexOutput(dir, r), true
+}
+
 // updateProjects lays out the subagents of the projects for the update, as
 // agents deploy --project does, but a subagent in conflict is skipped and
 // told. The state store is only read, and not created; the process is
@@ -193,6 +234,11 @@ type updateProjects struct {
 }
 
 func (p *updateProjects) List() ([]string, error) {
+	// Without an AI tool connected there is no format to lay out in: the
+	// layout is skipped silently.
+	if len(connectedTools()) == 0 {
+		return nil, nil
+	}
 	pool, bad := readLayoutPool()
 	if bad != nil {
 		return nil, &failureError{*bad}
@@ -224,7 +270,7 @@ func (p *updateProjects) Deploy(id string) (contract.UpdateAgents, error) {
 	if bad != nil {
 		return contract.UpdateAgents{}, &failureError{*bad}
 	}
-	res, err := agents.Sync(agentsLayout, d.targets, p.pool.paths())
+	res, err := agents.Sync(layoutFormats(), d.targets, p.pool.paths())
 	if err != nil {
 		return contract.UpdateAgents{}, &failureError{layoutFailure(err)}
 	}
@@ -397,35 +443,14 @@ func updateText(p *page, out contract.UpdateOutput, x updateExtra) {
 	} else {
 		fmt.Fprintln(p, msg.Text(msg.UpdateCurrent, out.Version))
 	}
-	changed := out.Action == update.Updated || slices.ContainsFunc(out.Integrations, func(s contract.SetupOutput) bool { return s.Action != claude.Unchanged })
+	changed := out.Action == update.Updated || slices.ContainsFunc(out.Integrations, pluginChanged)
 	if changed {
 		fmt.Fprintln(p, msg.Text(msg.UpdateNewSessions))
 	}
-	var hints []hint
 	if !x.connected {
 		fmt.Fprintln(p, msg.Text(msg.UpdateNoIntegrations))
 	}
-	// What setup tells the operator to do by hand is told as setup tells
-	// it: the rule of permission it could not write, the plugin disabled.
-	permission := ""
-	for _, s := range out.Integrations {
-		if s.Permission != nil && (*s.Permission == claude.PermissionFailed || *s.Permission == claude.PermissionUnwritten) {
-			permission = *s.Permission
-		}
-	}
-	switch permission {
-	case claude.PermissionFailed:
-		fmt.Fprintln(p, msg.Text(msg.SetupPermissionFailed))
-	case claude.PermissionUnwritten:
-		fmt.Fprintln(p, msg.Text(msg.SetupPermissionUnwritten))
-	}
-	if slices.ContainsFunc(out.Integrations, func(s contract.SetupOutput) bool { return !s.Enabled }) {
-		fmt.Fprintln(p, msg.Text(msg.SetupDisabled))
-		hints = append(hints, hintOf(msg.HintPluginEnable))
-	}
-	if permission != "" {
-		hints = append(hints, hintOf(msg.HintSetupPermission, claude.PermissionRule))
-	}
+	hints := integrationsText(p, out.Integrations)
 
 	var conflicts []contract.AgentsConflict
 	for _, a := range out.Agents {
@@ -458,6 +483,67 @@ func updateText(p *page, out contract.UpdateOutput, x updateExtra) {
 		hints = append(hints, hintOf(msg.HintUpdateSetup))
 	}
 	p.hints(hints...)
+}
+
+// integrationsText prints what setup tells the operator to do by hand in
+// the AI tools, as setup tells it, a line each and no fields: of Claude
+// Code, the rule of permission it could not write and the plugin disabled;
+// of Codex, the plugin disabled, the hook not trusted, the settings of the
+// hooks not read or written, the hooks the administrator turned off and the
+// sandbox a profile sets. It returns their hints, in their order: to enable
+// the plugins, to allow the tools of Claude Code, to trust the hook and to
+// fix the settings of the hooks of Codex.
+func integrationsText(p *page, integrations []contract.SetupOutput) []hint {
+	var claudeOut, codexOut *contract.SetupOutput
+	for i := range integrations {
+		switch integrations[i].Tool {
+		case claude.Tool:
+			claudeOut = &integrations[i]
+		case codex.Tool:
+			codexOut = &integrations[i]
+		}
+	}
+	var hints, later []hint
+	if claudeOut != nil {
+		permission := str(claudeOut.Permission)
+		switch permission {
+		case claude.PermissionFailed:
+			fmt.Fprintln(p, msg.Text(msg.SetupPermissionFailed))
+		case claude.PermissionUnwritten:
+			fmt.Fprintln(p, msg.Text(msg.SetupPermissionUnwritten))
+		}
+		if !claudeOut.Enabled {
+			fmt.Fprintln(p, msg.Text(msg.SetupDisabled, toolTitles[claude.Tool]))
+			hints = append(hints, hintOf(msg.HintPluginEnable))
+		}
+		if permission == claude.PermissionFailed || permission == claude.PermissionUnwritten {
+			later = append(later, hintOf(msg.HintSetupPermission, claude.PermissionRule))
+		}
+	}
+	if codexOut != nil {
+		if !codexOut.Enabled {
+			fmt.Fprintln(p, msg.Text(msg.SetupDisabled, toolTitles[codex.Tool]))
+			hints = append(hints, hintOf(msg.HintCodexPluginEnable))
+		}
+		switch str(codexOut.HookTrust) {
+		case codex.HookUntrusted:
+			fmt.Fprintln(p, msg.Text(msg.SetupCodexHookUntrusted))
+			later = append(later, hintOf(msg.HintCodexHookTrust))
+		case codex.HookFailed:
+			fmt.Fprintln(p, msg.Text(msg.SetupCodexHooksUnread))
+			later = append(later, hintOf(msg.HintCodexHooksFix).set("tool", codex.Tool))
+		case codex.HookUnwritten:
+			fmt.Fprintln(p, msg.Text(msg.SetupCodexHooksUnwritten))
+			later = append(later, hintOf(msg.HintCodexHooksFix).set("tool", codex.Tool))
+		}
+		if str(codexOut.HooksFeature) == codex.HooksManagedOff {
+			fmt.Fprintln(p, msg.Text(msg.SetupCodexManagedHooks))
+		}
+		if str(codexOut.Sandbox) == codex.SandboxProfile {
+			fmt.Fprintln(p, msg.Text(msg.SetupCodexProfile))
+		}
+	}
+	return append(hints, later...)
 }
 
 // programElsewhere refuses an update of a program other than that of the

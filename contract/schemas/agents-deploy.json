@@ -15,10 +15,15 @@
       "type": "boolean"
     },
     "worktrees": {
-      "description": "Every worktree of the pool, the main one first, then by path.",
+      "description": "Every worktree of the pool, the main one first, then by path; empty if no AI tool is connected.",
       "type": "array",
       "items": { "$ref": "./agents-worktree.json" }
+    },
+    "tools": {
+      "description": "The AI tools connected, in whose format the subagents are laid out, in the order claude, codex; empty if none is connected: then nothing is laid out.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
     }
   },
-  "required": ["project", "changed", "worktrees"]
+  "required": ["project", "changed", "worktrees", "tools"]
 }

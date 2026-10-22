@@ -27,6 +27,10 @@
     "agents": {
       "description": "What the layout of subagents in the worktree added did; present only when there is something to tell.",
       "$ref": "./agents-layout.json"
+    },
+    "codex_trust": {
+      "description": "The trust in Codex of the worktree of the command, added or in the pool already; present only if Codex is connected.",
+      "$ref": "./codex-trust.json"
     }
   },
   "required": ["path", "project", "main", "action"]

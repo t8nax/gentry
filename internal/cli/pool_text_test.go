@@ -212,7 +212,7 @@ func TestWorktreeAddText(t *testing.T) {
 		)},
 	}
 	for _, tt := range tests {
-		wantText(t, tt.name, func(p *page) { worktreeAddText(p, tt.out) }, tt.cli, tt.agent)
+		wantText(t, tt.name, func(p *page) { worktreeAddText(p, tt.out, nil) }, tt.cli, tt.agent)
 	}
 }
 
@@ -277,19 +277,25 @@ func TestAgentsDeployText(t *testing.T) {
 	laid := map[string]bool{shopMain: true, shopFix: true, "/work/shop-gone": true}
 	header := []string{msg.Text(msg.ColWorktree), msg.Text(msg.ColTask), msg.Text(msg.ColAgents), msg.Text(msg.ColChanges)}
 	wantText(t, "in place", func(p *page) {
-		agentsDeployText(p, contract.AgentsDeployOutput{Project: "shop", Worktrees: worktrees()}, laid)
+		agentsDeployText(p, contract.AgentsDeployOutput{Project: "shop", Worktrees: worktrees(), Tools: []string{"claude"}}, laid)
 	}, lines("Субагенты в рабочих копиях проекта shop соответствуют флоу.", "")+table(header,
 		[]string{shopMain, noValue, "reviewer", noValue},
 		[]string{shopFix, "SHOP-1", "reviewer", noValue},
 		[]string{"/work/shop-gone", noValue, noValue, "папки нет, копия пропущена"},
 	), "")
 	wantText(t, "laid out", func(p *page) {
-		agentsDeployText(p, contract.AgentsDeployOutput{Project: "shop", Changed: true, Worktrees: worktrees("reviewer")}, laid)
+		agentsDeployText(p, contract.AgentsDeployOutput{Project: "shop", Changed: true, Worktrees: worktrees("reviewer"), Tools: []string{"claude", "codex"}}, laid)
 	}, lines("Субагенты разложены в рабочие копии проекта shop.", msg.Text(msg.AgentsNextSession), "")+table(header,
 		[]string{shopMain, noValue, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
 		[]string{shopFix, "SHOP-1", "reviewer", noValue},
 		[]string{"/work/shop-gone", noValue, noValue, msg.Text(msg.AgentsWorktreeMissing)},
 	), "")
+	// Without an AI tool connected there is nothing to lay out in: the hint
+	// is to connect one, a command the agent has no tool of. The words are
+	// stated by the acceptance tests.
+	wantText(t, "no tools", func(p *page) {
+		agentsDeployText(p, contract.AgentsDeployOutput{Project: "shop", Worktrees: []contract.AgentsWorktree{}, Tools: []string{}}, laid)
+	}, lines(msg.Text(msg.AgentsNoTools), "", HintText(msg.HintUpdateSetup)), lines(msg.Text(msg.AgentsNoTools)))
 }
 
 // TestLayoutText checks the block of a layout of subagents inside another

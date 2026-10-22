@@ -16,6 +16,10 @@ type WorktreeAddOutput struct {
 	// is something to tell.
 	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
 
+	// The trust in Codex of the worktree of the command, added or in the pool
+	// already; present only if Codex is connected.
+	CodexTrust *CodexTrust `json:"codex_trust,omitempty,omitzero"`
+
 	// Whether this is the main worktree of the project.
 	Main bool `json:"main"`
 

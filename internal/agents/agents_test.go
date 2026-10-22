@@ -48,6 +48,7 @@ func (fake) Marked(content []byte) bool { return strings.HasPrefix(string(conten
 
 var (
 	layout   = fake{}
+	formats  = agents.Formats{Write: []agents.Layout{layout}, Known: []agents.Layout{layout}}
 	reviewer = flow.Agent{ID: "reviewer", Purpose: "ревью изменений", Capabilities: []string{"read", "search"}, Instruction: "Проверить корзину."}
 	tester   = flow.Agent{ID: "tester", Purpose: "тесты", Capabilities: []string{"read", "run"}, Instruction: "Запустить тесты."}
 )
@@ -74,7 +75,7 @@ func read(t *testing.T, p string) string {
 
 func sync(t *testing.T, targets []agents.Target, pool ...string) agents.Result {
 	t.Helper()
-	res, err := agents.Sync(layout, targets, pool)
+	res, err := agents.Sync(formats, targets, pool)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +149,7 @@ func TestConflicts(t *testing.T) {
 		{Path: main, Agents: []flow.Agent{reviewer, tester}},
 		{Path: linked, Agents: []flow.Agent{tester}},
 	}
-	got, err := agents.Check(layout, targets)
+	got, err := agents.Check(formats, targets)
 	want := []agents.Conflict{
 		{Worktree: main, Agent: "reviewer", File: "tools/agents/reviewer.txt", Reason: agents.Tracked},
 		{Worktree: linked, Agent: "tester", File: "tools/agents/tester.txt", Reason: agents.Foreign},
@@ -229,7 +230,7 @@ func TestBrokenWorktreeOfPool(t *testing.T) {
 	clean(t, linked)
 
 	// A worktree laid out that git does not take: nothing is written.
-	if _, err := agents.Sync(layout, []agents.Target{{Path: broken, Agents: []flow.Agent{reviewer}}}, []string{broken}); err == nil {
+	if _, err := agents.Sync(formats, []agents.Target{{Path: broken, Agents: []flow.Agent{reviewer}}}, []string{broken}); err == nil {
 		t.Error("no error for a directory that is not a worktree")
 	}
 	if _, err := os.Stat(agentFile(broken, "reviewer")); !os.IsNotExist(err) {
@@ -245,7 +246,7 @@ func TestConcurrentLayouts(t *testing.T) {
 		go func() {
 			var err error
 			for range 20 {
-				if _, err = agents.Sync(layout, []agents.Target{{Path: w, Agents: []flow.Agent{a}}}, []string{main, linked}); err != nil {
+				if _, err = agents.Sync(formats, []agents.Target{{Path: w, Agents: []flow.Agent{a}}}, []string{main, linked}); err != nil {
 					break
 				}
 			}
@@ -276,7 +277,7 @@ func TestBusyBlock(t *testing.T) {
 	agents.LockWait = 100 * time.Millisecond
 	defer func() { agents.LockWait = wait }()
 
-	_, err = agents.Sync(layout, []agents.Target{{Path: main, Agents: []flow.Agent{reviewer}}}, []string{main})
+	_, err = agents.Sync(formats, []agents.Target{{Path: main, Agents: []flow.Agent{reviewer}}}, []string{main})
 	var busy *agents.BusyError
 	if !errors.As(err, &busy) || !paths.Same(busy.Path, exclude) {
 		t.Fatalf("Sync with the block held: %v", err)
@@ -299,4 +300,70 @@ func TestExcludeKeepsPermissions(t *testing.T) {
 	if fi, err := os.Stat(exclude); err != nil || fi.Mode().Perm() != 0o664 {
 		t.Errorf("mode of info/exclude = %v, %v; want 0664", fi.Mode().Perm(), err)
 	}
+}
+
+// other lays out a subagent as other/agents/<id>.md, in a format of another
+// tool.
+type other struct{ fake }
+
+func (other) Dir() string           { return "other/agents" }
+func (other) Name(id string) string { return id + ".md" }
+func (other) ID(name string) (string, bool) {
+	id, ok := strings.CutSuffix(name, ".md")
+	return id, ok
+}
+
+func otherFile(w, id string) string { return filepath.Join(w, "other", "agents", id+".md") }
+
+// TestSyncFormats checks the layout in two formats: a subagent added in one
+// and updated in the other is added, the files of both are hidden.
+func TestSyncFormats(t *testing.T) {
+	main, _ := shop(t)
+	both := agents.Formats{Write: []agents.Layout{layout, other{}}, Known: []agents.Layout{layout, other{}}}
+	res, err := agents.Sync(both, []agents.Target{{Path: main, Agents: []flow.Agent{reviewer}}}, []string{main})
+	if err != nil || !slices.Equal(res.Worktrees[0].Added, []string{"reviewer"}) || !slices.Equal(res.Worktrees[0].Agents, []string{"reviewer"}) {
+		t.Fatalf("Sync = %+v, %v", res, err)
+	}
+	for _, p := range []string{agentFile(main, "reviewer"), otherFile(main, "reviewer")} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("no %s: %v", p, err)
+		}
+	}
+	clean(t, main)
+
+	os.Remove(otherFile(main, "reviewer"))
+	os.WriteFile(agentFile(main, "reviewer"), []byte(agents.MarkPrefix+" old\n"), 0o644)
+	res, err = agents.Sync(both, []agents.Target{{Path: main, Agents: []flow.Agent{reviewer}}}, []string{main})
+	if c := res.Worktrees[0]; err != nil || !slices.Equal(c.Added, []string{"reviewer"}) || len(c.Updated)+len(c.Removed) > 0 {
+		t.Errorf("added in one format and updated in the other: %+v, %v; want added", c, err)
+	}
+
+	res, err = agents.Sync(both, []agents.Target{{Path: main}}, []string{main})
+	if c := res.Worktrees[0]; err != nil || !slices.Equal(c.Removed, []string{"reviewer"}) || len(c.Added)+len(c.Updated) > 0 {
+		t.Errorf("removed in both formats: %+v, %v; want removed", c, err)
+	}
+	clean(t, main)
+}
+
+// TestSyncUnconnectedFormat checks that the files of a format known but not
+// written are left as they are and stay hidden from git.
+func TestSyncUnconnectedFormat(t *testing.T) {
+	main, linked := shop(t)
+	both := agents.Formats{Write: []agents.Layout{layout, other{}}, Known: []agents.Layout{layout, other{}}}
+	if _, err := agents.Sync(both, []agents.Target{{Path: main, Agents: []flow.Agent{reviewer}}}, []string{main, linked}); err != nil {
+		t.Fatal(err)
+	}
+	before := read(t, otherFile(main, "reviewer"))
+	only := agents.Formats{Write: []agents.Layout{layout}, Known: []agents.Layout{layout, other{}}}
+	changed := reviewer
+	changed.Instruction = "Проверить оплату."
+	res, err := agents.Sync(only, []agents.Target{{Path: main, Agents: []flow.Agent{changed}}, {Path: linked, Agents: []flow.Agent{changed}}}, []string{main, linked})
+	if err != nil || !slices.Equal(res.Worktrees[0].Updated, []string{"reviewer"}) {
+		t.Fatalf("Sync = %+v, %v", res, err)
+	}
+	if got := read(t, otherFile(main, "reviewer")); got != before {
+		t.Errorf("the file of the format not written changed: %q", got)
+	}
+	clean(t, main)
+	clean(t, linked)
 }

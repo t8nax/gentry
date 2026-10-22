@@ -135,7 +135,7 @@ func TestDescribeLayout(t *testing.T) {
 		"  gentry setup " + msg.Text(msg.ArgTool) + " [--switch] [--json]\n\n" +
 		msg.Text(msg.HelpArgs) + "\n" +
 		// The second line of the description keeps the column.
-		"  " + msg.Text(msg.ArgTool) + "   " + strings.ReplaceAll(msg.Text(msg.ArgToolDesc, "claude"), "\n", "\n"+column) + "\n\n" +
+		"  " + msg.Text(msg.ArgTool) + "   " + strings.ReplaceAll(msg.Text(msg.ArgToolDesc, "claude, codex"), "\n", "\n"+column) + "\n\n" +
 		msg.Text(msg.HelpFlags) + "\n" +
 		"  --switch" + strings.Repeat(" ", width-len("--switch")+3) + strings.ReplaceAll(msg.Text(msg.FlagSetupSwitch), "\n", "\n"+column) + "\n" +
 		"  --json" + strings.Repeat(" ", width-len("--json")+3) + msg.Text(msg.FlagJSON) + "\n"

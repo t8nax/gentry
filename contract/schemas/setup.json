@@ -40,9 +40,44 @@
       "minLength": 1
     },
     "settings": {
-      "description": "The file of the user settings of the tool the rule is in.",
+      "description": "The file of the user settings of the tool: of Claude Code, the rule is in it; of Codex, the settings Gentry checked and changed.",
       "type": "string",
       "minLength": 1
+    },
+    "hook_trust": {
+      "description": "Codex only: the trust of the session start hook of Gentry in Codex: trusted (Gentry trusted it now), present (Codex trusted it already), untrusted (Gentry could not trust it, see hook_error), skipped (the administrator turned the hooks off), failed (the settings of the hooks cannot be read) or unwritten (the settings of the hooks cannot be written); with failed and unwritten the hook is not written and the settings of the hooks are left as they are. The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    },
+    "hook_error": {
+      "description": "Codex only: why Gentry could not trust the hook, as Codex said it; only with hook_trust untrusted.",
+      "type": "string",
+      "minLength": 1
+    },
+    "hooks_file": {
+      "description": "Codex only: the file of the settings of the hooks of Codex the hook of Gentry is in.",
+      "type": "string",
+      "minLength": 1
+    },
+    "hooks_feature": {
+      "description": "Codex only: whether the hooks of Codex are on: on (the settings leave them on), enabled (the operator turned them off, Gentry turned them on) or managed_off (the administrator turned them off: Gentry does not turn them on). The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    },
+    "sandbox": {
+      "description": "Codex only: the data root in the sandbox of Codex: added (opened for writing now), present (open already) or profile (a profile of permissions sets the sandbox: it is left as it is, and the data root is not open). The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    },
+    "worktrees_trusted": {
+      "description": "Codex only, and always with Codex: the worktrees of the pools whose trust in Codex this command wrote, by the record of the root of their main repository; in no order.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "worktrees_distrusted": {
+      "description": "Codex only, and always with Codex: the worktrees of the pools whose record of trust in Codex the operator set other than trusted: they are left as they are; in no order.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
     }
   },
   "required": [

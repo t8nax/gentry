@@ -16,6 +16,10 @@ type ProjectAddOutput struct {
 	// there is something to tell.
 	Agents *AgentsLayout `json:"agents,omitempty,omitzero"`
 
+	// The trust in Codex of the worktrees of the command, those added and those in
+	// the pool already; present only if Codex is connected.
+	CodexTrust *CodexTrust `json:"codex_trust,omitempty,omitzero"`
+
 	// Absolute path of the project knowledge repository.
 	Knowledge string `json:"knowledge"`
 

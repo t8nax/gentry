@@ -59,18 +59,24 @@ func runWorktreeAdd(args []string, env Env) int {
 	if res.Unchanged {
 		out.Action = actionUnchanged
 	}
-	return emit(env, out, worktreeAddText)
+	// Codex reads the subagents only from a worktree it trusts.
+	var keys []string
+	out.CodexTrust, keys = codexTrust([]string{w.Path})
+	return emit(env, out, func(p *page, out contract.WorktreeAddOutput) { worktreeAddText(p, out, keys) })
 }
 
-// worktreeAddText prints the worktree added to the pool and the layout of
-// its subagents.
-func worktreeAddText(p *page, out contract.WorktreeAddOutput) {
+// worktreeAddText prints the worktree added to the pool, the layout of its
+// subagents and its trust in Codex; keys are the records of trust the
+// operator did not trust.
+func worktreeAddText(p *page, out contract.WorktreeAddOutput, keys []string) {
 	if out.Action == actionUnchanged {
 		fmt.Fprintln(p, msg.Text(msg.WorktreeUnchanged, out.Project, out.Path))
 	} else {
 		fmt.Fprintln(p, msg.Text(msg.WorktreeAdded, out.Project, out.Path))
 	}
-	writeLayout(p, out.Agents, true, "")
+	hints := layoutBlocks(p, out.Agents, true, "")
+	hints = append(hints, codexTrustText(p, out.CodexTrust, keys)...)
+	p.hints(hints...)
 }
 
 // runWorktreeList prints the worktrees of the pools. It only reads: without a

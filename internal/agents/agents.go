@@ -1,9 +1,9 @@
 // Package agents lays out the subagents of a flow in the worktrees of a pool,
-// in the format of the tool the agent works in. Files are copied, hidden from
-// git of the project by its info/exclude, and only files Gentry laid out are
-// replaced or removed: a file is told as Gentry's by its mark. Tracked files
-// of the project and files of the operator are never changed: a subagent
-// whose file is one of them is a conflict.
+// in the format of each AI tool the agent works in. Files are copied, hidden
+// from git of the project by its info/exclude, and only files Gentry laid out
+// are replaced or removed: a file is told as Gentry's by its mark. Tracked
+// files of the project and files of the operator are never changed: a
+// subagent whose file is one of them is a conflict.
 package agents
 
 import (
@@ -40,6 +40,15 @@ type Layout interface {
 	Marked(content []byte) bool
 }
 
+// Formats are the layouts of the AI tools: Write are those of the tools
+// connected, the files a layout writes and removes; Known are those of all
+// the tools Gentry knows, whose files Gentry laid out stay hidden from git
+// whether their tool is connected or not.
+type Formats struct {
+	Write []Layout
+	Known []Layout
+}
+
 // Reasons of a conflict, as the contract names them.
 const (
 	Tracked = "tracked" // the file is tracked by git of the project
@@ -60,7 +69,9 @@ type Target struct {
 	Agents []flow.Agent
 }
 
-// Change is what a layout did in a worktree, or would do.
+// Change is what a layout did in a worktree, or would do. A subagent is
+// added if a file of it is added in a format, else updated if a file of it
+// is updated, else removed.
 type Change struct {
 	Worktree string
 	Missing  bool     // the directory of the worktree does not exist: it is skipped
@@ -90,17 +101,19 @@ func (r Result) Changed() []Change {
 	return out
 }
 
-// plan is the layout of one worktree, worked out before anything is written.
+// plan is the layout of one worktree in one format, worked out before
+// anything is written.
 type plan struct {
+	l         Layout
 	change    Change
 	write     map[string][]byte // by file name in the directory of subagents
 	remove    []string          // file names
 	conflicts []Conflict
 }
 
-// planOf works out the layout of target t.
+// planOf works out the layout of target t in the format l.
 func planOf(l Layout, t Target) (plan, error) {
-	p := plan{change: Change{Worktree: t.Path, Agents: []string{}}, write: map[string][]byte{}}
+	p := plan{l: l, change: Change{Worktree: t.Path, Agents: []string{}}, write: map[string][]byte{}}
 	if fi, err := os.Stat(t.Path); err != nil || !fi.IsDir() {
 		p.change.Missing = true
 		return p, nil
@@ -161,6 +174,44 @@ func planOf(l Layout, t Target) (plan, error) {
 	return p, nil
 }
 
+// merge is the change of the worktree of target t in all formats: a
+// subagent laid out in a format is laid out; one added in a format is
+// added, else updated if it is updated in one, else removed.
+func merge(t Target, changes []Change) Change {
+	out := Change{Worktree: t.Path, Agents: []string{}}
+	if fi, err := os.Stat(t.Path); err != nil || !fi.IsDir() {
+		out.Missing = true
+	}
+	laid, added, updated, removed := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, c := range changes {
+		out.Missing = out.Missing || c.Missing
+		for _, set := range []struct {
+			ids []string
+			to  map[string]bool
+		}{{c.Agents, laid}, {c.Added, added}, {c.Updated, updated}, {c.Removed, removed}} {
+			for _, id := range set.ids {
+				set.to[id] = true
+			}
+		}
+	}
+	for id := range added {
+		delete(updated, id)
+		delete(removed, id)
+	}
+	for id := range updated {
+		delete(removed, id)
+	}
+	sorted := func(set map[string]bool) []string {
+		if len(set) == 0 {
+			return nil
+		}
+		return slices.Sorted(maps.Keys(set))
+	}
+	out.Agents = append(out.Agents, sorted(laid)...)
+	out.Added, out.Updated, out.Removed = sorted(added), sorted(updated), sorted(removed)
+	return out
+}
+
 // marked returns the files of subagents in dir that Gentry laid out.
 func marked(l Layout, dir string) (map[string]bool, error) {
 	out := map[string]bool{}
@@ -189,41 +240,49 @@ func marked(l Layout, dir string) (map[string]bool, error) {
 	return out, nil
 }
 
-// Check returns the conflicts of laying out targets; nothing is written.
-func Check(l Layout, targets []Target) ([]Conflict, error) {
+// Check returns the conflicts of laying out targets in the formats to
+// write; nothing is written.
+func Check(f Formats, targets []Target) ([]Conflict, error) {
 	var out []Conflict
 	for _, t := range targets {
-		p, err := planOf(l, t)
-		if err != nil {
-			return nil, err
+		for _, l := range f.Write {
+			p, err := planOf(l, t)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, p.conflicts...)
 		}
-		out = append(out, p.conflicts...)
 	}
 	return out, nil
 }
 
-// Sync lays out targets: the files of their subagents are written unless
-// they are the same, the files Gentry laid out for subagents no more there
-// are removed, and the subagents in conflict are skipped. The block of
-// Gentry in the info/exclude of each repository lists the files Gentry laid
-// out in all worktrees of pool that share it; pool is every worktree of the
-// pools, as a worktree outside the targets may have files too. The block
-// gets the files to write before they are written and loses the files
-// removed after they are, so a failure between leaves a pattern too many
-// rather than a file git shows.
-func Sync(l Layout, targets []Target, pool []string) (Result, error) {
+// Sync lays out targets in the formats to write: the files of their
+// subagents are written unless they are the same, the files Gentry laid out
+// for subagents no more there are removed, and the subagents in conflict
+// are skipped. The files of the formats not to write are left as they are.
+// The block of Gentry in the info/exclude of each repository lists the
+// files Gentry laid out in all worktrees of pool that share it, in every
+// format known; pool is every worktree of the pools, as a worktree outside
+// the targets may have files too. The block gets the files to write before
+// they are written and loses the files removed after they are, so a failure
+// between leaves a pattern too many rather than a file git shows.
+func Sync(f Formats, targets []Target, pool []string) (Result, error) {
 	var res Result
 	var plans []plan
 	for _, t := range targets {
-		p, err := planOf(l, t)
-		if err != nil {
-			return Result{}, err
+		var changes []Change
+		for _, l := range f.Write {
+			p, err := planOf(l, t)
+			if err != nil {
+				return Result{}, err
+			}
+			res.Conflicts = append(res.Conflicts, p.conflicts...)
+			changes = append(changes, p.change)
+			if !p.change.Missing {
+				plans = append(plans, p)
+			}
 		}
-		res.Conflicts = append(res.Conflicts, p.conflicts...)
-		res.Worktrees = append(res.Worktrees, p.change)
-		if !p.change.Missing {
-			plans = append(plans, p)
-		}
+		res.Worktrees = append(res.Worktrees, merge(t, changes))
 	}
 	if len(plans) == 0 {
 		return res, nil
@@ -232,20 +291,20 @@ func Sync(l Layout, targets []Target, pool []string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if err := exclude(l, files, plans, true); err != nil {
+	if err := exclude(f.Known, files, plans, true); err != nil {
 		return Result{}, err
 	}
 	for _, p := range plans {
-		if err := apply(l, p); err != nil {
+		if err := apply(p); err != nil {
 			return Result{}, err
 		}
 	}
-	return res, exclude(l, files, plans, false)
+	return res, exclude(f.Known, files, plans, false)
 }
 
 // apply writes and removes the files of plan p.
-func apply(l Layout, p plan) error {
-	dir := filepath.Join(p.change.Worktree, filepath.FromSlash(l.Dir()))
+func apply(p plan) error {
+	dir := filepath.Join(p.change.Worktree, filepath.FromSlash(p.l.Dir()))
 	if len(p.write) > 0 {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
@@ -271,6 +330,9 @@ func apply(l Layout, p plan) error {
 func excludeFiles(plans []plan, pool []string) (map[string]string, error) {
 	files := map[string]string{}
 	for _, p := range plans {
+		if _, ok := files[p.change.Worktree]; ok {
+			continue
+		}
 		f, err := git.ExcludeFile(p.change.Worktree)
 		if err != nil {
 			return nil, err
@@ -292,11 +354,12 @@ func excludeFiles(plans []plan, pool []string) (map[string]string, error) {
 }
 
 // exclude rewrites the block of Gentry in the info/exclude of the
-// repositories of plans with the files Gentry laid out in every worktree that
-// shares the file; before the files are written, adding also lists those
-// plans write. The block is worked out and written under a lock, so that two
-// commands in worktrees of one repository do not lose each other's files.
-func exclude(l Layout, files map[string]string, plans []plan, adding bool) error {
+// repositories of plans with the files Gentry laid out, in each format of
+// known, in every worktree that shares the file; before the files are
+// written, adding also lists those plans write. The block is worked out and
+// written under a lock, so that two commands in worktrees of one repository
+// do not lose each other's files.
+func exclude(known []Layout, files map[string]string, plans []plan, adding bool) error {
 	done := map[string]bool{}
 	for _, p := range plans {
 		file := files[p.change.Worktree]
@@ -318,19 +381,21 @@ func exclude(l Layout, files map[string]string, plans []plan, adding bool) error
 				if !paths.Same(f, file) {
 					continue
 				}
-				names, err := marked(l, filepath.Join(w, filepath.FromSlash(l.Dir())))
-				if err != nil {
-					return err
-				}
-				for name := range names {
-					laid["/"+path.Join(l.Dir(), name)] = true
+				for _, l := range known {
+					names, err := marked(l, filepath.Join(w, filepath.FromSlash(l.Dir())))
+					if err != nil {
+						return err
+					}
+					for name := range names {
+						laid["/"+path.Join(l.Dir(), name)] = true
+					}
 				}
 			}
 			if adding {
 				for _, q := range plans {
 					if paths.Same(files[q.change.Worktree], file) {
 						for name := range q.write {
-							laid["/"+path.Join(l.Dir(), name)] = true
+							laid["/"+path.Join(q.l.Dir(), name)] = true
 						}
 					}
 				}

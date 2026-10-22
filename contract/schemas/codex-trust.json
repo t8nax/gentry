@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t8nax/gentry/contract/schemas/codex-trust.json",
+  "title": "CodexTrust",
+  "description": "The trust in Codex of the worktrees of a command that adds worktrees to a pool, with Codex connected.",
+  "type": "object",
+  "properties": {
+    "trusted": {
+      "description": "The worktrees of the command whose trust in Codex the command wrote, by the record of the root of their main repository; in no order.",
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "distrusted": {
+      "description": "The worktrees of the command whose record of trust in Codex the operator set other than trusted: they are left as they are; in no order.",
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "error": {
+      "description": "Present if the settings of Codex could not be used: unreadable or unwritable; then they are left as they are. The list is open: a client shows an unknown value as is.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["trusted", "distrusted"]
+}

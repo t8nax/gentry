@@ -21,6 +21,15 @@ func TestSetupOutputLists(t *testing.T) {
 	if err != nil || !strings.Contains(string(b), `"worktrees_trusted":[]`) || !strings.Contains(string(b), `"worktrees_distrusted":["/w"]`) {
 		t.Errorf("setup of codex: %s, %v; want worktrees_trusted [] and worktrees_distrusted [\"/w\"]", b, err)
 	}
+	// The signs of a path are written as they are, as the commands write
+	// their output.
+	codex.Dir = "/home/dev/R&D <shop>/integrations/codex"
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(codex); err != nil || !strings.Contains(buf.String(), `"dir":"/home/dev/R&D <shop>/integrations/codex"`) {
+		t.Errorf("setup of codex with & and <: %s, %v", buf.String(), err)
+	}
 	var back SetupOutput
 	if err := json.Unmarshal(b, &back); err != nil || back.Tool != "codex" || len(back.WorktreesDistrusted) != 1 {
 		t.Errorf("setup of codex read back: %+v, %v", back, err)

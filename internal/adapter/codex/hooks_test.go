@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -98,8 +99,9 @@ func TestHookCommand(t *testing.T) {
 	if got := HookCommand("/usr/bin/gentry"); got != `"/usr/bin/gentry" hook session-start --tool codex` {
 		t.Errorf("HookCommand = %q", got)
 	}
-	if got := HookCommand(`C:\R&D\gentry.exe`); got != `"C:/R&D/gentry.exe" hook session-start --tool codex` {
-		t.Errorf("HookCommand of a path of Windows = %q", got)
+	in, slashed := osPath(`C:\R&D\gentry.exe`, "/opt/R&D/gentry.exe")
+	if got := HookCommand(in); got != `"`+slashed+`" hook session-start --tool codex` {
+		t.Errorf("HookCommand of %s = %q", in, got)
 	}
 	if got := HookCommand(testExe); got != `"/opt/Gentry Tools/gentry" hook session-start --tool codex` {
 		t.Errorf("HookCommand with a space = %q", got)
@@ -142,8 +144,9 @@ func TestHookCommandWindows(t *testing.T) {
 		t.Errorf("HookCommandWindows = %q", got)
 	}
 	// $ and ` are not expanded in single quotes; a single quote is doubled.
-	if got := HookCommandWindows(`C:\gen70 a$b\it's` + "`" + `\gentry.exe`); got != `& 'C:/gen70 a$b/it''s`+"`"+`/gentry.exe' hook session-start --tool codex` {
-		t.Errorf("HookCommandWindows of a path with $, ' and ` = %q", got)
+	in, slashed := osPath(`C:\gen70 a$b\it's`+"`"+`\gentry.exe`, "/opt/gen70 a$b/it's`/gentry.exe")
+	if got := HookCommandWindows(in); got != `& '`+strings.ReplaceAll(slashed, "'", "''")+`' hook session-start --tool codex` {
+		t.Errorf("HookCommandWindows of %s = %q", in, got)
 	}
 	out, _, err := hookEdit(nil, handler(testExe))
 	var file struct {
@@ -219,4 +222,14 @@ func TestFindHook(t *testing.T) {
 	if _, ok := findHook([]listedHook{{Command: "echo start"}}, p, hookCommands(testExe)); ok {
 		t.Error("a hook of the operator is found")
 	}
+}
+
+// osPath returns a path of the system of the test, the one of Windows or the
+// other: a backslash separates a path only on Windows. It returns the path
+// with forward slashes too, as the commands of the hook write it.
+func osPath(windows, other string) (path, slashed string) {
+	if runtime.GOOS == "windows" {
+		return windows, strings.ReplaceAll(windows, `\`, "/")
+	}
+	return other, other
 }

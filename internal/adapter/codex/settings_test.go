@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/paths"
@@ -155,7 +156,7 @@ func TestTrustWorktrees(t *testing.T) {
 	os.WriteFile(p, []byte("model = \"m\"\n"), 0o644)
 	os.Chmod(p, 0o444)
 	t.Cleanup(func() { os.Chmod(p, 0o644) })
-	if err := CheckSettings(p); !errors.As(err, &se) || se.Reason != Unwritable {
+	if _, err := checkSettings(p, SetupRequest{Root: t.TempDir()}); !errors.As(err, &se) || se.Reason != Unwritable {
 		t.Errorf("settings read-only: %v, want unwritable", err)
 	}
 	if _, err := TrustWorktrees(p, []string{a}); !errors.As(err, &se) || se.Reason != Unwritable {
@@ -208,4 +209,66 @@ func TestSandbox(t *testing.T) {
 func slicesEqual(v any, want []any) bool {
 	got, _ := v.([]any)
 	return slices.Equal(got, want)
+}
+
+// TestSamePlace checks a place named with the prefix Codex writes on
+// Windows, and through a symbolic link where the system makes one.
+func TestSamePlace(t *testing.T) {
+	dir, _ := paths.Canonical(t.TempDir())
+	if got := withoutVerbatim(verbatim + dir); got != dir {
+		t.Errorf("withoutVerbatim = %q, want %q", got, dir)
+	}
+	if !samePlace(verbatim+dir, dir) {
+		t.Errorf("%s%s is not %s", verbatim, dir, dir)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if os.Symlink(dir, link) != nil {
+		t.Log("no symbolic link: the system does not make one")
+		return
+	}
+	if !samePlace(verbatim+link, dir) || !samePlace(link, verbatim+dir) {
+		t.Errorf("%s through the link %s is not the same place", dir, link)
+	}
+	if samePlace(verbatim+link, t.TempDir()) {
+		t.Error("another folder is the same place")
+	}
+}
+
+// TestTrustRecordChoice checks the record taken of two of one place: the
+// key as the place is written, else the first by key.
+func TestTrustRecordChoice(t *testing.T) {
+	a, _, _ := repos(t)
+	other := a + string(filepath.Separator)
+	for i := 0; i < 10; i++ {
+		cfg := configOf(t, record(other, "untrusted")+record(a, "trusted"))
+		if key, level, _ := cfg.trustRecord(a); key != a || level != "trusted" {
+			t.Fatalf("the record of the key as written: %q %q, want %q trusted", key, level, a)
+		}
+		cfg = configOf(t, record(other+".", "untrusted")+record(other, "trusted"))
+		if key, _, _ := cfg.trustRecord(a); key != other {
+			t.Fatalf("the first record by key: %q, want %q", key, other)
+		}
+	}
+}
+
+// TestTrustWorktreesLock checks that the settings locked by another command
+// of Gentry are left as they are after the wait: unwritable.
+func TestTrustWorktreesLock(t *testing.T) {
+	a, _, _ := repos(t)
+	p := filepath.Join(t.TempDir(), "config.toml")
+	held, err := lockSettings(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Release()
+	wait := LockWait
+	LockWait = 100 * time.Millisecond
+	t.Cleanup(func() { LockWait = wait })
+	var se *SettingsError
+	if _, err := TrustWorktrees(p, []string{a}); !errors.As(err, &se) || se.Reason != Unwritable {
+		t.Errorf("TrustWorktrees with the lock held: %v, want unwritable", err)
+	}
+	if _, err := os.Stat(p); err == nil {
+		t.Error("the settings are written")
+	}
 }

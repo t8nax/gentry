@@ -89,17 +89,17 @@ func settingsPaths() (cfg, hooks string, err error) {
 // without Switch, an ElsewhereError; a command of Codex that fails, a
 // CommandError. A plugin the operator disabled stays disabled. Settings of
 // the hooks it cannot read or write and a hook it cannot trust are told in
-// the result.
-func Setup(req SetupRequest) (SetupResult, error) {
+// the result. A first setup that fails once the folder of the integration
+// is written removes it: Codex is connected by a setup that succeeds.
+func Setup(req SetupRequest) (res SetupResult, err error) {
 	cfgPath, hooksPath, err := settingsPaths()
 	if err != nil {
 		return SetupResult{}, err
 	}
-	c, err := readConfig(cfgPath)
+	// Every edit of the settings is tried before Codex is run, so that
+	// settings Gentry cannot edit refuse the setup before any change.
+	c, err := checkSettings(cfgPath, req)
 	if err != nil {
-		return SetupResult{}, err
-	}
-	if err := checkWritable(cfgPath, Unwritable); err != nil {
 		return SetupResult{}, err
 	}
 	program, err := Program()
@@ -124,6 +124,13 @@ func Setup(req SetupRequest) (SetupResult, error) {
 	if err != nil {
 		return SetupResult{}, err
 	}
+	if !exists(req.Dir) {
+		defer func() {
+			if err != nil {
+				os.RemoveAll(req.Dir)
+			}
+		}()
+	}
 	if err := Write(req.Dir, p); err != nil {
 		return SetupResult{}, &fs.PathError{Op: "write", Path: req.Dir, Err: err}
 	}
@@ -132,15 +139,12 @@ func Setup(req SetupRequest) (SetupResult, error) {
 	if previous != "" && samePlace(previous, req.Dir) {
 		previous, registered = "", req.Dir
 	}
-	disabled := false
-	if v, ok := c.value("plugins", pluginID, "enabled"); ok && v == false {
-		disabled = true
-	}
+	disabled := disabledIn(c)
 	r, err := register(program, req.Dir, registered, p.Version)
 	if err != nil {
 		return SetupResult{}, err
 	}
-	res := SetupResult{Action: r.action, PluginVersion: p.Version, Previous: previous, Enabled: r.enabled, Settings: cfgPath, HooksFile: hooksPath}
+	res = SetupResult{Action: r.action, PluginVersion: p.Version, Previous: previous, Enabled: r.enabled, Settings: cfgPath, HooksFile: hooksPath}
 
 	// The requirements of the administrator are read before the settings
 	// are changed: the hooks they turn off are left off. Requirements that
@@ -151,31 +155,14 @@ func Setup(req SetupRequest) (SetupResult, error) {
 		a.close()
 	}
 
-	// Codex rewrote its settings: they are read anew and changed.
-	if c, err = readConfig(cfgPath); err != nil {
+	// Installing the plugin enabled it: a plugin the operator disabled is
+	// disabled again.
+	restore := r.added && disabled
+	if res.HooksFeature, res.Sandbox, res.Trust, err = editSettings(cfgPath, req, managed, restore); err != nil {
 		return SetupResult{}, err
 	}
-	before := c.text
-	if r.added && disabled {
-		// Installing the plugin enabled it.
-		if err := c.set("false", "plugins", pluginID, "enabled"); err != nil {
-			return SetupResult{}, &SettingsError{Path: cfgPath, Reason: Unwritable, Err: err}
-		}
+	if restore {
 		res.Enabled = false
-	}
-	if res.HooksFeature, err = c.hooksFeature(managed); err != nil {
-		return SetupResult{}, &SettingsError{Path: cfgPath, Reason: Unwritable, Err: err}
-	}
-	if res.Sandbox, err = c.sandbox(req.Root); err != nil {
-		return SetupResult{}, &SettingsError{Path: cfgPath, Reason: Unwritable, Err: err}
-	}
-	if res.Trust, err = c.trust(req.Worktrees); err != nil {
-		return SetupResult{}, &SettingsError{Path: cfgPath, Reason: Unwritable, Err: err}
-	}
-	if c.text != before {
-		if err := writeFile(cfgPath, []byte(c.text)); err != nil {
-			return SetupResult{}, &SettingsError{Path: cfgPath, Reason: Unwritable, Err: err}
-		}
 	}
 
 	res.HookTrust = writeHook(hooksPath, req.Exe)
@@ -188,6 +175,62 @@ func Setup(req SetupRequest) (SetupResult, error) {
 		res.HookTrust, res.HookError = trustHook(program, req.Version, req.Root, hooksPath, req.Exe)
 	}
 	return res, nil
+}
+
+// editSettings makes the edits of setup in the settings of Codex at path
+// under their lock: Codex rewrote them, so they are read anew. Gentry tried
+// the edits before Codex ran, and Codex keeps the form of its settings when
+// it writes them; an edit that still cannot be made refuses the setup as
+// settings that cannot be written, the settings left as they are.
+func editSettings(path string, req SetupRequest, managed, restore bool) (feature, sandbox string, trust Trust, err error) {
+	lock, err := lockSettings(path)
+	if err != nil {
+		return "", "", Trust{}, err
+	}
+	defer lock.Release()
+	c, err := readConfig(path)
+	if err != nil {
+		return "", "", Trust{}, err
+	}
+	before := c.text
+	if feature, sandbox, trust, err = c.edits(req, managed, restore); err != nil {
+		return "", "", Trust{}, &SettingsError{Path: path, Reason: Unwritable, Err: err}
+	}
+	if c.text != before {
+		if err := writeFile(path, []byte(c.text)); err != nil {
+			return "", "", Trust{}, &SettingsError{Path: path, Reason: Unwritable, Err: err}
+		}
+	}
+	return feature, sandbox, trust, nil
+}
+
+// edits makes the edits of setup in the settings c, in memory: the plugin of
+// Gentry disabled if restore is set, the hooks turned on unless the
+// administrator turned them off, the data root opened in the sandbox and
+// the worktrees trusted.
+func (c *config) edits(req SetupRequest, managed, restore bool) (feature, sandbox string, trust Trust, err error) {
+	if restore {
+		if err := c.set("false", "plugins", pluginID, "enabled"); err != nil {
+			return "", "", Trust{}, err
+		}
+	}
+	if feature, err = c.hooksFeature(managed); err != nil {
+		return "", "", Trust{}, err
+	}
+	if sandbox, err = c.sandbox(req.Root); err != nil {
+		return "", "", Trust{}, err
+	}
+	if trust, err = c.trust(req.Worktrees); err != nil {
+		return "", "", Trust{}, err
+	}
+	return feature, sandbox, trust, nil
+}
+
+// disabledIn reports whether the operator disabled the plugin of Gentry in
+// the settings c.
+func disabledIn(c *config) bool {
+	v, ok := c.value("plugins", pluginID, "enabled")
+	return ok && v == false
 }
 
 // exists reports whether the path is there.
@@ -252,7 +295,7 @@ func trustHook(program, version, root, hooksPath, exe string) (state, reason str
 	case err != nil:
 		return HookUntrusted, reasonOf(err)
 	case !found:
-		return HookUntrusted, errHookNotListed.Error()
+		return HookUntrusted, notListed(exe)
 	case h.TrustStatus == HookTrusted:
 		return HookPresent, ""
 	}
@@ -262,8 +305,11 @@ func trustHook(program, version, root, hooksPath, exe string) (state, reason str
 	return HookTrusted, ""
 }
 
-// errHookNotListed means Codex does not list the hook Gentry wrote.
-var errHookNotListed = errors.New("codex app-server hooks/list: no hook " + HookSuffix)
+// notListed is the reason of a hook Codex does not list, which Gentry wrote
+// for the program exe, in the words of the commands of Codex.
+func notListed(exe string) string {
+	return appServerCommand + " hooks/list: no handler with the command " + HookCommand(exe)
+}
 
 // reasonOf is what Codex said about a failure.
 func reasonOf(err error) string {
@@ -276,15 +322,17 @@ func reasonOf(err error) string {
 
 // Elsewhere returns the existing directory of another data root Codex
 // serves the plugin of Gentry from, as Setup refuses it; "" if it serves
-// none, or that of dir, or one that is no more. Settings of Codex that
-// cannot be read or written are a SettingsError, before the program is
-// looked for.
-func Elsewhere(dir string) (string, error) {
+// none, or that of req.Dir, or one that is no more. Settings of Codex that
+// cannot be read or written, or in which an edit of Setup cannot be made,
+// are a SettingsError, before the program is looked for, as Setup refuses
+// them.
+func Elsewhere(req SetupRequest) (string, error) {
+	dir := req.Dir
 	cfgPath, _, err := settingsPaths()
 	if err != nil {
 		return "", err
 	}
-	if err := CheckSettings(cfgPath); err != nil {
+	if _, err := checkSettings(cfgPath, req); err != nil {
 		return "", err
 	}
 	program, err := Program()

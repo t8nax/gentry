@@ -6,10 +6,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
+	"time"
+
+	"github.com/t8nax/gentry/internal/filelock"
 )
 
 // HomeEnv names the folder of the settings of Codex; without it the settings
@@ -77,13 +82,46 @@ func readConfig(path string) (*config, error) {
 	return &config{path: path, text: string(b), doc: doc}, nil
 }
 
-// CheckSettings returns the SettingsError of the settings of Codex at path
-// if they cannot be read or written; nil if they can, or are not there.
-func CheckSettings(path string) error {
-	if _, err := readConfig(path); err != nil {
-		return err
+// checkSettings reads the settings of Codex at path and returns the
+// SettingsError of settings that cannot be read or written, or in which an
+// edit setup of req may make cannot be made, such as one in an inline
+// table: the edits are tried on a copy, the hooks taken for not turned off
+// by the administrator, whose requirements only the program of Codex
+// tells. Nothing is written.
+func checkSettings(path string, req SetupRequest) (*config, error) {
+	c, err := readConfig(path)
+	if err != nil {
+		return nil, err
 	}
-	return checkWritable(path, Unwritable)
+	if err := checkWritable(path, Unwritable); err != nil {
+		return nil, err
+	}
+	try := *c
+	if _, _, _, err := try.edits(req, false, disabledIn(c)); err != nil {
+		return nil, &SettingsError{Path: path, Reason: Unwritable, Err: err}
+	}
+	return c, nil
+}
+
+// lockName is the lock of the settings of Codex for the commands of Gentry,
+// beside config.toml: two of them do not lose the edits of each other.
+const lockName = configFile + ".gentry-lock"
+
+// LockWait is how long a command waits for another to release the lock of
+// the settings of Codex.
+var LockWait = 10 * time.Second
+
+// lockSettings takes the lock of the settings of Codex at path; a lock that
+// cannot be taken makes the settings unwritable.
+func lockSettings(path string) (*filelock.Lock, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, &SettingsError{Path: path, Reason: Unwritable, Err: err}
+	}
+	l, err := filelock.Acquire(filepath.Join(filepath.Dir(path), lockName), LockWait)
+	if err != nil {
+		return nil, &SettingsError{Path: path, Reason: Unwritable, Err: err}
+	}
+	return l, nil
 }
 
 // checkWritable returns a SettingsError with reason if the file at path is
@@ -175,7 +213,7 @@ func writeFile(path string, data []byte) error {
 // prefix \\?\ Codex writes on Windows, and on Windows without regard to the
 // case.
 func SamePath(a, b string) bool {
-	a, b = filepath.Clean(strings.TrimPrefix(a, `\\?\`)), filepath.Clean(strings.TrimPrefix(b, `\\?\`))
+	a, b = filepath.Clean(withoutVerbatim(a)), filepath.Clean(withoutVerbatim(b))
 	return a == b || runtime.GOOS == "windows" && strings.EqualFold(a, b)
 }
 
@@ -194,26 +232,34 @@ func (c *config) trustRecord(dir string) (key, level string, ok bool) {
 }
 
 // trustRecordIn returns the record of trust of the settings of Codex of
-// the values that applies to the folder dir, as trustRecord does.
+// the values that applies to the folder dir, as trustRecord does. Of two
+// records of one place, such as keys in another case, the one of the key
+// as the place is written is taken, else the first by key: the choice does
+// not change from a call to another.
 func trustRecordIn(values map[string]any, dir string, markers []string) (key, level string, ok bool) {
 	projects, _ := tomlAt(values, "projects")
 	records, _ := projects.(map[string]any)
 	if len(records) == 0 {
 		return "", "", false
 	}
+	keys := slices.Sorted(maps.Keys(records))
 	root := projectRoot(dir, markers)
 	for _, place := range []string{dir, root, mainRoot(root)} {
 		if place == "" {
 			continue
 		}
-		for k, v := range records {
-			if !SamePath(k, place) {
-				continue
-			}
-			m, _ := v.(map[string]any)
-			l, _ := m["trust_level"].(string)
-			return k, l, true
+		k, found := "", false
+		if _, exact := records[place]; exact {
+			k, found = place, true
+		} else if i := slices.IndexFunc(keys, func(k string) bool { return SamePath(k, place) }); i >= 0 {
+			k, found = keys[i], true
 		}
+		if !found {
+			continue
+		}
+		m, _ := records[k].(map[string]any)
+		l, _ := m["trust_level"].(string)
+		return k, l, true
 	}
 	return "", "", false
 }
@@ -367,6 +413,11 @@ func (c *config) trust(worktrees []string) (Trust, error) {
 // Settings that cannot be read or written are left as they are: a
 // SettingsError.
 func TrustWorktrees(path string, worktrees []string) (Trust, error) {
+	lock, err := lockSettings(path)
+	if err != nil {
+		return Trust{}, err
+	}
+	defer lock.Release()
 	c, err := readConfig(path)
 	if err != nil {
 		return Trust{}, err
@@ -418,7 +469,13 @@ func samePlace(a, b string) bool {
 	if SamePath(a, b) {
 		return true
 	}
-	ia, errA := os.Stat(strings.TrimPrefix(a, `\?\`))
-	ib, errB := os.Stat(strings.TrimPrefix(b, `\?\`))
+	ia, errA := os.Stat(withoutVerbatim(a))
+	ib, errB := os.Stat(withoutVerbatim(b))
 	return errA == nil && errB == nil && os.SameFile(ia, ib)
 }
+
+// verbatim is the prefix Codex writes before a local path on Windows.
+const verbatim = `\\?\`
+
+// withoutVerbatim returns the path p without the prefix verbatim.
+func withoutVerbatim(p string) string { return strings.TrimPrefix(p, verbatim) }

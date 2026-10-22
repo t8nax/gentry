@@ -188,10 +188,14 @@ func claudeCurrent(tool, dir, own string) (contract.SetupOutput, bool) {
 // codexElsewhere returns the existing directory of another data root Codex
 // serves the plugin of Gentry from, as setup refuses it; "" if it serves
 // none, or that of dir, or one that is no more. Settings of Codex that
-// cannot be read or written refuse first, with the hint to repeat the
-// update.
+// cannot be read or written, or edited as setup codex edits them, refuse
+// first, with the hint to repeat the update.
 func codexElsewhere(dir string) (string, error) {
-	registered, err := codex.Elsewhere(dir)
+	root, err := home.Root()
+	if err != nil {
+		return "", &failureError{homeUnknown()}
+	}
+	registered, err := codex.Elsewhere(codex.SetupRequest{Dir: dir, Root: root, Worktrees: poolPaths()})
 	var se *codex.SettingsError
 	switch {
 	case errors.As(err, &se):

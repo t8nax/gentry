@@ -185,7 +185,7 @@ func TestSetupRefused(t *testing.T) {
 	if _, err := Setup(s.request()); !errors.As(err, &ee) || !SamePath(ee.Registered, other.dir) {
 		t.Errorf("plugin of another data root: %v", err)
 	}
-	if got, err := Elsewhere(s.dir); err != nil || !SamePath(got, other.dir) {
+	if got, err := Elsewhere(s.request()); err != nil || !SamePath(got, other.dir) {
 		t.Errorf("Elsewhere = %q, %v", got, err)
 	}
 	req := s.request()
@@ -194,7 +194,102 @@ func TestSetupRefused(t *testing.T) {
 	if err != nil || !SamePath(r.Previous, other.dir) {
 		t.Errorf("switch: %+v, %v", r, err)
 	}
-	if got, err := Elsewhere(s.dir); err != nil || got != "" {
+	if got, err := Elsewhere(s.request()); err != nil || got != "" {
 		t.Errorf("Elsewhere after the switch = %q, %v", got, err)
+	}
+}
+
+// TestSetupEditRefused checks that settings with a value in a form Gentry
+// does not edit refuse the setup before Codex runs and anything is written,
+// and refuse the update too.
+func TestSetupEditRefused(t *testing.T) {
+	s := newStand(t)
+	const text = "features = { hooks = false, codex_hooks = false }\n"
+	os.WriteFile(ConfigPath(s.home), []byte(text), 0o644)
+	var se *SettingsError
+	if _, err := Setup(s.request()); !errors.As(err, &se) || se.Reason != Unwritable {
+		t.Errorf("Setup = %v, want unwritable", err)
+	}
+	if _, err := Elsewhere(s.request()); !errors.As(err, &se) || se.Reason != Unwritable {
+		t.Errorf("Elsewhere = %v, want unwritable", err)
+	}
+	if _, err := os.Stat(s.log); err == nil {
+		t.Errorf("Codex ran: %q", s.calls())
+	}
+	if _, err := os.Stat(s.dir); err == nil {
+		t.Error("the folder of the integration is made")
+	}
+	if b, _ := os.ReadFile(ConfigPath(s.home)); string(b) != text {
+		t.Errorf("the settings changed: %q", b)
+	}
+}
+
+// TestSetupFirstFails checks that a first setup that fails once the folder
+// of the integration is written removes it, and a later one keeps it.
+func TestSetupFirstFails(t *testing.T) {
+	s := newStand(t)
+	t.Setenv("FAKECODEX_FAIL", "plugin add")
+	var ce *CommandError
+	if _, err := Setup(s.request()); !errors.As(err, &ce) {
+		t.Fatalf("Setup = %v, want a command error", err)
+	}
+	if _, err := os.Stat(s.dir); err == nil {
+		t.Error("the folder of the integration stays after the first setup failed")
+	}
+	t.Setenv("FAKECODEX_FAIL", "")
+	s.setup(t)
+	t.Setenv("FAKECODEX_FAIL", "plugin add")
+	if _, err := Setup(SetupRequest{Dir: s.dir, Root: s.root, Exe: testExe, Version: "0.4.0"}); !errors.As(err, &ce) {
+		t.Fatalf("Setup of another version = %v, want a command error", err)
+	}
+	if _, err := os.Stat(s.dir); err != nil {
+		t.Errorf("the folder of the integration is gone after a later setup failed: %v", err)
+	}
+}
+
+// TestNotListed checks the reason of a hook Codex does not list.
+func TestNotListed(t *testing.T) {
+	if got := notListed(testExe); got != `codex app-server hooks/list: no handler with the command "/opt/Gentry Tools/gentry" hook session-start --tool codex` {
+		t.Errorf("notListed = %q", got)
+	}
+}
+
+// TestPluginMatches checks the plugin the hook compares with the program,
+// from the files of Codex: missing from the settings, of another version in
+// the cache, and with settings that cannot be read.
+func TestPluginMatches(t *testing.T) {
+	s := newStand(t)
+	s.setup(t)
+	cfg := ConfigPath(s.home)
+	good, _ := os.ReadFile(cfg)
+	if !PluginMatches(s.dir, testExe, "0.3.0") {
+		t.Fatal("the plugin of the program does not match")
+	}
+	if PluginMatches(s.dir, testExe, "0.4.0") {
+		t.Error("the plugin of another version matches")
+	}
+	// The settings without the marketplace, then without the plugin.
+	for _, text := range []string{
+		"[plugins.\"gentry@gentry\"]\nenabled = true\n",
+		"[marketplaces.gentry]\nsource_type = \"local\"\n",
+	} {
+		os.WriteFile(cfg, []byte(text), 0o644)
+		if PluginMatches(s.dir, testExe, "0.3.0") {
+			t.Errorf("the plugin matches with the settings:\n%s", text)
+		}
+	}
+	// Settings that cannot be read leave the cache to tell.
+	os.WriteFile(cfg, []byte("[features\n"), 0o644)
+	if !PluginMatches(s.dir, testExe, "0.3.0") {
+		t.Error("the plugin in the cache does not match with the settings not read")
+	}
+	os.WriteFile(cfg, good, 0o644)
+	cache := filepath.Join(s.home, "plugins", "cache", "gentry", "gentry")
+	entries, _ := os.ReadDir(cache)
+	for _, e := range entries {
+		os.Rename(filepath.Join(cache, e.Name()), filepath.Join(cache, "0.0.0"))
+	}
+	if PluginMatches(s.dir, testExe, "0.3.0") {
+		t.Error("the plugin of another version in the cache matches")
 	}
 }

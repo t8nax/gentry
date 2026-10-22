@@ -78,7 +78,7 @@ func TestUpdateText(t *testing.T) {
 		{"what needs attention", attention, lines(
 			msg.Text(msg.UpdateUpdated, "0.1.0", "0.3.0"),
 			msg.Text(msg.UpdateNewSessions),
-			msg.Text(msg.SetupDisabled),
+			msg.Text(msg.SetupDisabled, "Claude Code"),
 			"",
 			msg.Text(msg.AgentsConflictWarning),
 			"",
@@ -94,7 +94,7 @@ func TestUpdateText(t *testing.T) {
 		), lines(
 			msg.Text(msg.UpdateUpdated, "0.1.0", "0.3.0"),
 			msg.Text(msg.UpdateNewSessions),
-			msg.Text(msg.SetupDisabled),
+			msg.Text(msg.SetupDisabled, "Claude Code"),
 			"",
 			msg.Text(msg.AgentsConflictWarning),
 			"",
@@ -130,7 +130,7 @@ func TestUpdateText(t *testing.T) {
 			msg.Text(msg.UpdateUpdated, "0.1.0", "0.3.0"),
 			msg.Text(msg.UpdateNewSessions),
 			msg.Text(line),
-			msg.Text(msg.SetupDisabled),
+			msg.Text(msg.SetupDisabled, "Claude Code"),
 			"",
 			msg.Text(msg.ReleasePageLink, link),
 			"",

@@ -8,6 +8,7 @@ import (
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/paths"
 	"github.com/t8nax/gentry/internal/project"
 	"github.com/t8nax/gentry/internal/state"
 )
@@ -83,15 +84,39 @@ func runProjectAdd(args []string, env Env) int {
 		out.Action = actionUnchanged
 	}
 	x := projectAddExtra{repoCreated: res.RepoCreated, unpooled: res.Unpooled}
+	// Codex reads the subagents only from a worktree it trusts: the
+	// worktrees of the command in the pool are trusted.
+	out.CodexTrust, x.distrustKeys = codexTrust(pooled(st, p.ID, res.Worktrees))
 	return emit(env, out, func(p *page, out contract.ProjectAddOutput) { projectAddText(p, out, x) })
 }
 
+// pooled returns the worktrees of list in the pool of project, in the order
+// of list.
+func pooled(st *state.Store, project string, list []string) []string {
+	worktrees, err := st.Worktrees()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, path := range list {
+		for _, w := range worktrees {
+			if w.Project == project && paths.Same(w.Path, path) {
+				out = append(out, w.Path)
+				break
+			}
+		}
+	}
+	return out
+}
+
 // projectAddExtra is what the text of project add has apart from the
-// contract: whether the repository of the knowledge was created, and the
-// worktrees of the repository in no pool.
+// contract: whether the repository of the knowledge was created, the
+// worktrees of the repository in no pool and the records of trust in Codex
+// the operator did not trust.
 type projectAddExtra struct {
-	repoCreated bool
-	unpooled    []string
+	repoCreated  bool
+	unpooled     []string
+	distrustKeys []string
 }
 
 // projectAddText prints the project connected: its knowledge, prefix and
@@ -114,14 +139,16 @@ func projectAddText(p *page, out contract.ProjectAddOutput, x projectAddExtra) {
 			fmt.Fprintln(p, msg.Text(msg.ProjectWorktreeAdded, w))
 		}
 	}
-	writeLayout(p, out.Agents, false, out.Project)
+	hints := layoutBlocks(p, out.Agents, false, out.Project)
+	hints = append(hints, codexTrustText(p, out.CodexTrust, x.distrustKeys)...)
 	// Other worktrees of the repository are not added on their own: the
 	// operator decides where Gentry may work.
 	if len(x.unpooled) > 0 {
 		p.WriteString("\n")
 		writeList(&p.Builder, msg.Text(msg.ProjectUnpooled), x.unpooled)
-		p.hints(hintOf(msg.HintProjectUnpooled))
+		hints = append(hints, hintOf(msg.HintProjectUnpooled))
 	}
+	p.hints(hints...)
 }
 
 // runProjectList prints the connected projects. It only reads: without a

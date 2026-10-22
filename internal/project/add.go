@@ -63,8 +63,11 @@ type AddResult struct {
 	KnowledgeCreated bool     // the project information was written and committed now
 	RepoCreated      bool     // the knowledge repository was created now
 	Added            []string // worktrees added to the pool, the main one first
-	Unchanged        bool     // the project was already connected so
-	Unpooled         []string // worktrees of the repository in no pool, as git lists them
+	// Worktrees are the worktrees of the command, added or in the pool
+	// already: the main one and the one the command ran in.
+	Worktrees []string
+	Unchanged bool     // the project was already connected so
+	Unpooled  []string // worktrees of the repository in no pool, as git lists them
 }
 
 // NotRepoError means the command does not run in a git worktree.
@@ -212,7 +215,7 @@ func Add(st *state.Store, req AddRequest) (AddResult, error) {
 		return AddResult{}, err
 	}
 	if unchanged {
-		return AddResult{Project: existing, Unchanged: true, Unpooled: unpooled}, nil
+		return AddResult{Project: existing, Unchanged: true, Unpooled: unpooled, Worktrees: pool}, nil
 	}
 
 	res := AddResult{Project: p, KnowledgeCreated: kind != kindExisting, RepoCreated: kind == kindNewRepo}
@@ -253,9 +256,9 @@ func Add(st *state.Store, req AddRequest) (AddResult, error) {
 	}
 	if unchanged {
 		// Connected by another gentry meanwhile.
-		return AddResult{Project: existing, Unchanged: true, Unpooled: unpooled}, nil
+		return AddResult{Project: existing, Unchanged: true, Unpooled: unpooled, Worktrees: pool}, nil
 	}
-	res.Added = pool
+	res.Added, res.Worktrees = pool, pool
 	res.Unpooled = unpooled
 	return res, nil
 }

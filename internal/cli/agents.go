@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
-	"github.com/t8nax/gentry/internal/adapter/claude"
 	"github.com/t8nax/gentry/internal/agents"
 	"github.com/t8nax/gentry/internal/flow"
 	"github.com/t8nax/gentry/internal/msg"
@@ -18,10 +17,6 @@ import (
 	"github.com/t8nax/gentry/internal/state"
 	"github.com/t8nax/gentry/internal/task"
 )
-
-// agentsLayout is how subagents are laid out for the tool the agent works
-// in. Claude Code is the one tool so far.
-var agentsLayout agents.Layout = claude.Agents{}
 
 // layoutPool is the worktrees of the pools and the tasks that hold them, as read
 // for a layout. The store is closed by close.
@@ -164,7 +159,7 @@ func (o layoutOutcome) json(p *layoutPool) *contract.AgentsLayout {
 
 // layoutWorktree lays out the subagents of list in worktree path.
 func layoutWorktree(p *layoutPool, path string, list []flow.Agent) layoutOutcome {
-	res, err := agents.Sync(agentsLayout, []agents.Target{{Path: path, Agents: list}}, p.paths())
+	res, err := agents.Sync(layoutFormats(), []agents.Target{{Path: path, Agents: list}}, p.paths())
 	return layoutOutcome{changes: res.Changed(), conflicts: res.Conflicts, err: err}
 }
 
@@ -198,7 +193,7 @@ func layoutFree(r *process.Repo, projects map[string]bool) (layoutOutcome, *layo
 	if len(targets) == 0 {
 		return layoutOutcome{}, p
 	}
-	res, err := agents.Sync(agentsLayout, targets, p.paths())
+	res, err := agents.Sync(layoutFormats(), targets, p.paths())
 	return layoutOutcome{changes: res.Changed(), conflicts: res.Conflicts, err: err}, p
 }
 
@@ -247,7 +242,7 @@ func layoutAdded(st *state.Store, r *process.Repo, project string, paths []strin
 			targets = append(targets, agents.Target{Path: path, Agents: list})
 		}
 	}
-	res, err := agents.Sync(agentsLayout, targets, p.paths())
+	res, err := agents.Sync(layoutFormats(), targets, p.paths())
 	return layoutOutcome{changes: res.Changed(), conflicts: res.Conflicts, err: err}, p
 }
 
@@ -300,11 +295,18 @@ func sharedProjects(r *process.Repo) map[string]bool {
 
 // writeLayout tells what a layout inside another command did, as blocks
 // each preceded by an empty line: the change of one worktree, or the number
-// of free worktrees changed by project; then the conflicts and the failure.
-// A layout with nothing to tell is nil.
+// of free worktrees changed by project; then the conflicts and the failure,
+// and their hints. A layout with nothing to tell is nil.
 func writeLayout(p *page, l *contract.AgentsLayout, single bool, project string) {
+	p.hints(layoutBlocks(p, l, single, project)...)
+}
+
+// layoutBlocks prints what a layout inside another command did, as
+// writeLayout does, and returns the hints instead of printing them, for the
+// last block of the command.
+func layoutBlocks(p *page, l *contract.AgentsLayout, single bool, project string) []hint {
 	if l == nil {
-		return
+		return nil
 	}
 	if len(l.Worktrees) > 0 {
 		p.WriteString("\n")
@@ -318,20 +320,23 @@ func writeLayout(p *page, l *contract.AgentsLayout, single bool, project string)
 		}
 		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
 	}
-	writeLayoutTrouble(p, l)
+	return layoutTrouble(p, l)
 }
 
-// writeLayoutTrouble tells the conflicts and the failure of a layout.
-func writeLayoutTrouble(p *page, l *contract.AgentsLayout) {
+// layoutTrouble prints the conflicts and the failure of a layout, each a
+// block, and returns their hints.
+func layoutTrouble(p *page, l *contract.AgentsLayout) []hint {
+	var hints []hint
 	if len(l.Conflicts) > 0 {
 		fmt.Fprintf(p, "\n%s\n\n", msg.Text(msg.AgentsConflictWarning))
 		writeConflicts(&p.Builder, l.Conflicts)
-		p.hints(hintOf(msg.HintAgentsConflictWarning))
+		hints = append(hints, hintOf(msg.HintAgentsConflictWarning))
 	}
 	if l.Error != nil {
 		fmt.Fprintf(p, "\n%s\n%s\n", msg.Text(msg.AgentsSyncFailed), msg.Text(msg.AgentsSyncFailedReason, *l.Error))
-		p.hints(hintOf(msg.HintAgentsDeployFailed))
+		hints = append(hints, hintOf(msg.HintAgentsDeployFailed))
 	}
+	return hints
 }
 
 // writeFreeLayout tells a layout of free worktrees after a synchronization,
@@ -353,7 +358,7 @@ func writeFreeLayout(p *page, l *contract.AgentsLayout, projects map[string]stri
 		}
 		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
 	}
-	writeLayoutTrouble(p, l)
+	p.hints(layoutTrouble(p, l)...)
 }
 
 // projectsOf returns the project of each worktree of the pool p; nil
@@ -478,18 +483,27 @@ func runAgentsDeploy(args []string, env Env) int {
 	if bad != nil {
 		return fail(env, *bad)
 	}
-	conflicts, err := agents.Check(agentsLayout, d.targets)
+	// Without an AI tool connected there is no format to lay out in.
+	connected := connectedTools()
+	formats := formatsOf(connected)
+	if len(connected) == 0 {
+		out := contract.AgentsDeployOutput{Project: id, Worktrees: []contract.AgentsWorktree{}, Tools: []string{}}
+		return emit(env, out, func(p *page, out contract.AgentsDeployOutput) { agentsDeployText(p, out, d.laid) })
+	}
+	conflicts, err := agents.Check(formats, d.targets)
 	if err != nil {
 		return fail(env, layoutFailure(err))
 	}
 	if len(conflicts) > 0 {
 		return fail(env, agentsConflict(conflicts))
 	}
-	res, err := agents.Sync(agentsLayout, d.targets, p.paths())
+	res, err := agents.Sync(formats, d.targets, p.paths())
 	if err != nil {
 		return fail(env, layoutFailure(err))
 	}
-	return emit(env, d.output(res, p), func(p *page, out contract.AgentsDeployOutput) { agentsDeployText(p, out, d.laid) })
+	out := d.output(res, p)
+	out.Tools = connected
+	return emit(env, out, func(p *page, out contract.AgentsDeployOutput) { agentsDeployText(p, out, d.laid) })
 }
 
 // A deploy is the layout of the pool of a project: its worktrees, the main
@@ -558,6 +572,11 @@ func (d deploy) output(res agents.Result, p *layoutPool) contract.AgentsDeployOu
 // subagents of the others are not laid out, for a flow with problems or a
 // snapshot that cannot be read.
 func agentsDeployText(p *page, out contract.AgentsDeployOutput, laid map[string]bool) {
+	if len(out.Tools) == 0 {
+		fmt.Fprintln(p, msg.Text(msg.AgentsNoTools))
+		p.hints(hintOf(msg.HintAgentsNoTools))
+		return
+	}
 	if out.Changed {
 		fmt.Fprintln(p, msg.Text(msg.AgentsDeployed, out.Project))
 		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))

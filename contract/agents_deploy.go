@@ -15,7 +15,12 @@ type AgentsDeployOutput struct {
 	// Identifier of the project.
 	Project string `json:"project"`
 
-	// Every worktree of the pool, the main one first, then by path.
+	// The AI tools connected, in whose format the subagents are laid out, in the
+	// order claude, codex; empty if none is connected: then nothing is laid out.
+	Tools []string `json:"tools"`
+
+	// Every worktree of the pool, the main one first, then by path; empty if no AI
+	// tool is connected.
 	Worktrees []AgentsWorktree `json:"worktrees"`
 }
 
@@ -30,6 +35,9 @@ func (j *AgentsDeployOutput) UnmarshalJSON(value []byte) error {
 	}
 	if _, ok := raw["project"]; raw != nil && !ok {
 		return fmt.Errorf("field project in AgentsDeployOutput: required")
+	}
+	if _, ok := raw["tools"]; raw != nil && !ok {
+		return fmt.Errorf("field tools in AgentsDeployOutput: required")
 	}
 	if _, ok := raw["worktrees"]; raw != nil && !ok {
 		return fmt.Errorf("field worktrees in AgentsDeployOutput: required")

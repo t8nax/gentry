@@ -590,10 +590,11 @@ func TestUpdateAgents(t *testing.T) {
 
 // TestUpdateAgentsTask checks that the worktree of a task gets the
 // subagents of the flow of the task and the free one those of the active
-// flow, as agents deploy lays them out.
+// flow, as agents deploy lays them out. Claude Code is connected: the
+// subagents are laid out in its format.
 func TestUpdateAgentsTask(t *testing.T) {
 	parallel(t)
-	s := installedStand(t, v010, false)
+	s := installedStand(t, v010, true)
 	shop := s.project("shop", "fix")
 	fix := s.worktree("shop", "fix")
 	s.mustIn(fix, "task", "take", "--scenario", "feature", "--title", "Частичный возврат по карте", "--statement", "Деньги возвращаются на карту.")
@@ -616,16 +617,44 @@ func TestUpdateAgentsTask(t *testing.T) {
 	}
 }
 
-// TestUpdateAgentsWithoutIntegrations checks that the update lays out the
-// subagents with no integration connected.
+// TestUpdateAgentsWithoutIntegrations checks that with no AI tool connected
+// the update skips the layout of the subagents silently: the JSON has no
+// field agents. The subagents are laid out in the format of each AI tool
+// connected (GEN-70).
 func TestUpdateAgentsWithoutIntegrations(t *testing.T) {
 	parallel(t)
-	s := installedStand(t, v020, false)
-	s.project("shop")
-	out, res := s.updateJSON()
-	if !slices.ContainsFunc(res.Agents, func(a updateAgents) bool { return a.Project == "shop" }) {
-		t.Errorf("update --json:\n%s\nwant an element of agents for shop", out)
-	}
+	t.Run("text", func(t *testing.T) {
+		t.Parallel()
+		s := installedStand(t, v020, false)
+		shop := s.project("shop")
+		// The worktree has no files of subagents, as a layout would add them:
+		// the update does not lay them out and says nothing of it.
+		dirs := []string{filepath.Join(shop, ".claude"), filepath.Join(shop, ".codex")}
+		for _, d := range dirs {
+			os.RemoveAll(d)
+		}
+		r := s.update()
+		wantCode(t, r, 0)
+		for _, o := range []string{r.stdout, r.stderr} {
+			wantNoLineWith(t, o, "убагент")
+		}
+		for _, d := range dirs {
+			if testkit.FileExists(d) {
+				t.Errorf("the update laid out the subagents in %s with no AI tool connected", d)
+			}
+		}
+	})
+	t.Run("json", func(t *testing.T) {
+		t.Parallel()
+		s := installedStand(t, v020, false)
+		s.project("shop")
+		out, _ := s.updateJSON()
+		var fields map[string]json.RawMessage
+		json.Unmarshal([]byte(out), &fields)
+		if _, ok := fields["agents"]; ok {
+			t.Errorf("update --json:\n%s\nwant no field agents", out)
+		}
+	})
 }
 
 // TestUpdateAgentsUnchanged checks that with the same version and the plugin
@@ -669,10 +698,11 @@ func TestUpdateNoProjects(t *testing.T) {
 
 // TestUpdateAgentsConflict checks that a file of the name of a subagent git
 // tracks in a worktree does not stop the update: it warns with the file and
-// the hint to lay out the project, and leaves the file.
+// the hint to lay out the project, and leaves the file. Claude Code is
+// connected: the subagents are laid out in its format.
 func TestUpdateAgentsConflict(t *testing.T) {
 	parallel(t)
-	s := installedStand(t, v010, false)
+	s := installedStand(t, v010, true)
 	s.project("shop", "fix")
 	fix := s.worktree("shop", "fix")
 	const own = "Ревьюер проекта.\n"
@@ -725,10 +755,11 @@ func TestUpdateOutputOrder(t *testing.T) {
 // TestUpdateAgentsFailed checks that a project whose layout fails does not
 // stop the layout of the others: the new program stays, and the update
 // fails with the project, the reason and the hint to lay it out again.
+// Claude Code is connected: the subagents are laid out in its format.
 func TestUpdateAgentsFailed(t *testing.T) {
 	parallel(t)
 	setup := func(t *testing.T) *stand {
-		s := installedStand(t, v010, false)
+		s := installedStand(t, v010, true)
 		s.project("shop", "fix")
 		editByHand(t, reviewer(s.project("admin")))
 		// git no longer knows the worktree.

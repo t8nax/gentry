@@ -160,7 +160,7 @@ func runTaskTake(args []string, env Env) int {
 	}
 	// A file of the name of a subagent that Gentry did not lay out refuses
 	// the task: a stage of the subagent would run that file.
-	conflicts, err := agents.Check(agentsLayout, []agents.Target{{Path: w.Path, Agents: res.Flow.Agents}})
+	conflicts, err := agents.Check(layoutFormats(), []agents.Target{{Path: w.Path, Agents: res.Flow.Agents}})
 	if err != nil {
 		return fail(env, layoutFailure(err))
 	}

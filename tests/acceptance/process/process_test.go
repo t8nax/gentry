@@ -35,6 +35,8 @@ func twoMachines(t *testing.T) machines {
 		gittest.Run(t, root, "init", "--quiet", "--bare", remote)
 		testkit.MustRun(t, "process", "remote", "set", remote)
 		t.Setenv(testkit.HomeEnv, filepath.Join(root, "home-b"))
+		// The subagents are laid out in the format of Claude Code on B too.
+		testkit.ConnectClaude(t)
 		testkit.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
 		testkit.MustRun(t, "process", "remote", "set", remote)
 	})
@@ -78,6 +80,7 @@ func TestProcessRemoteSet(t *testing.T) {
 
 	// Another machine gets the process and shows the same flow.
 	t.Setenv(testkit.HomeEnv, filepath.Join(root, "home-b"))
+	testkit.ConnectClaude(t)
 	testkit.MustRun(t, "project", "add", "--knowledge", "../shop-knowledge")
 	if _, stdout, _ := testkit.Run("process", "remote", "set", remote); !strings.HasSuffix(stdout, "\n"+msg.Text(msg.ProcessResultReceived)+"\n") {
 		t.Errorf("remote on b:\n%s", stdout)
@@ -457,6 +460,8 @@ func TestProjectAddWithFlow(t *testing.T) {
 
 	// A third machine takes the process first, then connects the shop.
 	t.Setenv(testkit.HomeEnv, filepath.Join(filepath.Dir(m.a), "home-c"))
+	// The subagents are laid out in the format of Claude Code on C too.
+	testkit.ConnectClaude(t)
 	testkit.MustRun(t, "process", "remote", "set", m.remote)
 	_, stdout, _ := testkit.Run("project", "add", "--knowledge", "../shop-knowledge")
 	if !strings.Contains(stdout, "\n\n"+laidOut) {

@@ -58,7 +58,7 @@ func TestUsageFailureText(t *testing.T) {
 			"Папка плагина: /home/dev/.gentry-old/claude",
 			"Папка плагина этой команды: /home/dev/.gentry/claude",
 			"",
-			hintLineOf(msg.HintPluginElsewhere, "gentry setup claude --switch"),
+			msg.Text(msg.HintPluginElsewhere, "Claude Code")+": gentry setup claude --switch",
 		), lines(
 			"Плагин Gentry в Claude Code подключён из другой папки данных.",
 			"Папка плагина: /home/dev/.gentry-old/claude",

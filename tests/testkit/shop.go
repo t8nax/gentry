@@ -1,6 +1,7 @@
 package testkit
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -70,16 +71,88 @@ func cleanWork(t *testing.T) {
 }
 
 // ShopDir makes a shop repository with a secondary worktree, gives the test a
-// data root of its own and returns the directory of them.
+// data root of its own with Claude Code connected, so that the subagents are
+// laid out in its format, and returns the directory of them.
 func ShopDir(t *testing.T) string {
 	t.Helper()
-	Layer(t, "dir", func() {
-		cleanWork(t)
-		t.Setenv(home.EnvVar, filepath.Join(work, "home"))
-		shop := gittest.Repo(t, filepath.Join(work, "shop"))
-		gittest.Worktree(t, shop, filepath.Join(work, "shop-fix"), "fix")
-	})
+	Layer(t, "dir", func() { toolsDir(t, true, false) })
 	return work
+}
+
+// toolsDir makes the shop of ShopDir with the AI tools connected: Claude Code
+// by the folder of its integration, Codex by gentry setup codex with the
+// fake Codex.
+func toolsDir(t *testing.T, claude, codex bool) {
+	t.Helper()
+	cleanWork(t)
+	t.Setenv(home.EnvVar, filepath.Join(work, "home"))
+	shop := gittest.Repo(t, filepath.Join(work, "shop"))
+	gittest.Worktree(t, shop, filepath.Join(work, "shop-fix"), "fix")
+	if claude {
+		ConnectClaude(t)
+	}
+	if codex {
+		ConnectCodex(t)
+	}
+}
+
+// layerName names the layer of the fixture with the AI tools connected.
+func layerName(name string, claude, codex bool) string {
+	return fmt.Sprintf("%s-claude-%t-codex-%t", name, claude, codex)
+}
+
+// ToolsShopDir is ShopDir with the AI tools given connected before any
+// project: Claude Code by the folder of its integration, Codex by gentry
+// setup codex with the fake Codex, which stays the codex program of the
+// test.
+func ToolsShopDir(t *testing.T, claude, codex bool) string {
+	t.Helper()
+	Layer(t, layerName("dir", claude, codex), func() { toolsDir(t, claude, codex) })
+	if codex {
+		UseCodex(t)
+	}
+	return work
+}
+
+// ToolsShopFlow is ShopFlow with the AI tools of ToolsShopDir: the shop is
+// connected from its main worktree, the only one of the pool, and the flow
+// of the flow testdata applied. The test runs in the main worktree.
+func ToolsShopFlow(t *testing.T, claude, codex bool) flow.Places {
+	t.Helper()
+	Layer(t, layerName("flow", claude, codex), func() {
+		ToolsShopDir(t, claude, codex)
+		t.Chdir(filepath.Join(work, "shop"))
+		if code, _, stderr := Run("project", "add", "shop", "--knowledge", "../shop-knowledge"); code != contract.ExitOK {
+			t.Fatalf("project add: %s", stderr)
+		}
+		if err := os.CopyFS(ShopPlaces().Shared, os.DirFS(filepath.Join(flowTestdata, "agents"))); err != nil {
+			t.Fatal(err)
+		}
+		MustRun(t, "flow", "apply")
+		CopyShopFlow(t, ShopPlaces())
+		MustRun(t, "flow", "apply")
+	})
+	if codex {
+		UseCodex(t)
+	}
+	return ShopPlaces()
+}
+
+// ToolsTaskShop is TaskShop with the AI tools of ToolsShopDir: shop-fix is
+// in the pool too. It returns the main worktree and shop-fix.
+func ToolsTaskShop(t *testing.T, claude, codex bool) (shop, fix string) {
+	t.Helper()
+	t.Setenv(caller.SessionEnv, "")
+	t.Setenv(caller.ClaudeCodeEnv, "")
+	shop, fix = filepath.Join(work, "shop"), filepath.Join(work, "shop-fix")
+	Layer(t, layerName("pool", claude, codex), func() {
+		ToolsShopFlow(t, claude, codex)
+		MustRun(t, "worktree", "add", fix)
+	})
+	if codex {
+		UseCodex(t)
+	}
+	return shop, fix
 }
 
 // ConnectedShop connects the shop of ShopDir from its main worktree and

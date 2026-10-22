@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/t8nax/gentry/contract"
+	"github.com/t8nax/gentry/internal/adapter/codex"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/state"
 )
@@ -223,12 +224,30 @@ func toolFailed(tool, command, output string) failure {
 }
 
 func pluginElsewhere(tool, registered, dir string) failure {
+	title := toolTitles[tool]
 	return failure{
 		exit:    contract.ExitError,
 		code:    contract.CodePluginElsewhere,
-		message: msg.Text(msg.ErrPluginElsewhere, registered, dir),
-		hints:   []hint{hintOf(msg.HintPluginElsewhere).set("tool", tool)},
+		message: msg.Text(msg.ErrPluginElsewhere, title, registered, dir),
+		hints:   []hint{hintOf(msg.HintPluginElsewhere, title).set("tool", tool)},
 		details: map[string]any{"tool": tool, "registered": registered, "dir": dir},
+	}
+}
+
+// settingsInvalid refuses a command for settings of the AI tool it cannot
+// read or write, with which the tool does not work: Codex. The hint is to
+// fix them and repeat setup of the tool.
+func settingsInvalid(tool, path, reason string) failure {
+	k := msg.ErrCodexSettingsUnread
+	if reason == codex.Unwritable {
+		k = msg.ErrCodexSettingsUnwritten
+	}
+	return failure{
+		exit:    contract.ExitError,
+		code:    contract.CodeSettingsInvalid,
+		message: msg.Text(k, path),
+		hints:   []hint{hintOf(msg.HintCodexSettingsFix).set("tool", tool)},
+		details: map[string]any{"tool": tool, "path": path, "reason": reason},
 	}
 }
 

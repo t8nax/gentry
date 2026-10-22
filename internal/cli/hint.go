@@ -44,9 +44,12 @@ type param struct {
 // and its arguments and flags. Values are set where the hint is given.
 var hintSpecs = map[msg.Key]hint{
 	msg.HintPluginElsewhere:       {cmd: "setup", params: []param{arg("tool"), flag("switch")}},
+	msg.HintCodexSettingsFix:      {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintCodexHooksFix:         {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintToolNotFound:          {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintIntroPluginStale:      {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintUpdateSetup:           {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintAgentsNoTools:         {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintIntegrationSetup:      {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintUpdateProgram:         {cmd: "update"},
 	msg.HintProjectUnpooled:       {cmd: "worktree add", params: []param{arg("path")}},

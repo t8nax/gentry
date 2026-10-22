@@ -26,18 +26,17 @@ func TestHelpText(t *testing.T) {
 
 	setup, _ := lookup("setup")
 	want := lines(
-		"Подключить Gentry к ИИ-инструменту: сформировать и зарегистрировать плагин.",
-		"После gentry update плагин пересоздаётся сам; после скрипта установки команду нужно повторить.",
+		"Подключить Gentry к ИИ-инструменту: сформировать и установить плагин и настроить ИИ-инструмент для работы с Gentry.",
 		"",
 		"Использование:",
 		"  gentry setup <ИИ-инструмент> [--switch] [--json]",
 		"",
 		"Аргументы:",
 		"  <ИИ-инструмент>   ИИ-инструмент для подключения.",
-		"                    Допустимые значения: claude",
+		"                    Допустимые значения: claude, codex",
 		"",
 		"Флаги:",
-		"  --switch          Переключить на папку данных этой команды плагин Gentry в Claude Code,",
+		"  --switch          Переключить на папку данных этой команды плагин Gentry в ИИ-инструменте,",
 		"                    подключённый из другой папки данных.",
 		"  --json            Вывести результат в формате JSON.",
 	)
@@ -364,14 +363,14 @@ func TestSetupText(t *testing.T) {
 		), ""},
 		{"unchanged", setup(claude.Unchanged, claude.PermissionPresent, true), "Gentry уже подключён к Claude Code.\n", ""},
 		{"settings not read", setup(claude.Unchanged, claude.PermissionFailed, true), lines(
-			msg.Text(msg.SetupUnchanged),
+			msg.Text(msg.SetupUnchanged, "Claude Code"),
 			"Разрешить инструменты Gentry не удалось: настройки Claude Code не прочитаны.",
 			msg.Text(msg.SetupSettings, settings),
 			"",
 			msg.Text(msg.HintSetupPermission, claude.PermissionRule),
 		), ""},
 		{"settings not written", setup(claude.Unchanged, claude.PermissionUnwritten, true), lines(
-			msg.Text(msg.SetupUnchanged),
+			msg.Text(msg.SetupUnchanged, "Claude Code"),
 			"Разрешить инструменты Gentry не удалось: настройки Claude Code не записаны.",
 			msg.Text(msg.SetupSettings, settings),
 			"",
@@ -383,7 +382,7 @@ func TestSetupText(t *testing.T) {
 			"Прежняя папка плагина: /home/dev/.gentry-old/integrations/claude",
 		), ""},
 		{"disabled", disabled, lines(
-			msg.Text(msg.SetupSwitched, previous),
+			msg.Text(msg.SetupSwitched, "Claude Code", previous),
 			"",
 			"Плагин Gentry отключён в Claude Code.",
 			"",
@@ -394,9 +393,9 @@ func TestSetupText(t *testing.T) {
 		wantText(t, tt.name, func(p *page) { setupText(p, tt.out, setupExtra{}) }, tt.cli, tt.agent)
 	}
 
-	// With a project connected, an updated or switched plugin asks to lay
-	// out the subagents anew, last; a plugin installed or unchanged does not.
-	deploy := "Переложить субагентов в рабочие копии каждого проекта: gentry agents deploy --project <идентификатор>"
+	// With a project connected, an installed, updated or switched plugin asks
+	// to lay out the subagents, last; a plugin unchanged does not.
+	deploy := "Разложить субагентов в рабочие копии каждого проекта: gentry agents deploy --project <идентификатор>"
 	deployTool := hintLineOf(msg.HintAgentsDeployAll, "agents_deploy (project)")
 	withProjects := []struct {
 		name       string
@@ -404,31 +403,39 @@ func TestSetupText(t *testing.T) {
 		cli, agent string
 	}{
 		{"updated with projects", setup(claude.Updated, claude.PermissionPresent, true), lines(
-			msg.Text(msg.SetupUpdated),
+			msg.Text(msg.SetupUpdated, "Claude Code"),
 			"",
 			deploy,
 		), lines(
-			msg.Text(msg.SetupUpdated),
+			msg.Text(msg.SetupUpdated, "Claude Code"),
 			"",
 			deployTool,
 		)},
 		{"switched and disabled with projects", disabled, lines(
-			msg.Text(msg.SetupSwitched, previous),
+			msg.Text(msg.SetupSwitched, "Claude Code", previous),
 			"",
-			msg.Text(msg.SetupDisabled),
+			msg.Text(msg.SetupDisabled, "Claude Code"),
 			"",
 			msg.Text(msg.HintPluginEnable),
 			deploy,
 		), lines(
-			msg.Text(msg.SetupSwitched, previous),
+			msg.Text(msg.SetupSwitched, "Claude Code", previous),
 			"",
-			msg.Text(msg.SetupDisabled),
+			msg.Text(msg.SetupDisabled, "Claude Code"),
 			"",
 			msg.Text(msg.HintPluginEnable),
 			deployTool,
 		)},
-		{"installed with projects", setup(claude.Installed, claude.PermissionPresent, true), msg.Text(msg.SetupInstalled) + "\n", ""},
-		{"unchanged with projects", setup(claude.Unchanged, claude.PermissionPresent, true), msg.Text(msg.SetupUnchanged) + "\n", ""},
+		{"installed with projects", setup(claude.Installed, claude.PermissionPresent, true), lines(
+			msg.Text(msg.SetupInstalled, "Claude Code"),
+			"",
+			deploy,
+		), lines(
+			msg.Text(msg.SetupInstalled, "Claude Code"),
+			"",
+			deployTool,
+		)},
+		{"unchanged with projects", setup(claude.Unchanged, claude.PermissionPresent, true), msg.Text(msg.SetupUnchanged, "Claude Code") + "\n", ""},
 	}
 	for _, tt := range withProjects {
 		wantText(t, tt.name, func(p *page) { setupText(p, tt.out, setupExtra{projects: true}) }, tt.cli, tt.agent)

@@ -34,7 +34,7 @@ func TestSetupClaude(t *testing.T) {
 	if code != contract.ExitOK || stderr != "" {
 		t.Fatalf("exit code %d, stderr %q", code, stderr)
 	}
-	if want := msg.Text(msg.SetupInstalled) + "\n" + msg.Text(msg.SetupPermissionAdded) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n"; stdout != want {
+	if want := msg.Text(msg.SetupInstalled, "Claude Code") + "\n" + msg.Text(msg.SetupPermissionAdded) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n"; stdout != want {
 		t.Errorf("first run: stdout %q, want %q", stdout, want)
 	}
 	for _, f := range []string{".claude-plugin/marketplace.json", "gentry/.claude-plugin/plugin.json", "gentry/hooks/hooks.json"} {
@@ -48,7 +48,7 @@ func TestSetupClaude(t *testing.T) {
 		t.Errorf("hooks.json does not call the running gentry %s:\n%s", exe, hooks)
 	}
 
-	if _, stdout, _ := run("setup", "claude"); stdout != msg.Text(msg.SetupUnchanged)+"\n" {
+	if _, stdout, _ := run("setup", "claude"); stdout != msg.Text(msg.SetupUnchanged, "Claude Code")+"\n" {
 		t.Errorf("second run: stdout %q", stdout)
 	}
 	_, stdout, _ = run("setup", "claude", "--json")
@@ -70,7 +70,7 @@ func TestSetupClaude(t *testing.T) {
 	// up all the same.
 	os.WriteFile(settings, []byte(`{"permissions":`), 0o644)
 	code, stdout, _ = run("setup", "claude")
-	want := msg.Text(msg.SetupUnchanged) + "\n" + msg.Text(msg.SetupPermissionFailed) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n\n" +
+	want := msg.Text(msg.SetupUnchanged, "Claude Code") + "\n" + msg.Text(msg.SetupPermissionFailed) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n\n" +
 		msg.Text(msg.HintSetupPermission, claude.PermissionRule) + "\n"
 	if code != contract.ExitOK || stdout != want {
 		t.Errorf("unreadable settings: exit code %d, stdout:\n%s\nwant:\n%s", code, stdout, want)
@@ -94,7 +94,7 @@ func TestSetupClaude(t *testing.T) {
 		defer os.Chmod(filepath.Dir(settings), 0o755)
 	}
 	code, stdout, _ = run("setup", "claude")
-	want = msg.Text(msg.SetupUnchanged) + "\n" + msg.Text(msg.SetupPermissionUnwritten) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n\n" +
+	want = msg.Text(msg.SetupUnchanged, "Claude Code") + "\n" + msg.Text(msg.SetupPermissionUnwritten) + "\n" + msg.Text(msg.SetupSettings, settings) + "\n\n" +
 		msg.Text(msg.HintSetupPermission, claude.PermissionRule) + "\n"
 	if code != contract.ExitOK || stdout != want {
 		t.Errorf("settings that cannot be written: exit code %d, stdout:\n%s\nwant:\n%s", code, stdout, want)
@@ -243,7 +243,7 @@ func TestSetupPluginElsewhere(t *testing.T) {
 
 	before := readFake(t).Log
 	code, stdout, stderr := setupFrom(t, b)
-	want := msg.Text(msg.ErrPluginElsewhere, from, to) + "\n\n" + HintFor(msg.HintPluginElsewhere, "tool", "claude") + "\n"
+	want := msg.Text(msg.ErrPluginElsewhere, "Claude Code", from, to) + "\n\n" + HintFor(msg.HintPluginElsewhere, "tool", "claude", "Claude Code") + "\n"
 	if code != contract.ExitError || stdout != "" || stderr != want {
 		t.Errorf("exit code %d, stdout %q, stderr %q; want %q", code, stdout, stderr, want)
 	}
@@ -266,7 +266,7 @@ func TestSetupPluginElsewhere(t *testing.T) {
 		t.Errorf("--json: exit code %d, output %s", code, stdout)
 	}
 
-	if code, stdout, _ := setupFrom(t, a); code != contract.ExitOK || stdout != msg.Text(msg.SetupUnchanged)+"\n" {
+	if code, stdout, _ := setupFrom(t, a); code != contract.ExitOK || stdout != msg.Text(msg.SetupUnchanged, "Claude Code")+"\n" {
 		t.Errorf("setup from the data root of the plugin: exit code %d, stdout %q", code, stdout)
 	}
 }
@@ -276,7 +276,7 @@ func TestSetupSwitch(t *testing.T) {
 	from, to := filepath.Join(a, "integrations", "claude"), filepath.Join(b, "integrations", "claude")
 
 	code, stdout, stderr := setupFrom(t, b, "--switch")
-	if code != contract.ExitOK || stdout != msg.Text(msg.SetupSwitched, from)+"\n" {
+	if code != contract.ExitOK || stdout != msg.Text(msg.SetupSwitched, "Claude Code", from)+"\n" {
 		t.Errorf("exit code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 	if got := fakeMarketplace(t); got != to {
@@ -286,7 +286,7 @@ func TestSetupSwitch(t *testing.T) {
 		t.Errorf("the plugin of the other data root must stay: %v", err)
 	}
 
-	if code, stdout, _ := setupFrom(t, b, "--switch"); code != contract.ExitOK || stdout != msg.Text(msg.SetupUnchanged)+"\n" {
+	if code, stdout, _ := setupFrom(t, b, "--switch"); code != contract.ExitOK || stdout != msg.Text(msg.SetupUnchanged, "Claude Code")+"\n" {
 		t.Errorf("--switch with nothing to switch: exit code %d, stdout %q", code, stdout)
 	}
 	code, stdout, _ = setupFrom(t, a, "--switch", "--json")
@@ -305,7 +305,7 @@ func TestSetupSwitchFromMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, stdout, stderr := setupFrom(t, b)
-	if code != contract.ExitOK || stdout != msg.Text(msg.SetupSwitched, from)+"\n" {
+	if code != contract.ExitOK || stdout != msg.Text(msg.SetupSwitched, "Claude Code", from)+"\n" {
 		t.Errorf("exit code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 	if got, want := fakeMarketplace(t), filepath.Join(b, "integrations", "claude"); got != want {
@@ -316,7 +316,7 @@ func TestSetupSwitchFromMissing(t *testing.T) {
 func TestSetupSwitchFirst(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("FAKECLAUDE_STATE", filepath.Join(root, "fakeclaude-state.json"))
-	if code, stdout, _ := setupFrom(t, root, "--switch"); code != contract.ExitOK || stdout != msg.Text(msg.SetupInstalled)+"\n" {
+	if code, stdout, _ := setupFrom(t, root, "--switch"); code != contract.ExitOK || stdout != msg.Text(msg.SetupInstalled, "Claude Code")+"\n" {
 		t.Errorf("--switch on the first setup: exit code %d, stdout %q", code, stdout)
 	}
 }
@@ -327,7 +327,7 @@ func TestSetupSwitchKeepsDisabled(t *testing.T) {
 		t.Fatalf("%v: %s", err, out)
 	}
 	code, stdout, _ := setupFrom(t, b, "--switch")
-	want := msg.Text(msg.SetupSwitched, filepath.Join(a, "integrations", "claude")) + "\n\n" + msg.Text(msg.SetupDisabled) + "\n\n" + msg.Text(msg.HintPluginEnable) + "\n"
+	want := msg.Text(msg.SetupSwitched, "Claude Code", filepath.Join(a, "integrations", "claude")) + "\n\n" + msg.Text(msg.SetupDisabled, "Claude Code") + "\n\n" + msg.Text(msg.HintPluginEnable) + "\n"
 	if code != contract.ExitOK || stdout != want {
 		t.Errorf("exit code %d, stdout %q, want %q", code, stdout, want)
 	}
@@ -353,7 +353,7 @@ func TestSetupSameThroughLink(t *testing.T) {
 	if err := os.WriteFile(state, seed, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, stdout, stderr := setupFrom(t, b); code != contract.ExitOK || stdout != msg.Text(msg.SetupInstalled)+"\n" {
+	if code, stdout, stderr := setupFrom(t, b); code != contract.ExitOK || stdout != msg.Text(msg.SetupInstalled, "Claude Code")+"\n" {
 		t.Errorf("exit code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }
@@ -385,7 +385,7 @@ func TestSetupAsksToDeploy(t *testing.T) {
 	run("setup", "claude")
 	older()
 	// Without a project there is nothing to lay out.
-	if _, stdout, _ := run("setup", "claude"); !strings.HasPrefix(stdout, msg.Text(msg.SetupUpdated)+"\n") ||
+	if _, stdout, _ := run("setup", "claude"); !strings.HasPrefix(stdout, msg.Text(msg.SetupUpdated, "Claude Code")+"\n") ||
 		strings.Contains(stdout, msg.Text(msg.HintAgentsDeployAll)) {
 		t.Errorf("updated without a project:\n%s", stdout)
 	}
@@ -401,11 +401,11 @@ func TestSetupAsksToDeploy(t *testing.T) {
 	}
 	st.Close()
 	older()
-	if _, stdout, _ := run("setup", "claude"); !strings.HasPrefix(stdout, msg.Text(msg.SetupUpdated)+"\n") ||
+	if _, stdout, _ := run("setup", "claude"); !strings.HasPrefix(stdout, msg.Text(msg.SetupUpdated, "Claude Code")+"\n") ||
 		!strings.HasSuffix(stdout, "\n\n"+HintText(msg.HintAgentsDeployAll)+"\n") {
 		t.Errorf("updated with a project:\n%s", stdout)
 	}
-	if _, stdout, _ := run("setup", "claude"); stdout != msg.Text(msg.SetupUnchanged)+"\n" {
+	if _, stdout, _ := run("setup", "claude"); stdout != msg.Text(msg.SetupUnchanged, "Claude Code")+"\n" {
 		t.Errorf("unchanged with a project:\n%s", stdout)
 	}
 }

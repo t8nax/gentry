@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/t8nax/gentry/internal/adapter/claude"
+	"github.com/t8nax/gentry/internal/adapter/codex"
 	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
@@ -40,6 +41,11 @@ func isolated(m *testing.M) int {
 	os.Setenv(claude.ConfigDirEnv, settings)
 	os.Unsetenv(caller.ClaudeCodeEnv)
 	os.Unsetenv(caller.SessionEnv)
+	os.Unsetenv(caller.CodexThreadEnv)
+	// Codex is a program that does not exist, with settings of the test: no
+	// test touches the settings of the operator.
+	os.Setenv(codex.HomeEnv, filepath.Join(dir, "codex"))
+	os.Setenv(codex.ProgramEnv, filepath.Join(dir, "no-codex"))
 	if err := gittest.Isolate(dir); err != nil {
 		panic(err)
 	}

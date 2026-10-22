@@ -20,6 +20,29 @@ type SetupOutput struct {
 	// operator disabled.
 	Enabled bool `json:"enabled"`
 
+	// Codex only: why Gentry could not trust the hook, as Codex said it; only with
+	// hook_trust untrusted.
+	HookError *string `json:"hook_error,omitempty,omitzero"`
+
+	// Codex only: the trust of the session start hook of Gentry in Codex: trusted
+	// (Gentry trusted it now), present (Codex trusted it already), untrusted (Gentry
+	// could not trust it, see hook_error), skipped (the administrator turned the
+	// hooks off), failed (the settings of the hooks cannot be read) or unwritten (the
+	// settings of the hooks cannot be written); with failed and unwritten the hook is
+	// not written and the settings of the hooks are left as they are. The list is
+	// open: a client shows an unknown value as is.
+	HookTrust *string `json:"hook_trust,omitempty,omitzero"`
+
+	// Codex only: whether the hooks of Codex are on: on (the settings leave them on),
+	// enabled (the operator turned them off, Gentry turned them on) or managed_off
+	// (the administrator turned them off: Gentry does not turn them on). The list is
+	// open: a client shows an unknown value as is.
+	HooksFeature *string `json:"hooks_feature,omitempty,omitzero"`
+
+	// Codex only: the file of the settings of the hooks of Codex the hook of Gentry
+	// is in.
+	HooksFile *string `json:"hooks_file,omitempty,omitzero"`
+
 	// The rule that allows the tools of Gentry in the user settings of the tool:
 	// added, present (the settings had it), failed (the settings cannot be read) or
 	// unwritten (the settings cannot be written); with failed and unwritten the
@@ -34,11 +57,28 @@ type SetupOutput struct {
 	// with the action switched.
 	PreviousDir *string `json:"previous_dir,omitempty,omitzero"`
 
-	// The file of the user settings of the tool the rule is in.
+	// Codex only: the data root in the sandbox of Codex: added (opened for writing
+	// now), present (open already) or profile (a profile of permissions sets the
+	// sandbox: it is left as it is, and the data root is not open). The list is open:
+	// a client shows an unknown value as is.
+	Sandbox *string `json:"sandbox,omitempty,omitzero"`
+
+	// The file of the user settings of the tool: of Claude Code, the rule is in it;
+	// of Codex, the settings Gentry checked and changed.
 	Settings *string `json:"settings,omitempty,omitzero"`
 
 	// The tool Gentry was set up for, such as claude.
 	Tool string `json:"tool"`
+
+	// Codex only, and always with Codex: the worktrees of the pools whose record of
+	// trust in Codex the operator set other than trusted: they are left as they are;
+	// in no order.
+	WorktreesDistrusted []string `json:"worktrees_distrusted,omitempty,omitzero"`
+
+	// Codex only, and always with Codex: the worktrees of the pools whose trust in
+	// Codex this command wrote, by the record of the root of their main repository;
+	// in no order.
+	WorktreesTrusted []string `json:"worktrees_trusted,omitempty,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -73,6 +113,18 @@ func (j *SetupOutput) UnmarshalJSON(value []byte) error {
 	if utf8.RuneCountInString(string(plain.Dir)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "dir", 1)
 	}
+	if plain.HookError != nil && utf8.RuneCountInString(string(*plain.HookError)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "hook_error", 1)
+	}
+	if plain.HookTrust != nil && utf8.RuneCountInString(string(*plain.HookTrust)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "hook_trust", 1)
+	}
+	if plain.HooksFeature != nil && utf8.RuneCountInString(string(*plain.HooksFeature)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "hooks_feature", 1)
+	}
+	if plain.HooksFile != nil && utf8.RuneCountInString(string(*plain.HooksFile)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "hooks_file", 1)
+	}
 	if plain.Permission != nil && utf8.RuneCountInString(string(*plain.Permission)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "permission", 1)
 	}
@@ -81,6 +133,9 @@ func (j *SetupOutput) UnmarshalJSON(value []byte) error {
 	}
 	if plain.PreviousDir != nil && utf8.RuneCountInString(string(*plain.PreviousDir)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "previous_dir", 1)
+	}
+	if plain.Sandbox != nil && utf8.RuneCountInString(string(*plain.Sandbox)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "sandbox", 1)
 	}
 	if plain.Settings != nil && utf8.RuneCountInString(string(*plain.Settings)) < 1 {
 		return fmt.Errorf("field %s length: must be >= %d", "settings", 1)

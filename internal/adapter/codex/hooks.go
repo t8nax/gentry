@@ -28,13 +28,10 @@ const hookTimeout = 10
 
 // HookCommand is the command of the hook of Gentry for the program exe, as
 // the shell of Codex runs it: the path with forward slashes, which every
-// shell on Windows accepts, in double quotes if it has a space.
+// shell on Windows accepts, in double quotes, as the hook of the plugin of
+// Claude Code has it, in case it has a space or another sign of a shell.
 func HookCommand(exe string) string {
-	p := filepath.ToSlash(exe)
-	if strings.ContainsAny(p, " \t") {
-		p = `"` + p + `"`
-	}
-	return p + " " + HookSuffix
+	return `"` + strings.ReplaceAll(filepath.ToSlash(exe), `"`, `\"`) + `" ` + HookSuffix
 }
 
 // handler is the handler of Gentry for the program exe in the settings of
@@ -124,7 +121,7 @@ func (o *object) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		kb, _ := json.Marshal(k)
+		kb := raw(k)
 		b.Write(kb)
 		b.WriteByte(':')
 		b.Write(o.values[k])
@@ -133,10 +130,15 @@ func (o *object) MarshalJSON() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// raw marshals v, which is always possible for the values of Gentry.
+// raw marshals v, which is always possible for the values of Gentry. The
+// signs &, < and > are written as they are, as the operator wrote them in
+// the hooks of the operator.
 func raw(v any) json.RawMessage {
-	b, _ := json.Marshal(v)
-	return b
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.Encode(v)
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n"))
 }
 
 // isGentry reports whether the raw handler is one of Gentry: its command
@@ -174,6 +176,14 @@ func hookEdit(data []byte, want map[string]any) (out []byte, changed bool, err e
 	events := &object{values: map[string]json.RawMessage{}}
 	if v, ok := top.values["hooks"]; ok {
 		if events, ok = readObject(v); !ok {
+			return nil, false, errHooks
+		}
+	}
+	// The event of Gentry is a list of groups, as Codex reads it: another
+	// value is no settings Gentry can read.
+	if v, ok := events.values[sessionStart]; ok {
+		var groups []json.RawMessage
+		if json.Unmarshal(v, &groups) != nil {
 			return nil, false, errHooks
 		}
 	}

@@ -75,16 +75,31 @@ func TestHookEdit(t *testing.T) {
 	if !strings.Contains(string(out), `"additionalContextLimit": 0`) {
 		t.Errorf("the handler has no additionalContextLimit 0:\n%s", out)
 	}
-	if _, _, err := hookEdit([]byte("{ no"), want); !errors.Is(err, errHooks) {
-		t.Errorf("hookEdit of no JSON: %v", err)
+	for _, bad := range []string{"{ no", `{"hooks": []}`, `{"hooks": {"SessionStart": {"hooks": []}}}`} {
+		if _, _, err := hookEdit([]byte(bad), want); !errors.Is(err, errHooks) {
+			t.Errorf("hookEdit of %s: %v, want the settings not read", bad, err)
+		}
 	}
 }
 
-// TestHookCommand checks the command of the hook: the path in double quotes
-// only with a space.
+// TestHookEditKeepsSigns checks that the hooks of the operator keep the
+// signs &, < and > as they are written.
+func TestHookEditKeepsSigns(t *testing.T) {
+	operator := `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "a && b < c > d"}]}]}}`
+	out, changed, err := hookEdit([]byte(operator), handler(testExe))
+	if err != nil || !changed || !strings.Contains(string(out), `"command": "a && b < c > d"`) || strings.Contains(string(out), `\u0026`) {
+		t.Errorf("hookEdit = %v, %v:\n%s", changed, err, out)
+	}
+}
+
+// TestHookCommand checks the command of the hook: the path always in double
+// quotes, with forward slashes.
 func TestHookCommand(t *testing.T) {
-	if got := HookCommand("/usr/bin/gentry"); got != "/usr/bin/gentry hook session-start --tool codex" {
+	if got := HookCommand("/usr/bin/gentry"); got != `"/usr/bin/gentry" hook session-start --tool codex` {
 		t.Errorf("HookCommand = %q", got)
+	}
+	if got := HookCommand(`C:\R&D\gentry.exe`); got != `"C:/R&D/gentry.exe" hook session-start --tool codex` {
+		t.Errorf("HookCommand of a path of Windows = %q", got)
 	}
 	if got := HookCommand(testExe); got != `"/opt/Gentry Tools/gentry" hook session-start --tool codex` {
 		t.Errorf("HookCommand with a space = %q", got)

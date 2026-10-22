@@ -351,3 +351,32 @@ func TestCurrentWindowsCommand(t *testing.T) {
 		}
 	}
 }
+
+// TestSetupFailsKeepsMarketplace checks that a setup that fails leaves in
+// Codex the marketplace and the plugin it did not add: the folder of the
+// integration is gone, the marketplace of Gentry names it, and plugin list
+// fails.
+func TestSetupFailsKeepsMarketplace(t *testing.T) {
+	s := newStand(t)
+	s.setup(t)
+	if err := os.RemoveAll(s.dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FAKECODEX_FAIL", "plugin list")
+	var ce *CommandError
+	if _, err := Setup(s.request()); !errors.As(err, &ce) {
+		t.Fatalf("Setup = %v, want a command error", err)
+	}
+	t.Setenv("FAKECODEX_FAIL", "")
+	if got, err := Registered(fakeCodex); err != nil || !SamePath(got, s.dir) {
+		t.Errorf("the marketplace of Gentry: %q, %v; want that of %s", got, err, s.dir)
+	}
+	if p, found, err := (cli{program: fakeCodex}).plugin(); err != nil || !found {
+		t.Errorf("the plugin of Gentry: %+v %v, %v; want it installed", p, found, err)
+	}
+	for _, c := range s.calls() {
+		if strings.HasPrefix(c, "plugin marketplace remove") {
+			t.Errorf("the setup ran codex %s", c)
+		}
+	}
+}

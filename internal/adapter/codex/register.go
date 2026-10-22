@@ -149,6 +149,10 @@ type registration struct {
 	action  string // Installed, Updated or Unchanged
 	enabled bool   // whether Codex has the plugin enabled
 	added   bool   // the plugin was installed now: Codex enabled it
+	// market tells that register added the marketplace of dir to Codex,
+	// set even when a later command failed: a failed first setup removes
+	// what it added, and only that.
+	market bool
 }
 
 // register makes Codex serve the plugin built in dir with the version: it
@@ -158,32 +162,35 @@ type registration struct {
 // it, so the marketplace of dir is not added again.
 func register(program, dir, registered, version string) (registration, error) {
 	c := cli{program: program}
+	var r registration
 	if registered != "" && !samePlace(registered, dir) {
 		if err := c.run("plugin", "marketplace", "remove", integration.Name, "--json"); err != nil {
-			return registration{}, err
+			return r, err
 		}
 		registered = ""
 	}
 	if registered == "" {
 		if err := c.run("plugin", "marketplace", "add", dir, "--json"); err != nil {
-			return registration{}, err
+			return r, err
 		}
+		r.market = true
 	}
 	p, found, err := c.plugin()
 	if err != nil {
-		return registration{}, err
+		return r, err
 	}
 	if found && p.Version == version {
-		return registration{action: Unchanged, enabled: p.Enabled}, nil
+		r.action, r.enabled = Unchanged, p.Enabled
+		return r, nil
 	}
 	if err := c.run("plugin", "add", pluginID, "--json"); err != nil {
-		return registration{}, err
+		return r, err
 	}
-	action := Installed
+	r.action, r.enabled, r.added = Installed, true, true
 	if found {
-		action = Updated
+		r.action = Updated
 	}
-	return registration{action: action, enabled: true, added: true}, nil
+	return r, nil
 }
 
 // appServer is a session of the app-server of Codex: JSON-RPC over the

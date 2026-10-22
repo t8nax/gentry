@@ -124,13 +124,14 @@ func Setup(req SetupRequest) (res SetupResult, err error) {
 	if err != nil {
 		return SetupResult{}, err
 	}
-	if !exists(req.Dir) {
-		defer func() {
-			if err != nil {
-				unregister(program, req.Dir)
-			}
-		}()
-	}
+	// A setup that fails undoes what it did: the marketplace it added to
+	// Codex, the folder of the integration it made.
+	first, market := !exists(req.Dir), false
+	defer func() {
+		if err != nil {
+			unregister(program, req.Dir, market, first)
+		}
+	}()
 	if err := Write(req.Dir, p); err != nil {
 		return SetupResult{}, &fs.PathError{Op: "write", Path: req.Dir, Err: err}
 	}
@@ -141,6 +142,7 @@ func Setup(req SetupRequest) (res SetupResult, err error) {
 	}
 	disabled := disabledIn(c)
 	r, err := register(program, req.Dir, registered, p.Version)
+	market = r.market
 	if err != nil {
 		return SetupResult{}, err
 	}
@@ -233,16 +235,19 @@ func disabledIn(c *config) bool {
 	return ok && v == false
 }
 
-// unregister undoes a first setup that failed: the marketplace of Gentry in
-// Codex is removed if it is that of the folder of the integration dir,
-// which removes its plugin too, and the folder is removed, so that Codex is
-// not connected and the next setup installs the plugin anew. What fails
-// here is left: the failure of the setup is the one told.
-func unregister(program, dir string) {
-	if registered, err := Registered(program); err == nil && registered != "" && samePlace(registered, dir) {
+// unregister undoes what a setup that failed did: the marketplace of Gentry
+// in Codex is removed if the setup added it (market), which removes its
+// plugin too, and the folder of the integration dir if the setup made it
+// (first), so that Codex is not connected and the next setup installs the
+// plugin anew. A marketplace or a folder that was there before is left.
+// What fails here is left: the failure of the setup is the one told.
+func unregister(program, dir string, market, first bool) {
+	if market {
 		(cli{program: program}).run("plugin", "marketplace", "remove", integration.Name, "--json")
 	}
-	os.RemoveAll(dir)
+	if first {
+		os.RemoveAll(dir)
+	}
 }
 
 // exists reports whether the path is there.

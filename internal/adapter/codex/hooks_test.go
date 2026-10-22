@@ -133,3 +133,73 @@ func TestWriteHook(t *testing.T) {
 		t.Errorf("the settings changed: %q", b)
 	}
 }
+
+// TestHookCommandWindows checks the handler of Gentry: the command and the
+// command of Windows, which runs the program by the call operator of
+// PowerShell.
+func TestHookCommandWindows(t *testing.T) {
+	if got := HookCommandWindows(testExe); got != `& "/opt/Gentry Tools/gentry" hook session-start --tool codex` {
+		t.Errorf("HookCommandWindows = %q", got)
+	}
+	out, _, err := hookEdit(nil, handler(testExe))
+	var file struct {
+		Hooks map[string][]struct {
+			Hooks []map[string]any `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err != nil || json.Unmarshal(out, &file) != nil {
+		t.Fatalf("hookEdit = %v\n%s", err, out)
+	}
+	h := file.Hooks[sessionStart][0].Hooks[0]
+	if h["command"] != HookCommand(testExe) || h["commandWindows"] != HookCommandWindows(testExe) || h["additionalContextLimit"] != float64(0) {
+		t.Errorf("the handler of Gentry: %v", h)
+	}
+}
+
+// TestHookEditWithoutWindows checks that a handler of Gentry without the
+// command of Windows, as an earlier Gentry wrote it, is replaced, and the
+// handler is there once.
+func TestHookEditWithoutWindows(t *testing.T) {
+	old := `{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "` + strings.ReplaceAll(HookCommand(testExe), `"`, `\"`) + `", "timeout": 10, "additionalContextLimit": 0}]}]}}`
+	out, changed, err := hookEdit([]byte(old), handler(testExe))
+	if err != nil || !changed {
+		t.Fatalf("hookEdit = %v, %v", changed, err)
+	}
+	if got := handlersOf(t, out)[sessionStart]; len(got) != 1 || !strings.Contains(string(out), `"commandWindows"`) {
+		t.Errorf("handlers: %v\n%s", got, out)
+	}
+	p := filepath.Join(t.TempDir(), "hooks.json")
+	os.WriteFile(p, []byte(old), 0o644)
+	if hookCurrent(p, testExe) {
+		t.Error("a handler without the command of Windows is current")
+	}
+	other := strings.Replace(string(out), "& ", "", 1)
+	os.WriteFile(p, []byte(other), 0o644)
+	if hookCurrent(p, testExe) {
+		t.Error("a handler with another command of Windows is current")
+	}
+	os.WriteFile(p, out, 0o644)
+	if !hookCurrent(p, testExe) {
+		t.Error("the handler of Gentry is not current")
+	}
+}
+
+// TestFindHook checks that the hook of Gentry is found in the list of Codex
+// by its command and by its command of Windows, which Codex lists on
+// Windows, in its settings of the hooks only.
+func TestFindHook(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "hooks.json")
+	for _, command := range []string{HookCommand(testExe), HookCommandWindows(testExe)} {
+		listed := []listedHook{{Key: "other", Command: "echo start"}, {Key: "gentry", Command: command, SourcePath: p}}
+		if h, ok := findHook(listed, p, hookCommands(testExe)); !ok || h.Key != "gentry" {
+			t.Errorf("findHook by %q = %+v, %v", command, h, ok)
+		}
+	}
+	listed := []listedHook{{Key: "elsewhere", Command: HookCommand(testExe), SourcePath: filepath.Join(t.TempDir(), "hooks.json")}}
+	if _, ok := findHook(listed, p, hookCommands(testExe)); ok {
+		t.Error("the hook of other settings of the hooks is found")
+	}
+	if _, ok := findHook([]listedHook{{Command: "echo start"}}, p, hookCommands(testExe)); ok {
+		t.Error("a hook of the operator is found")
+	}
+}

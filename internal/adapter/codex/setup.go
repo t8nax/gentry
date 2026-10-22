@@ -302,7 +302,7 @@ func trustHook(program, version, root, hooksPath, exe string) (state, reason str
 		return HookUntrusted, reasonOf(err)
 	}
 	defer a.close()
-	h, found, err := a.hook(root, hooksPath, HookCommand(exe))
+	h, found, err := a.hook(root, hooksPath, hookCommands(exe))
 	switch {
 	case err != nil:
 		return HookUntrusted, reasonOf(err)
@@ -409,7 +409,7 @@ func Current(req SetupRequest) (SetupResult, bool) {
 	}
 	if managed {
 		res.HookTrust = HookSkipped
-	} else if h, found, err := a.hook(req.Root, hooksPath, HookCommand(req.Exe)); err != nil || !found || h.TrustStatus != HookTrusted {
+	} else if h, found, err := a.hook(req.Root, hooksPath, hookCommands(req.Exe)); err != nil || !found || h.TrustStatus != HookTrusted {
 		return SetupResult{}, false
 	}
 	if res.Sandbox, err = c.sandbox(req.Root); err != nil || res.Sandbox == SandboxAdded {

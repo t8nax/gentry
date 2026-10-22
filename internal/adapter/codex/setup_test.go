@@ -330,3 +330,24 @@ func TestSetupFirstFailsUndo(t *testing.T) {
 		t.Error("the folder of the integration stays")
 	}
 }
+
+// TestCurrentWindowsCommand checks that the integration is not current for
+// update when the handler of Gentry has no command of Windows or another.
+func TestCurrentWindowsCommand(t *testing.T) {
+	s := newStand(t)
+	s.setup(t)
+	if _, ok := Current(s.request()); !ok {
+		t.Fatal("the integration is not current after setup")
+	}
+	p := HooksPath(s.home)
+	good, _ := os.ReadFile(p)
+	for _, text := range []string{
+		strings.Replace(string(good), `"commandWindows"`, `"commandOther"`, 1),
+		strings.Replace(string(good), `"& \"`, `"\"`, 1),
+	} {
+		os.WriteFile(p, []byte(text), 0o644)
+		if _, ok := Current(s.request()); ok {
+			t.Errorf("the integration is current with the settings of the hooks:\n%s", text)
+		}
+	}
+}

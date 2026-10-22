@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -357,7 +358,7 @@ type listedHook struct {
 
 // hook returns the hook of the settings of the hooks at path with the
 // command, as Codex lists it for the folder cwd.
-func (a *appServer) hook(cwd, path, command string) (listedHook, bool, error) {
+func (a *appServer) hook(cwd, path string, commands []string) (listedHook, bool, error) {
 	var res struct {
 		Data []struct {
 			Hooks []listedHook `json:"hooks"`
@@ -366,14 +367,24 @@ func (a *appServer) hook(cwd, path, command string) (listedHook, bool, error) {
 	if err := a.call("hooks/list", map[string]any{"cwds": []string{cwd}}, &res); err != nil {
 		return listedHook{}, false, err
 	}
+	var listed []listedHook
 	for _, d := range res.Data {
-		for _, h := range d.Hooks {
-			if h.Command == command && (h.SourcePath == "" || samePlace(h.SourcePath, path)) {
-				return h, true, nil
-			}
+		listed = append(listed, d.Hooks...)
+	}
+	h, ok := findHook(listed, path, commands)
+	return h, ok, nil
+}
+
+// findHook returns the hook of the settings of the hooks at path whose
+// command is one of commands, of those listed. Codex lists the command of
+// the hook as it runs it: on Windows the command of Windows.
+func findHook(listed []listedHook, path string, commands []string) (listedHook, bool) {
+	for _, h := range listed {
+		if slices.Contains(commands, h.Command) && (h.SourcePath == "" || samePlace(h.SourcePath, path)) {
+			return h, true
 		}
 	}
-	return listedHook{}, false, nil
+	return listedHook{}, false
 }
 
 // trustHook writes the hash of the hook as trusted in the settings of

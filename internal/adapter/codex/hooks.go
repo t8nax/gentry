@@ -27,21 +27,33 @@ const sessionStart = "SessionStart"
 const hookTimeout = 10
 
 // HookCommand is the command of the hook of Gentry for the program exe, as
-// the shell of Codex runs it: the path with forward slashes, which every
-// shell on Windows accepts, in double quotes, as the hook of the plugin of
-// Claude Code has it, in case it has a space or another sign of a shell.
+// the shell of Codex runs it on Linux and macOS: the path with forward
+// slashes in double quotes, as the hook of the plugin of Claude Code has
+// it, in case it has a space or another sign of a shell.
 func HookCommand(exe string) string {
 	return `"` + strings.ReplaceAll(filepath.ToSlash(exe), `"`, `\"`) + `" ` + HookSuffix
 }
 
+// HookCommandWindows is the command of the hook of Gentry for the program
+// exe on Windows, where Codex runs it in PowerShell: a path in quotes there
+// is a string, not a program, so the call operator & runs it.
+func HookCommandWindows(exe string) string { return "& " + HookCommand(exe) }
+
+// hookCommands are the commands of the hook of Gentry for the program exe,
+// either of which hooks/list of the app-server of Codex gives: the command
+// of Windows on Windows, the command elsewhere.
+func hookCommands(exe string) []string { return []string{HookCommand(exe), HookCommandWindows(exe)} }
+
 // handler is the handler of Gentry for the program exe in the settings of
-// the hooks of Codex. With additionalContextLimit 0 Codex gives the agent
+// the hooks of Codex: the command, and the command of Windows, which Codex
+// runs there instead. With additionalContextLimit 0 Codex gives the agent
 // the whole introduction: by default it cuts the output of a hook to about
 // 2500 tokens.
 func handler(exe string) map[string]any {
 	return map[string]any{
 		"type":                   "command",
 		"command":                HookCommand(exe),
+		"commandWindows":         HookCommandWindows(exe),
 		"timeout":                hookTimeout,
 		"additionalContextLimit": 0,
 	}

@@ -530,7 +530,11 @@ func TestSetupCodexManagedHooks(t *testing.T) {
 		}
 		// The text of the case, which no case of the layout of the output
 		// has; the warning of the hook not trusted is absent by hook_trust.
-		wantLine(t, r.stdout, "Хуки выключены администратором Codex: агент не получит вводных сведений в начале сессии.")
+		// Two blocks: the result, then the warning of the administrator; no
+		// warning of the hook not trusted and no block of hints.
+		if bs := blocksOf(r.stdout); len(bs) != 2 || len(bs[1]) != 1 || bs[1][0] != "Хуки выключены администратором Codex: агент не получит вводных сведений в начале сессии." {
+			t.Errorf("stdout:\n%s\nwant two blocks: the result and «Хуки выключены администратором Codex: агент не получит вводных сведений в начале сессии.»", r.stdout)
+		}
 		if v, ok := toml.At(s.codexConfig(), "hooks", "state"); ok {
 			t.Errorf("setup codex trusted the hook: hooks.state %v", v)
 		}
@@ -753,8 +757,8 @@ func TestSetupCodexSettingsInvalid(t *testing.T) {
 		wantCode(t, r, 1)
 		// The words of the hint, the same for worktree add, are stated by
 		// TestWorktreeAddCodexText/settings_warning of the area pool.
-		if ls := lines(r.stderr); len(ls) != 4 || ls[0] != "Настройки Codex не прочитаны." || ls[1] != "Настройки: "+s.codexConfigFile() || ls[2] != "" || ls[3] == "" {
-			t.Errorf("stderr:\n%s\nwant «Настройки Codex не прочитаны.», «Настройки: %s», an empty line and the hint", r.stderr, s.codexConfigFile())
+		if ls := lines(r.stderr); len(ls) != 4 || ls[0] != "Настройки Codex не прочитаны." || ls[1] != "Настройки: "+s.codexConfigFile() || ls[2] != "" || !strings.HasSuffix(ls[3], ": gentry setup codex") {
+			t.Errorf("stderr:\n%s\nwant «Настройки Codex не прочитаны.», «Настройки: %s», an empty line and the hint to repeat gentry setup codex", r.stderr, s.codexConfigFile())
 		}
 		code, details := s.setupError("codex")
 		if code != "settings_invalid" || details["tool"] != "codex" || details["reason"] != "unreadable" || !samePath(str(details["path"]), s.codexConfigFile()) {
@@ -1045,7 +1049,8 @@ func TestSetupCodexWarnings(t *testing.T) {
 		}
 		for j := range w {
 			if w[j] == reason {
-				if !strings.HasPrefix(g[j], reason) || len(g[j]) == len(reason) {
+				// The reason is the output of Codex: that of the fake.
+				if !strings.HasPrefix(g[j], reason) || !strings.Contains(g[j], "simulated failure of codex app-server") {
 					return false
 				}
 			} else if g[j] != w[j] {
@@ -1324,9 +1329,8 @@ func TestSetupAgentsHint(t *testing.T) {
 		s := installedStand(t, latest, false)
 		s.project("shop")
 		s.useCodex()
-		codex := hintOf(t, s.gentry("setup", "codex"))
-		if claude := hintOf(t, s.gentry("setup", "claude")); codex != claude {
-			t.Errorf("the hint of setup codex %q is not that of setup claude %q", codex, claude)
+		if hint := hintOf(t, s.gentry("setup", "codex")); !strings.Contains(hint, "gentry agents deploy --project") {
+			t.Errorf("the last block of setup codex: %q, want the hint to lay out the subagents by gentry agents deploy --project", hint)
 		}
 	})
 	t.Run("claude_first", func(t *testing.T) {

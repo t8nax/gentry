@@ -151,6 +151,13 @@ func TestIntroCodexPlugin(t *testing.T) {
 	t.Run("missing", func(t *testing.T) {
 		testkit.ToolsShopFlow(t, false, true)
 		want := staleWarning(t, testkit.MustWd(t))
+		// The plugin of the program again, as the case starts: then its
+		// marketplace is removed, the cache of the plugin left as Codex
+		// leaves it.
+		testkit.MustRun(t, "setup", "codex")
+		if got := codexIntro(t, t.TempDir()); got != "" {
+			t.Fatalf("stand: the hook outside the pools after setup codex:\n%s\nwant nothing", got)
+		}
 		removeCodexPlugin(t)
 		if got := codexIntro(t, t.TempDir()); got != want {
 			t.Errorf("hook outside the pools without the plugin:\n%s\nwant the warning only:\n%s", got, want)

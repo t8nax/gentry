@@ -319,6 +319,20 @@ func TestWorktreeAddCodexText(t *testing.T) {
 	})
 }
 
+// lastLines returns the lines of the last block of the output, after its
+// last empty line; nil if it has no empty line.
+func lastLines(out string) []string {
+	ls := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	i := len(ls) - 1
+	for i >= 0 && ls[i] != "" {
+		i--
+	}
+	if i < 0 {
+		return nil
+	}
+	return ls[i+1:]
+}
+
 // readOnly makes the file read-only until the test ends.
 func readOnly(t *testing.T, p string) {
 	t.Helper()
@@ -356,6 +370,21 @@ func TestWorktreeAddCodexSettings(t *testing.T) {
 		}
 		if b, _ := os.ReadFile(testkit.CodexConfigFile(testkit.CodexHome())); string(b) != broken {
 			t.Errorf("the settings of Codex changed:\n%s", b)
+		}
+		// The hint is that of the settings not written, whose words
+		// TestWorktreeAddCodexText/settings_warning states: the last block of
+		// the output of worktree add with the settings of Codex read-only, on
+		// the shop anew.
+		if os.Geteuid() != 0 {
+			testkit.ToolsShopFlow(t, false, true)
+			other := clone(t, testkit.MustWd(t))
+			readOnly(t, testkit.CodexConfigFile(testkit.CodexHome()))
+			_, unwritten, _ := testkit.Run("worktree", "add", other)
+			os.Chmod(testkit.CodexConfigFile(testkit.CodexHome()), 0o644)
+			hint, want := lastLines(stdout), lastLines(unwritten)
+			if len(hint) != 1 || len(want) != 1 || hint[0] != want[0] {
+				t.Errorf("the last block of worktree add: %q, want one line, that with the settings not written: %q", hint, want)
+			}
 		}
 		c = unread(t)
 		out, _, trust, _ := addJSON(t, "schemas/worktree-add.json", "worktree", "add", c)

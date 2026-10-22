@@ -272,6 +272,14 @@ func CodexSamePath(key, p string) bool {
 	return a == b || runtime.GOOS == "windows" && strings.EqualFold(a, b)
 }
 
+// CodexTrustKey returns the key of a record of trust as the hint to trust
+// the worktrees names it: the inside of a basic string of TOML, with \ and "
+// escaped, so that the line can be put into the settings of Codex as it is
+// (decision of the operator, GEN-70).
+func CodexTrustKey(key string) string {
+	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(key)
+}
+
 // CodexProjects returns the records of trust of the settings of Codex: the
 // key of each record and its trust_level.
 func CodexProjects(cfg map[string]any) map[string]string {

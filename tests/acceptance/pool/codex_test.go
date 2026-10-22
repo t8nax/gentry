@@ -170,14 +170,38 @@ func TestProjectAddCodexTrust(t *testing.T) {
 	}
 }
 
-// TestWorktreeAddCodexDistrusted checks that worktree add leaves a worktree
-// of a record the operator set untrusted as it is and names it.
-func TestWorktreeAddCodexDistrusted(t *testing.T) {
+// distrustedShop gives the shop of A with the record of A untrusted and a
+// worktree B of A outside the pool, which it returns with A. The test runs
+// in A.
+func distrustedShop(t *testing.T) (a, b string) {
+	t.Helper()
 	testkit.ToolsShopFlow(t, false, true)
-	a := testkit.MustWd(t)
+	a = testkit.MustWd(t)
 	testkit.SetCodexTrust(t, testkit.CodexHome(), a, "untrusted")
+	b = gittest.Worktree(t, a, filepath.Join(filepath.Dir(a), "shop-b"), "b")
+	return a, b
+}
+
+// TestWorktreeAddCodexDistrusted checks that worktree add leaves a worktree
+// of a record the operator set untrusted as it is and names it: the text
+// and, on the shop of its own, the JSON.
+func TestWorktreeAddCodexDistrusted(t *testing.T) {
+	t.Run("text", worktreeAddDistrustedText)
+	t.Run("json", func(t *testing.T) {
+		_, b := distrustedShop(t)
+		out, _, trust, fields := addJSON(t, "schemas/worktree-add.json", "worktree", "add", b)
+		if trust == nil || !samePaths(trust.Distrusted, b) || string(fields["trusted"]) != "[]" {
+			t.Errorf("worktree add --json: %s\nwant codex_trust.distrusted [%s], codex_trust.trusted []", out, b)
+		}
+	})
+}
+
+// worktreeAddDistrustedText checks the text of worktree add of a worktree
+// of a record the operator set untrusted.
+func worktreeAddDistrustedText(t *testing.T) {
+	t.Helper()
+	a, b := distrustedShop(t)
 	before := testkit.CodexProjects(testkit.ReadCodexConfig(t, testkit.CodexHome()))
-	b := gittest.Worktree(t, a, filepath.Join(filepath.Dir(a), "shop-b"), "b")
 	code, stdout, _ := testkit.Run("worktree", "add", b)
 	if code != contract.ExitOK {
 		t.Fatalf("worktree add: exit code %d", code)
@@ -202,20 +226,12 @@ func TestWorktreeAddCodexDistrusted(t *testing.T) {
 		if strings.Contains(l, `projects."`) {
 			n++
 		}
-		if strings.Contains(l, `projects."`+a+`".trust_level`) {
+		if strings.Contains(l, `projects."`+testkit.CodexTrustKey(a)+`".trust_level`) {
 			ofA++
 		}
 	}
 	if n != 1 || ofA != 1 {
 		t.Errorf("worktree add:\n%s\nwant one hint to trust the worktrees in the last block, of the record %s", stdout, a)
-	}
-	// The JSON of the same state, anew.
-	testkit.ToolsShopFlow(t, false, true)
-	testkit.SetCodexTrust(t, testkit.CodexHome(), a, "untrusted")
-	gittest.Worktree(t, a, b, "b")
-	out, _, trust, fields := addJSON(t, "schemas/worktree-add.json", "worktree", "add", b)
-	if trust == nil || !samePaths(trust.Distrusted, b) || string(fields["trusted"]) != "[]" {
-		t.Errorf("worktree add --json: %s\nwant codex_trust.distrusted [%s], codex_trust.trusted []", out, b)
 	}
 }
 
@@ -348,14 +364,18 @@ func readOnly(t *testing.T, p string) {
 // TestWorktreeAddCodexSettings checks that worktree add with settings of
 // Codex it cannot read or write adds the worktree and warns.
 func TestWorktreeAddCodexSettings(t *testing.T) {
+	const broken = "[features\nhooks = true\n"
+	// unread gives the shop of A with the settings of Codex no TOML and the
+	// clone C outside the pool, which it returns. The test runs in A.
+	unread := func(t *testing.T) string {
+		testkit.ToolsShopFlow(t, false, true)
+		c := clone(t, testkit.MustWd(t))
+		testkit.WriteFiles(t, testkit.CodexHome(), map[string]string{"config.toml": broken})
+		return c
+	}
+	// The case «настройки не прочитаны при worktree add» is checked by three
+	// subtests, each on a shop of its own: the text, the hint, the JSON.
 	t.Run("unreadable", func(t *testing.T) {
-		const broken = "[features\nhooks = true\n"
-		unread := func(t *testing.T) string {
-			testkit.ToolsShopFlow(t, false, true)
-			c := clone(t, testkit.MustWd(t))
-			testkit.WriteFiles(t, testkit.CodexHome(), map[string]string{"config.toml": broken})
-			return c
-		}
 		c := unread(t)
 		code, stdout, _ := testkit.Run("worktree", "add", c)
 		// The warning of the settings not read has no case of the layout of
@@ -371,22 +391,35 @@ func TestWorktreeAddCodexSettings(t *testing.T) {
 		if b, _ := os.ReadFile(testkit.CodexConfigFile(testkit.CodexHome())); string(b) != broken {
 			t.Errorf("the settings of Codex changed:\n%s", b)
 		}
-		// The hint is that of the settings not written, whose words
-		// TestWorktreeAddCodexText/settings_warning states: the last block of
-		// the output of worktree add with the settings of Codex read-only, on
-		// the shop anew.
-		if os.Geteuid() != 0 {
-			testkit.ToolsShopFlow(t, false, true)
-			other := clone(t, testkit.MustWd(t))
-			readOnly(t, testkit.CodexConfigFile(testkit.CodexHome()))
-			_, unwritten, _ := testkit.Run("worktree", "add", other)
-			os.Chmod(testkit.CodexConfigFile(testkit.CodexHome()), 0o644)
-			hint, want := lastLines(stdout), lastLines(unwritten)
-			if len(hint) != 1 || len(want) != 1 || hint[0] != want[0] {
-				t.Errorf("the last block of worktree add: %q, want one line, that with the settings not written: %q", hint, want)
-			}
+	})
+	// The hint is that of the settings not written, whose words
+	// TestWorktreeAddCodexText/settings_warning states: on one shop, the last
+	// block of worktree add of a clone D with the settings of Codex
+	// read-only, then that of worktree add of C with the settings no TOML.
+	t.Run("unreadable_hint", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root writes a file closed for writing")
 		}
-		c = unread(t)
+		testkit.ToolsShopFlow(t, false, true)
+		a := testkit.MustWd(t)
+		config := testkit.CodexConfigFile(testkit.CodexHome())
+		d := filepath.Join(filepath.Dir(a), "shop-d")
+		gittest.Run(t, filepath.Dir(a), "clone", "--quiet", a, d)
+		readOnly(t, config)
+		_, unwritten, _ := testkit.Run("worktree", "add", d)
+		if err := os.Chmod(config, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		c := clone(t, a)
+		testkit.WriteFiles(t, testkit.CodexHome(), map[string]string{"config.toml": broken})
+		code, stdout, _ := testkit.Run("worktree", "add", c)
+		hint, want := lastLines(stdout), lastLines(unwritten)
+		if code != contract.ExitOK || len(hint) != 1 || len(want) != 1 || hint[0] != want[0] {
+			t.Errorf("worktree add: exit code %d, the last block %q, want 0 and one line, that with the settings not written: %q", code, hint, want)
+		}
+	})
+	t.Run("unreadable_json", func(t *testing.T) {
+		c := unread(t)
 		out, _, trust, _ := addJSON(t, "schemas/worktree-add.json", "worktree", "add", c)
 		if trust == nil || trust.Error == nil || *trust.Error != "unreadable" {
 			t.Errorf("worktree add --json: %s\nwant codex_trust.error unreadable", out)

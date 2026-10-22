@@ -196,12 +196,13 @@ func wantPathsBlock(t *testing.T, out string, paths ...string) {
 }
 
 // trustHints returns how many lines of the last block of the output name
-// the record of trust key: the hints to trust the worktrees of the record.
+// the record of trust key, written as a string of TOML: the hints to trust
+// the worktrees of the record.
 // The words of the hint are stated by TestSetupCodexWarnings.
 func trustHints(out, key string) int {
 	n := 0
 	for _, l := range lastBlock(out) {
-		if strings.Contains(l, `projects."`+key+`".trust_level`) {
+		if strings.Contains(l, `projects."`+testkit.CodexTrustKey(key)+`".trust_level`) {
 			n++
 		}
 	}
@@ -1033,7 +1034,7 @@ func TestSetupCodexWarnings(t *testing.T) {
 		{
 			`Включить плагин в настройках Codex: plugins."gentry@gentry".enabled = true`,
 			"Доверить хук в Codex: /hooks",
-			`Доверить рабочие копии в настройках Codex: projects."` + key + `".trust_level = "trusted"`,
+			`Доверить рабочие копии в настройках Codex: projects."` + testkit.CodexTrustKey(key) + `".trust_level = "trusted"`,
 		},
 	}
 	got := blocksOf(r.stdout)

@@ -127,7 +127,7 @@ func Setup(req SetupRequest) (res SetupResult, err error) {
 	if !exists(req.Dir) {
 		defer func() {
 			if err != nil {
-				os.RemoveAll(req.Dir)
+				unregister(program, req.Dir)
 			}
 		}()
 	}
@@ -231,6 +231,18 @@ func (c *config) edits(req SetupRequest, managed, restore bool) (feature, sandbo
 func disabledIn(c *config) bool {
 	v, ok := c.value("plugins", pluginID, "enabled")
 	return ok && v == false
+}
+
+// unregister undoes a first setup that failed: the marketplace of Gentry in
+// Codex is removed if it is that of the folder of the integration dir,
+// which removes its plugin too, and the folder is removed, so that Codex is
+// not connected and the next setup installs the plugin anew. What fails
+// here is left: the failure of the setup is the one told.
+func unregister(program, dir string) {
+	if registered, err := Registered(program); err == nil && registered != "" && samePlace(registered, dir) {
+		(cli{program: program}).run("plugin", "marketplace", "remove", integration.Name, "--json")
+	}
+	os.RemoveAll(dir)
 }
 
 // exists reports whether the path is there.

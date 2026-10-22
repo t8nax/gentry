@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // stand is a CODEX_HOME of the test with the fake Codex of the tests of
@@ -236,8 +237,13 @@ func TestSetupFirstFails(t *testing.T) {
 	if _, err := os.Stat(s.dir); err == nil {
 		t.Error("the folder of the integration stays after the first setup failed")
 	}
+	if got, err := Registered(fakeCodex); err != nil || got != "" {
+		t.Errorf("the marketplace of Gentry stays after the first setup failed: %q, %v", got, err)
+	}
 	t.Setenv("FAKECODEX_FAIL", "")
-	s.setup(t)
+	if r := s.setup(t); r.Action != Installed {
+		t.Errorf("the setup after the failed one: %s, want installed", r.Action)
+	}
 	t.Setenv("FAKECODEX_FAIL", "plugin add")
 	if _, err := Setup(SetupRequest{Dir: s.dir, Root: s.root, Exe: testExe, Version: "0.4.0"}); !errors.As(err, &ce) {
 		t.Fatalf("Setup of another version = %v, want a command error", err)
@@ -291,5 +297,36 @@ func TestPluginMatches(t *testing.T) {
 	}
 	if PluginMatches(s.dir, testExe, "0.3.0") {
 		t.Error("the plugin of another version in the cache matches")
+	}
+}
+
+// TestSetupFirstFailsUndo checks that a first setup that fails after the
+// plugin is installed removes the marketplace of Gentry from Codex, and
+// that a removal that fails leaves the failure of the setup told.
+func TestSetupFirstFailsUndo(t *testing.T) {
+	s := newStand(t)
+	// The lock of the settings held by another command fails the edits after
+	// the install.
+	held, err := lockSettings(ConfigPath(s.home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait := LockWait
+	LockWait = 100 * time.Millisecond
+	t.Cleanup(func() { LockWait = wait })
+	var se *SettingsError
+	if _, err := Setup(s.request()); !errors.As(err, &se) {
+		t.Fatalf("Setup = %v, want the settings unwritable", err)
+	}
+	if got, _ := Registered(fakeCodex); got != "" {
+		t.Errorf("the marketplace of Gentry stays: %q", got)
+	}
+	t.Setenv("FAKECODEX_FAIL", "plugin marketplace remove")
+	if _, err := Setup(s.request()); !errors.As(err, &se) {
+		t.Errorf("Setup with the removal failing = %v, want the settings unwritable", err)
+	}
+	held.Release()
+	if _, err := os.Stat(s.dir); err == nil {
+		t.Error("the folder of the integration stays")
 	}
 }

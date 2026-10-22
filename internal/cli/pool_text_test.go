@@ -295,7 +295,7 @@ func TestAgentsDeployText(t *testing.T) {
 	// stated by the acceptance tests.
 	wantText(t, "no tools", func(p *page) {
 		agentsDeployText(p, contract.AgentsDeployOutput{Project: "shop", Worktrees: []contract.AgentsWorktree{}, Tools: []string{}}, laid)
-	}, lines(msg.Text(msg.AgentsNoTools), "", HintText(msg.HintUpdateSetup)), lines(msg.Text(msg.AgentsNoTools)))
+	}, lines("ИИ-инструменты не подключены: субагентов некуда раскладывать.", "", HintText(msg.HintAgentsNoTools)), lines("ИИ-инструменты не подключены: субагентов некуда раскладывать."))
 }
 
 // TestLayoutText checks the block of a layout of subagents inside another

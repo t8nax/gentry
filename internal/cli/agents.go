@@ -295,14 +295,10 @@ func sharedProjects(r *process.Repo) map[string]bool {
 
 // writeLayout tells what a layout inside another command did, as blocks
 // each preceded by an empty line: the change of one worktree, or the number
-// of free worktrees changed by project; then the conflicts and the failure.
-// A layout with nothing to tell is nil.
+// of free worktrees changed by project; then the conflicts and the failure,
+// and their hints. A layout with nothing to tell is nil.
 func writeLayout(p *page, l *contract.AgentsLayout, single bool, project string) {
-	if l == nil {
-		return
-	}
-	writeLayoutChange(p, l, single, project)
-	writeLayoutTrouble(p, l)
+	p.hints(layoutBlocks(p, l, single, project)...)
 }
 
 // layoutBlocks prints what a layout inside another command did, as
@@ -312,23 +308,6 @@ func layoutBlocks(p *page, l *contract.AgentsLayout, single bool, project string
 	if l == nil {
 		return nil
 	}
-	writeLayoutChange(p, l, single, project)
-	var hints []hint
-	if len(l.Conflicts) > 0 {
-		fmt.Fprintf(p, "\n%s\n\n", msg.Text(msg.AgentsConflictWarning))
-		writeConflicts(&p.Builder, l.Conflicts)
-		hints = append(hints, hintOf(msg.HintAgentsConflictWarning))
-	}
-	if l.Error != nil {
-		fmt.Fprintf(p, "\n%s\n%s\n", msg.Text(msg.AgentsSyncFailed), msg.Text(msg.AgentsSyncFailedReason, *l.Error))
-		hints = append(hints, hintOf(msg.HintAgentsDeployFailed))
-	}
-	return hints
-}
-
-// writeLayoutChange tells the change of a layout inside another command: of
-// one worktree, or the number of free worktrees changed by project.
-func writeLayoutChange(p *page, l *contract.AgentsLayout, single bool, project string) {
 	if len(l.Worktrees) > 0 {
 		p.WriteString("\n")
 		switch {
@@ -341,19 +320,23 @@ func writeLayoutChange(p *page, l *contract.AgentsLayout, single bool, project s
 		}
 		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
 	}
+	return layoutTrouble(p, l)
 }
 
-// writeLayoutTrouble tells the conflicts and the failure of a layout.
-func writeLayoutTrouble(p *page, l *contract.AgentsLayout) {
+// layoutTrouble prints the conflicts and the failure of a layout, each a
+// block, and returns their hints.
+func layoutTrouble(p *page, l *contract.AgentsLayout) []hint {
+	var hints []hint
 	if len(l.Conflicts) > 0 {
 		fmt.Fprintf(p, "\n%s\n\n", msg.Text(msg.AgentsConflictWarning))
 		writeConflicts(&p.Builder, l.Conflicts)
-		p.hints(hintOf(msg.HintAgentsConflictWarning))
+		hints = append(hints, hintOf(msg.HintAgentsConflictWarning))
 	}
 	if l.Error != nil {
 		fmt.Fprintf(p, "\n%s\n%s\n", msg.Text(msg.AgentsSyncFailed), msg.Text(msg.AgentsSyncFailedReason, *l.Error))
-		p.hints(hintOf(msg.HintAgentsDeployFailed))
+		hints = append(hints, hintOf(msg.HintAgentsDeployFailed))
 	}
+	return hints
 }
 
 // writeFreeLayout tells a layout of free worktrees after a synchronization,
@@ -375,7 +358,7 @@ func writeFreeLayout(p *page, l *contract.AgentsLayout, projects map[string]stri
 		}
 		fmt.Fprintln(p, msg.Text(msg.AgentsNextSession))
 	}
-	writeLayoutTrouble(p, l)
+	p.hints(layoutTrouble(p, l)...)
 }
 
 // projectsOf returns the project of each worktree of the pool p; nil
@@ -501,7 +484,8 @@ func runAgentsDeploy(args []string, env Env) int {
 		return fail(env, *bad)
 	}
 	// Without an AI tool connected there is no format to lay out in.
-	formats, connected := layoutFormats(), connectedTools()
+	connected := connectedTools()
+	formats := formatsOf(connected)
 	if len(connected) == 0 {
 		out := contract.AgentsDeployOutput{Project: id, Worktrees: []contract.AgentsWorktree{}, Tools: []string{}}
 		return emit(env, out, func(p *page, out contract.AgentsDeployOutput) { agentsDeployText(p, out, d.laid) })
@@ -572,7 +556,7 @@ func (d deploy) output(res agents.Result, p *layoutPool) contract.AgentsDeployOu
 	for _, c := range res.Worktrees {
 		changes[c.Worktree] = c
 	}
-	out := contract.AgentsDeployOutput{Project: d.project, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}, Tools: connectedTools()}
+	out := contract.AgentsDeployOutput{Project: d.project, Changed: len(res.Changed()) > 0, Worktrees: []contract.AgentsWorktree{}}
 	for _, w := range d.worktrees {
 		c, ok := changes[w.Path]
 		if !ok {
@@ -590,7 +574,7 @@ func (d deploy) output(res agents.Result, p *layoutPool) contract.AgentsDeployOu
 func agentsDeployText(p *page, out contract.AgentsDeployOutput, laid map[string]bool) {
 	if len(out.Tools) == 0 {
 		fmt.Fprintln(p, msg.Text(msg.AgentsNoTools))
-		p.hints(hintOf(msg.HintUpdateSetup))
+		p.hints(hintOf(msg.HintAgentsNoTools))
 		return
 	}
 	if out.Changed {

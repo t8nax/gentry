@@ -49,6 +49,7 @@ var hintSpecs = map[msg.Key]hint{
 	msg.HintToolNotFound:          {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintIntroPluginStale:      {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintUpdateSetup:           {cmd: "setup", params: []param{arg("tool")}},
+	msg.HintAgentsNoTools:         {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintIntegrationSetup:      {cmd: "setup", params: []param{arg("tool")}},
 	msg.HintUpdateProgram:         {cmd: "update"},
 	msg.HintProjectUnpooled:       {cmd: "worktree add", params: []param{arg("path")}},

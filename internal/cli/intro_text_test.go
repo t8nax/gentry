@@ -3,6 +3,7 @@ package cli
 import (
 	"testing"
 
+	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/state"
 	"github.com/t8nax/gentry/internal/task"
 )
@@ -33,5 +34,15 @@ func TestIntroStepsText(t *testing.T) {
 		if got := introSteps(tt.v); got != tt.want {
 			t.Errorf("%s: %q, want %q", tt.name, got, tt.want)
 		}
+	}
+}
+
+// TestIntroCodexUntrustedText states the words of the warning of the hook of
+// Codex in a worktree Codex does not trust; the acceptance tests of the hook
+// check where it is, before the introduction.
+func TestIntroCodexUntrustedText(t *testing.T) {
+	want := "Рабочая копия не доверена в Codex: субагенты флоу в этой сессии недоступны.\nСообщить оператору."
+	if got := msg.Text(msg.IntroCodexUntrusted); got != want {
+		t.Errorf("%q, want %q", got, want)
 	}
 }

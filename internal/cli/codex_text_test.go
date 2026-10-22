@@ -9,9 +9,8 @@ import (
 	"github.com/t8nax/gentry/internal/msg"
 )
 
-// The texts of Codex are stated word for word by the acceptance tests of
-// GEN-70: the tests here build them from the catalog and check the blocks
-// and their order in each channel.
+// The texts of Codex are stated word for word by the tests of the functions
+// that print them, here; the words of the hints by TestHintText.
 
 // codexSetup is the output of setup codex of a state with nothing to tell.
 func codexSetup(action string) contract.SetupOutput {
@@ -26,86 +25,78 @@ func codexSetup(action string) contract.SetupOutput {
 func TestSetupCodexText(t *testing.T) {
 	deploy := HintText(msg.HintAgentsDeployAll)
 	deployTool := hintLineOf(msg.HintAgentsDeployAll, "agents_deploy (project)")
-	first := lines(msg.Text(msg.SetupInstalled, "Codex"), "", deploy)
+	installed := []string{"Gentry подключён к Codex.", "Плагин начнёт работать со следующей сессии."}
 	wantText(t, "installed with projects", func(p *page) { setupText(p, codexSetup(codex.Installed), setupExtra{projects: true}) },
-		first, lines(msg.Text(msg.SetupInstalled, "Codex"), "", deployTool))
+		lines(append(installed, "", deploy)...), lines(append(installed, "", deployTool)...))
+	wantText(t, "updated", func(p *page) { setupText(p, codexSetup(codex.Updated), setupExtra{}) },
+		lines("Плагин Gentry в Codex обновлён.", "Изменения вступят в силу со следующей сессии."), "")
 	wantText(t, "unchanged with projects", func(p *page) { setupText(p, codexSetup(codex.Unchanged), setupExtra{projects: true}) },
-		lines(msg.Text(msg.SetupUnchanged, "Codex")), "")
+		lines("Gentry уже подключён к Codex."), "")
 
 	switched := codexSetup(codex.Installed)
 	switched.Action, switched.PreviousDir = setupSwitched, ptr("/home/dev/.gentry-old/integrations/codex")
-	wantText(t, "switched", func(p *page) { setupText(p, switched, setupExtra{}) },
-		lines(msg.Text(msg.SetupSwitched, "Codex", "/home/dev/.gentry-old/integrations/codex")), "")
+	wantText(t, "switched", func(p *page) { setupText(p, switched, setupExtra{}) }, lines(
+		"Плагин Gentry в Codex переключён на папку данных этой команды.",
+		"Изменения вступят в силу со следующей сессии.",
+		"Прежняя папка плагина: /home/dev/.gentry-old/integrations/codex",
+	), "")
 
 	// Each warning a block, in the order of the specification; the hints in
-	// the last block.
+	// the last block. The key of a record is the text of a string of TOML.
 	all := codexSetup(codex.Unchanged)
 	all.Enabled = false
 	all.HookTrust, all.HookError = ptr(codex.HookUntrusted), ptr("codex: нет ответа")
 	all.HooksFeature, all.Sandbox = ptr(codex.HooksManagedOff), ptr(codex.SandboxProfile)
 	all.WorktreesDistrusted = []string{"/work/shop", "/work/shop-fix"}
-	// The key of the record is written as the text of a string of TOML.
 	x := setupExtra{distrustKeys: []string{`C:\Dev\shop`}}
-	warnings := []string{
-		msg.Text(msg.SetupUnchanged, "Codex"),
+	wantText(t, "warnings", func(p *page) { setupText(p, all, x) }, lines(
+		"Gentry уже подключён к Codex.",
 		"",
-		msg.Text(msg.SetupDisabled, "Codex"),
+		"Плагин Gentry отключён в Codex.",
 		"",
-		msg.Text(msg.SetupCodexHookUntrusted),
-		msg.Text(msg.SetupCodexHookReason, "codex: нет ответа"),
+		"Хук запуска сессии записан, но не доверен в Codex.",
+		"Причина: codex: нет ответа",
 		"",
-		msg.Text(msg.SetupCodexManagedHooks),
+		"Хуки выключены администратором Codex: агент не получит вводных сведений в начале сессии.",
 		"",
-		msg.Text(msg.SetupCodexProfile),
+		"Песочница Codex задана профилем разрешений: папка данных Gentry в ней не открыта.",
 		"",
-		msg.Text(msg.CodexDistrusted),
+		"Рабочие копии, которым оператор не доверил в Codex, оставлены как есть:",
 		"  /work/shop",
 		"  /work/shop-fix",
 		"",
 		msg.Text(msg.HintCodexPluginEnable),
 		msg.Text(msg.HintCodexHookTrust),
 		msg.Text(msg.HintCodexTrust, `C:\\Dev\\shop`),
-	}
-	wantText(t, "warnings", func(p *page) { setupText(p, all, x) }, lines(warnings...), "")
+	), "")
 
 	for _, tt := range []struct {
-		state string
-		line  msg.Key
-	}{{codex.HookFailed, msg.SetupCodexHooksUnread}, {codex.HookUnwritten, msg.SetupCodexHooksUnwritten}} {
+		state, line string
+	}{
+		{codex.HookFailed, "Хук запуска сессии не записан: настройки хуков Codex не прочитаны."},
+		{codex.HookUnwritten, "Хук запуска сессии не записан: настройки хуков Codex не записаны."},
+	} {
 		out := codexSetup(codex.Unchanged)
 		out.HookTrust = ptr(tt.state)
-		wantText(t, "hooks "+tt.state, func(p *page) { setupText(p, out, setupExtra{}) }, lines(
-			msg.Text(msg.SetupUnchanged, "Codex"),
-			"",
-			msg.Text(tt.line),
-			msg.Text(msg.SetupCodexHooksFile, "/home/dev/.codex/hooks.json"),
-			"",
-			HintFor(msg.HintCodexHooksFix, "tool", "codex"),
-		), lines(
-			msg.Text(msg.SetupUnchanged, "Codex"),
-			"",
-			msg.Text(tt.line),
-			msg.Text(msg.SetupCodexHooksFile, "/home/dev/.codex/hooks.json"),
-		))
+		block := []string{"Gentry уже подключён к Codex.", "", tt.line, "Настройки хуков: /home/dev/.codex/hooks.json"}
+		wantText(t, "hooks "+tt.state, func(p *page) { setupText(p, out, setupExtra{}) },
+			lines(append(block, "", HintFor(msg.HintCodexHooksFix, "tool", "codex"))...), lines(block...))
 	}
 }
 
 // TestSettingsInvalidText checks the refusal of settings of Codex that
 // cannot be read or written: the settings and the hint to repeat setup
-// codex, or gentry update.
+// codex.
 func TestSettingsInvalidText(t *testing.T) {
 	f := settingsInvalid(codex.Tool, "/home/dev/.codex/config.toml", codex.Unreadable)
-	wantFail(t, "unreadable", f, lines(
-		msg.Text(msg.ErrCodexSettingsUnread, "/home/dev/.codex/config.toml"),
-		"",
-		HintFor(msg.HintCodexSettingsFix, "tool", "codex"),
-	), lines(msg.Text(msg.ErrCodexSettingsUnread, "/home/dev/.codex/config.toml")))
+	refusal := []string{"Настройки Codex не прочитаны.", "Настройки: /home/dev/.codex/config.toml"}
+	wantFail(t, "unreadable", f, lines(append(refusal, "", HintFor(msg.HintCodexSettingsFix, "tool", "codex"))...), lines(refusal...))
 	if f.code != contract.CodeSettingsInvalid || f.details["reason"] != codex.Unreadable || f.details["tool"] != codex.Tool {
 		t.Errorf("failure: %+v", f)
 	}
-	if f := settingsInvalid(codex.Tool, "/c", codex.Unwritable); f.message != msg.Text(msg.ErrCodexSettingsUnwrit, "/c") {
-		t.Errorf("unwritable: %q", f.message)
-	}
+	f = settingsInvalid(codex.Tool, "/c", codex.Unwritable)
+	wantFail(t, "unwritable", f, lines("Настройки Codex не записаны.", "Настройки: /c", "", HintFor(msg.HintCodexSettingsFix, "tool", "codex")),
+		lines("Настройки Codex не записаны.", "Настройки: /c"))
 }
 
 // TestUpdateCodexText checks what the update tells of both AI tools: the
@@ -162,19 +153,51 @@ func TestWorktreeAddCodexText(t *testing.T) {
 		"",
 		msg.Text(msg.HintCodexTrust, `C:\\Dev\\\"shop\"`),
 	), "")
-	unread := codex.Unreadable
-	out.CodexTrust = &contract.CodexTrust{Trusted: []string{}, Distrusted: []string{}, Error: &unread}
-	wantText(t, "settings not read", func(p *page) { worktreeAddText(p, out, nil) }, lines(
-		msg.Text(msg.WorktreeAdded, "shop", shopFix),
-		"",
-		msg.Text(msg.CodexTrustUnread),
-		"",
-		HintFor(msg.HintCodexSettingsFix, "tool", "codex"),
-	), lines(
-		msg.Text(msg.WorktreeAdded, "shop", shopFix),
-		"",
-		msg.Text(msg.CodexTrustUnread),
-	))
+	for _, tt := range []struct {
+		reason, line string
+	}{
+		{codex.Unreadable, "Доверить рабочие копии в Codex не удалось: настройки Codex не прочитаны."},
+		{codex.Unwritable, "Доверить рабочие копии в Codex не удалось: настройки Codex не записаны."},
+	} {
+		reason := tt.reason
+		out.CodexTrust = &contract.CodexTrust{Trusted: []string{}, Distrusted: []string{}, Error: &reason}
+		block := []string{msg.Text(msg.WorktreeAdded, "shop", shopFix), "", tt.line}
+		wantText(t, "settings "+tt.reason, func(p *page) { worktreeAddText(p, out, nil) },
+			lines(append(block, "", HintFor(msg.HintCodexSettingsFix, "tool", "codex"))...), lines(block...))
+	}
 	out.CodexTrust = &contract.CodexTrust{Trusted: []string{shopFix}, Distrusted: []string{}}
 	wantText(t, "trusted", func(p *page) { worktreeAddText(p, out, nil) }, lines(msg.Text(msg.WorktreeAdded, "shop", shopFix)), "")
+}
+
+// TestProjectAddCodexText checks the place of the blocks of Codex in the
+// output of project add: after the layout, before the worktrees of the
+// repository outside the pool; the hints in that order in the last block.
+func TestProjectAddCodexText(t *testing.T) {
+	unread := codex.Unreadable
+	out := contract.ProjectAddOutput{
+		Project: "shop", Prefix: "SHOP", Knowledge: "/work/shop-knowledge", MainWorktree: shopMain, Worktrees: []string{shopMain}, Action: actionUnchanged,
+		Agents:     &contract.AgentsLayout{Worktrees: []contract.AgentsWorktree{{Path: shopMain, Added: []string{"reviewer"}}}, Conflicts: []contract.AgentsConflict{}},
+		CodexTrust: &contract.CodexTrust{Trusted: []string{}, Distrusted: []string{shopMain}, Error: &unread},
+	}
+	x := projectAddExtra{unpooled: []string{"/work/shop-wt"}, distrustKeys: []string{shopMain}}
+	blocks := []string{
+		msg.Text(msg.ProjectUnchanged, "shop"),
+		"",
+		msg.Text(msg.AgentsFreeSynced, "shop"),
+		msg.Text(msg.AgentsNextSession),
+		"",
+		msg.Text(msg.CodexTrustUnread),
+		"",
+		msg.Text(msg.CodexDistrusted),
+		"  " + shopMain,
+		"",
+		msg.Text(msg.ProjectUnpooled),
+		"  /work/shop-wt",
+		"",
+	}
+	trust := msg.Text(msg.HintCodexTrust, codex.KeyText(shopMain))
+	// The agent has no command setup: its hint is left out.
+	wantText(t, "blocks of Codex", func(p *page) { projectAddText(p, out, x) },
+		lines(append(blocks, HintFor(msg.HintCodexSettingsFix, "tool", "codex"), trust, HintText(msg.HintProjectUnpooled))...),
+		lines(append(blocks, trust, hintLineOf(msg.HintProjectUnpooled, "worktree_add (path)"))...))
 }

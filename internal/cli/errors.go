@@ -240,7 +240,7 @@ func pluginElsewhere(tool, registered, dir string) failure {
 func settingsInvalid(tool, path, reason string) failure {
 	k := msg.ErrCodexSettingsUnread
 	if reason == codex.Unwritable {
-		k = msg.ErrCodexSettingsUnwrit
+		k = msg.ErrCodexSettingsUnwritten
 	}
 	return failure{
 		exit:    contract.ExitError,

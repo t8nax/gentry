@@ -29,8 +29,10 @@ func TestAgentFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, b)
 	}
-	can := msg.Text(msg.AgentCodexCan, strings.Join([]string{msg.Text(msg.CapabilityRead), msg.Text(msg.CapabilitySearch), msg.Text(msg.CapabilityTask)}, ", "))
-	cannot := msg.Text(msg.AgentCodexCannot, strings.Join([]string{msg.Text(msg.CapabilityEdit), msg.Text(msg.CapabilityRun), msg.Text(msg.CapabilityWeb), msg.Text(msg.CapabilityNoProgress)}, ", "))
+	// The lines of the capabilities in the words of the catalog: the test of
+	// the output of the file states them.
+	can := "Возможности: читать файлы, искать по коду, смотреть задачу инструментами Gentry."
+	cannot := "Не делать: править файлы, запускать команды в оболочке, обращаться к сети, вести ход работы задачи (шаги, заметки, артефакты)."
 	want := map[string]any{
 		"name":                   "reviewer",
 		"description":            a.Purpose,
@@ -54,23 +56,16 @@ func TestAgentFile(t *testing.T) {
 }
 
 // TestAgentCapabilities checks the lines of what a subagent may do and of
-// what it does not.
+// what it does not: all the capabilities, none, and progress without task.
 func TestAgentCapabilities(t *testing.T) {
-	text := func(ks ...msg.Key) string {
-		var parts []string
-		for _, k := range ks {
-			parts = append(parts, msg.Text(k))
-		}
-		return strings.Join(parts, ", ")
-	}
 	for _, tt := range []struct {
 		caps []string
 		want string
 	}{
-		{flow.Capabilities, msg.Text(msg.AgentCodexCan, text(msg.CapabilityRead, msg.CapabilitySearch, msg.CapabilityEdit, msg.CapabilityRun, msg.CapabilityWeb, msg.CapabilityProgress)) + "\n"},
-		{nil, msg.Text(msg.AgentCodexCannot, text(msg.CapabilityRead, msg.CapabilitySearch, msg.CapabilityEdit, msg.CapabilityRun, msg.CapabilityWeb, msg.CapabilityNoGentry)) + "\n"},
-		{[]string{"run", "progress"}, msg.Text(msg.AgentCodexCan, text(msg.CapabilityRun, msg.CapabilityProgress)) + "\n" +
-			msg.Text(msg.AgentCodexCannot, text(msg.CapabilityRead, msg.CapabilitySearch, msg.CapabilityEdit, msg.CapabilityWeb)) + "\n"},
+		{flow.Capabilities, "Возможности: читать файлы, искать по коду, править файлы, запускать команды в оболочке, обращаться к сети, смотреть задачу и вести ход работы инструментами Gentry (шаги, заметки, артефакты).\n"},
+		{nil, "Не делать: читать файлы, искать по коду, править файлы, запускать команды в оболочке, обращаться к сети, вызывать инструменты Gentry.\n"},
+		{[]string{"run", "progress"}, "Возможности: запускать команды в оболочке, смотреть задачу и вести ход работы инструментами Gentry (шаги, заметки, артефакты).\n" +
+			"Не делать: читать файлы, искать по коду, править файлы, обращаться к сети.\n"},
 	} {
 		got := instruction(flow.Agent{Capabilities: tt.caps, Instruction: "Сделать."})
 		if want := tt.want + "\nСделать.\n"; got != want {

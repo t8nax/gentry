@@ -51,12 +51,16 @@ func connected(tool string) bool {
 // the AI tools connected are written, and the files Gentry laid out in the
 // format of any tool stay hidden from git; without a tool connected
 // nothing is laid out.
-func layoutFormats() agents.Formats {
+func layoutFormats() agents.Formats { return formatsOf(connectedTools()) }
+
+// formatsOf returns the formats of the layout with the AI tools connected
+// given.
+func formatsOf(connected []string) agents.Formats {
 	f := agents.Formats{}
 	for _, t := range tools {
 		f.Known = append(f.Known, toolLayouts[t])
 	}
-	for _, t := range connectedTools() {
+	for _, t := range connected {
 		f.Write = append(f.Write, toolLayouts[t])
 	}
 	return f

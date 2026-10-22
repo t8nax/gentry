@@ -4,15 +4,10 @@
 package claude
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -170,54 +165,10 @@ func shellCommand(args []string) string {
 }
 
 // fingerprint is a short hash of the files.
-func fingerprint(files map[string][]byte) string {
-	paths := make([]string, 0, len(files))
-	for p := range files {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-	h := sha256.New()
-	for _, p := range paths {
-		fmt.Fprintf(h, "%s\x00%d\x00", p, len(files[p]))
-		h.Write(files[p])
-	}
-	return hex.EncodeToString(h.Sum(nil))[:8]
-}
+func fingerprint(files map[string][]byte) string { return integration.Fingerprint(files) }
 
 // Write replaces dir with the plugin files. The files are written to a
 // sibling directory first, so a failure midway leaves the old plugin intact.
-func Write(dir string, p Plugin) error {
-	parent := filepath.Dir(dir)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return err
-	}
-	suffix := make([]byte, 4)
-	rand.Read(suffix)
-	tmp := dir + ".tmp-" + hex.EncodeToString(suffix)
-	if err := writeFiles(tmp, p.Files); err != nil {
-		os.RemoveAll(tmp)
-		return err
-	}
-	if err := os.RemoveAll(dir); err != nil {
-		os.RemoveAll(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, dir); err != nil {
-		os.RemoveAll(tmp)
-		return err
-	}
-	return nil
-}
+func Write(dir string, p Plugin) error { return integration.WriteDir(dir, p.Files) }
 
-func writeFiles(dir string, files map[string][]byte) error {
-	for path, b := range files {
-		full := filepath.Join(dir, filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(full, b, 0o644); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+func writeFiles(dir string, files map[string][]byte) error { return integration.WriteFiles(dir, files) }

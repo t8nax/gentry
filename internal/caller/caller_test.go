@@ -5,6 +5,7 @@ import "testing"
 func TestByAgent(t *testing.T) {
 	t.Setenv(SessionEnv, "")
 	t.Setenv(ClaudeCodeEnv, "")
+	t.Setenv(CodexThreadEnv, "")
 	if ByAgent() {
 		t.Error("outside a session the operator calls")
 	}
@@ -13,6 +14,11 @@ func TestByAgent(t *testing.T) {
 		t.Error("a command in a session of Claude Code is not the agent's")
 	}
 	t.Setenv(ClaudeCodeEnv, "")
+	t.Setenv(CodexThreadEnv, "t1")
+	if !ByAgent() {
+		t.Error("a command in the shell of a session of Codex is not the agent's")
+	}
+	t.Setenv(CodexThreadEnv, "")
 	t.Setenv(SessionEnv, "drv-1")
 	if !ByAgent() {
 		t.Error("a session of the driver is not the agent's")

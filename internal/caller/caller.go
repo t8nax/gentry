@@ -14,11 +14,14 @@ const (
 	SessionEnv = "GENTRY_SESSION"
 	// ClaudeCodeEnv is set by Claude Code for the commands of its sessions.
 	ClaudeCodeEnv = "CLAUDECODE"
+	// CodexThreadEnv is set by Codex for the commands of the shell of its
+	// sessions.
+	CodexThreadEnv = "CODEX_THREAD_ID"
 )
 
 // ByAgent reports whether a command of the command line runs in a session of
-// the driver or of Claude Code. The tools of gentry mcp are the agent's
-// whatever this says.
+// the driver, of Claude Code or of Codex. The tools of gentry mcp are the
+// agent's whatever this says.
 func ByAgent() bool {
-	return os.Getenv(SessionEnv) != "" || os.Getenv(ClaudeCodeEnv) != ""
+	return os.Getenv(SessionEnv) != "" || os.Getenv(ClaudeCodeEnv) != "" || os.Getenv(CodexThreadEnv) != ""
 }

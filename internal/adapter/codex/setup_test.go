@@ -341,9 +341,15 @@ func TestCurrentWindowsCommand(t *testing.T) {
 	}
 	p := HooksPath(s.home)
 	good, _ := os.ReadFile(p)
+	// Without the command of Windows, and with it in double quotes, as
+	// Gentry wrote it before.
+	stale := strings.Replace(string(good), string(raw(HookCommandWindows(testExe))), string(raw("& "+HookCommand(testExe))), 1)
+	if stale == string(good) {
+		t.Fatal("stand: no command of Windows to make stale")
+	}
 	for _, text := range []string{
 		strings.Replace(string(good), `"commandWindows"`, `"commandOther"`, 1),
-		strings.Replace(string(good), `"& \"`, `"\"`, 1),
+		stale,
 	} {
 		os.WriteFile(p, []byte(text), 0o644)
 		if _, ok := Current(s.request()); ok {

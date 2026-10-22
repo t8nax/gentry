@@ -138,8 +138,12 @@ func TestWriteHook(t *testing.T) {
 // command of Windows, which runs the program by the call operator of
 // PowerShell.
 func TestHookCommandWindows(t *testing.T) {
-	if got := HookCommandWindows(testExe); got != `& "/opt/Gentry Tools/gentry" hook session-start --tool codex` {
+	if got := HookCommandWindows(testExe); got != `& '/opt/Gentry Tools/gentry' hook session-start --tool codex` {
 		t.Errorf("HookCommandWindows = %q", got)
+	}
+	// $ and ` are not expanded in single quotes; a single quote is doubled.
+	if got := HookCommandWindows(`C:\gen70 a$b\it's` + "`" + `\gentry.exe`); got != `& 'C:/gen70 a$b/it''s`+"`"+`/gentry.exe' hook session-start --tool codex` {
+		t.Errorf("HookCommandWindows of a path with $, ' and ` = %q", got)
 	}
 	out, _, err := hookEdit(nil, handler(testExe))
 	var file struct {
@@ -177,6 +181,19 @@ func TestHookEditWithoutWindows(t *testing.T) {
 	os.WriteFile(p, []byte(other), 0o644)
 	if hookCurrent(p, testExe) {
 		t.Error("a handler with another command of Windows is current")
+	}
+	// The command of Windows of the path in double quotes, as Gentry wrote
+	// it before, is replaced.
+	stale := strings.Replace(string(out), string(raw(HookCommandWindows(testExe))), string(raw("& "+HookCommand(testExe))), 1)
+	if stale == string(out) {
+		t.Fatal("stand: no command of Windows to make stale")
+	}
+	os.WriteFile(p, []byte(stale), 0o644)
+	if hookCurrent(p, testExe) {
+		t.Error("a handler with the command of Windows in double quotes is current")
+	}
+	if again, changed, err := hookEdit([]byte(stale), handler(testExe)); err != nil || !changed || len(handlersOf(t, again)[sessionStart]) != 1 || !strings.Contains(string(again), string(raw(HookCommandWindows(testExe)))) {
+		t.Errorf("hookEdit of the stale handler: %v, %v\n%s", changed, err, again)
 	}
 	os.WriteFile(p, out, 0o644)
 	if !hookCurrent(p, testExe) {

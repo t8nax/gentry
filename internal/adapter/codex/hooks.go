@@ -36,8 +36,12 @@ func HookCommand(exe string) string {
 
 // HookCommandWindows is the command of the hook of Gentry for the program
 // exe on Windows, where Codex runs it in PowerShell: a path in quotes there
-// is a string, not a program, so the call operator & runs it.
-func HookCommandWindows(exe string) string { return "& " + HookCommand(exe) }
+// is a string, not a program, so the call operator & runs it. The path, with
+// forward slashes, is in single quotes, with a single quote in it doubled:
+// PowerShell expands $ and ` in double quotes.
+func HookCommandWindows(exe string) string {
+	return "& '" + strings.ReplaceAll(filepath.ToSlash(exe), "'", "''") + "' " + HookSuffix
+}
 
 // hookCommands are the commands of the hook of Gentry for the program exe,
 // either of which hooks/list of the app-server of Codex gives: the command

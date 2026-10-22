@@ -44,7 +44,8 @@ func TestSetupCodexText(t *testing.T) {
 	all.HookTrust, all.HookError = ptr(codex.HookUntrusted), ptr("codex: нет ответа")
 	all.HooksFeature, all.Sandbox = ptr(codex.HooksManagedOff), ptr(codex.SandboxProfile)
 	all.WorktreesDistrusted = []string{"/work/shop", "/work/shop-fix"}
-	x := setupExtra{distrustKeys: []string{"/work/shop"}}
+	// The key of the record is written as the text of a string of TOML.
+	x := setupExtra{distrustKeys: []string{`C:\Dev\shop`}}
 	warnings := []string{
 		msg.Text(msg.SetupUnchanged, "Codex"),
 		"",
@@ -63,7 +64,7 @@ func TestSetupCodexText(t *testing.T) {
 		"",
 		msg.Text(msg.HintCodexPluginEnable),
 		msg.Text(msg.HintCodexHookTrust),
-		msg.Text(msg.HintCodexTrust, "/work/shop"),
+		msg.Text(msg.HintCodexTrust, `C:\\Dev\\shop`),
 	}
 	wantText(t, "warnings", func(p *page) { setupText(p, all, x) }, lines(warnings...), "")
 
@@ -153,13 +154,13 @@ func TestUpdateCodexText(t *testing.T) {
 func TestWorktreeAddCodexText(t *testing.T) {
 	out := contract.WorktreeAddOutput{Path: shopFix, Project: "shop", Action: actionAdded,
 		CodexTrust: &contract.CodexTrust{Trusted: []string{}, Distrusted: []string{shopFix}}}
-	wantText(t, "distrusted", func(p *page) { worktreeAddText(p, out, []string{shopMain}) }, lines(
+	wantText(t, "distrusted", func(p *page) { worktreeAddText(p, out, []string{`C:\Dev\"shop"`}) }, lines(
 		msg.Text(msg.WorktreeAdded, "shop", shopFix),
 		"",
 		msg.Text(msg.CodexDistrusted),
 		"  "+shopFix,
 		"",
-		msg.Text(msg.HintCodexTrust, shopMain),
+		msg.Text(msg.HintCodexTrust, `C:\\Dev\\\"shop\"`),
 	), "")
 	unread := codex.Unreadable
 	out.CodexTrust = &contract.CodexTrust{Trusted: []string{}, Distrusted: []string{}, Error: &unread}

@@ -67,7 +67,7 @@ func codexTrustText(p *page, t *contract.CodexTrust, keys []string) []hint {
 		p.WriteString("\n")
 		writeList(&p.Builder, msg.Text(msg.CodexDistrusted), t.Distrusted)
 		for _, k := range keys {
-			hints = append(hints, hintOf(msg.HintCodexTrust, k))
+			hints = append(hints, hintOf(msg.HintCodexTrust, codex.KeyText(k)))
 		}
 	}
 	return hints

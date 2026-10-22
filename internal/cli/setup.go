@@ -346,7 +346,7 @@ func codexSetupText(p *page, out contract.SetupOutput, x setupExtra) {
 		p.WriteString("\n")
 		writeList(&p.Builder, msg.Text(msg.CodexDistrusted), out.WorktreesDistrusted)
 		for _, k := range x.distrustKeys {
-			hints = append(hints, hintOf(msg.HintCodexTrust, k))
+			hints = append(hints, hintOf(msg.HintCodexTrust, codex.KeyText(k)))
 		}
 	}
 	if x.projects && pluginChanged(out) {

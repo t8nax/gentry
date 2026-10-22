@@ -192,6 +192,18 @@ func TestTOMLStrings(t *testing.T) {
 			t.Errorf("tomlKey(%q) = %s, want %s", in, got, want)
 		}
 	}
+	// The key of a record in a hint: the text of a basic string, which reads
+	// back as the key.
+	for _, key := range []string{`C:\Dev\shop`, `/work/"shop"`} {
+		text := KeyText(key)
+		d, err := parseTOML(`[projects."` + text + `"]` + "\ntrust_level = \"trusted\"\n")
+		if _, ok := tomlAt(d.root, "projects", key); err != nil || !ok {
+			t.Errorf("KeyText(%q) = %s does not read back: %v", key, text, err)
+		}
+	}
+	if got := KeyText(`C:\Dev\shop`); got != `C:\\Dev\\shop` {
+		t.Errorf("KeyText = %s", got)
+	}
 	if got := tomlBasic("a\"b\\c\nd\x01"); got != `"a\"b\\c\nd\u0001"` || !strings.HasPrefix(got, `"`) {
 		t.Errorf("tomlBasic = %s", got)
 	}

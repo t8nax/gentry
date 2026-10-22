@@ -1012,3 +1012,12 @@ func tomlAppend(text string, path []string, lit string) (string, error) {
 
 // bom is the byte order mark a text may start with.
 const bom = "\ufeff"
+
+// KeyText writes the key of a record of the settings of Codex as the text of
+// a basic string of TOML, without its quotes: a backslash, a quote and a
+// control character are escaped, so that projects."<text>" can be put in the
+// settings as it is, a path of Windows too.
+func KeyText(key string) string {
+	s := tomlBasic(key)
+	return s[1 : len(s)-1]
+}

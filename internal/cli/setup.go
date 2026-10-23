@@ -16,15 +16,13 @@ import (
 	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/integration"
 	"github.com/t8nax/gentry/internal/msg"
+	"github.com/t8nax/gentry/internal/setup"
+	"github.com/t8nax/gentry/internal/state"
 )
 
 // setupSwitched is the action of a setup that moved the plugin from the
 // directory of another data root.
 const setupSwitched = "switched"
-
-// setupUnchanged is the action of a setup that left the plugin as it was,
-// the same for every tool.
-const setupUnchanged = claude.Unchanged
 
 var setupMessages = map[string]msg.Key{
 	claude.Installed: msg.SetupInstalled,
@@ -46,15 +44,74 @@ func runSetup(args []string, env Env) int {
 		return fail(env, invalidArgument("setup", "tool", t, msg.Text(msg.ErrSetupToolUnknown, t), helpHint(msg.HintCommandHelp, "setup")))
 	}
 
-	out, x, bad := setupTool(f.args[0], *switchFlag)
-	if bad != nil {
-		return fail(env, *bad)
+	projects := &setupProjects{}
+	defer projects.close()
+	var x setupExtra
+	r, err := setup.Run(func() (contract.SetupOutput, error) {
+		out, extra, bad := setupTool(f.args[0], *switchFlag)
+		x = extra
+		if bad != nil {
+			return out, &failureError{*bad}
+		}
+		return out, nil
+	}, projects)
+	if err != nil {
+		return fail(env, failureOf(err))
 	}
-	// The subagents laid out name the tools of the previous plugin: once it
-	// changes, the operator lays them out anew in each project. setup does
-	// not do it itself.
-	x.projects = connectedProjects()
-	return emit(env, out, func(p *page, out contract.SetupOutput) { setupText(p, out, x) })
+	text := func(p *page, out contract.SetupOutput) { setupText(p, out, x) }
+	if r.ListErr != nil {
+		return emitFailed(env, r.Setup, text, failureOf(r.ListErr), "setup")
+	}
+	if len(r.Projects) > 0 {
+		var failures []agentsFailure
+		for _, project := range r.Projects {
+			bad := failureOf(project.Err)
+			failures = append(failures, agentsFailure{project: project.Project, reason: shortReason(bad), code: bad.code})
+		}
+		return emitFailed(env, r.Setup, text, agentsFailed(failures), "setup")
+	}
+	return emit(env, r.Setup, text)
+}
+
+// setupProjects shares the layout used by update. Setup classifies every
+// failure to open the state store as a state failure, including SQLite open
+// errors that the older reader returns without an UnavailableError wrapper.
+// This leaves the existing error envelope of update unchanged.
+type setupProjects struct{ updateProjects }
+
+func (p *setupProjects) List() ([]string, error) {
+	path, err := state.Path()
+	if err != nil {
+		return nil, &failureError{homeUnknown()}
+	}
+	st, err := state.OpenRead(path)
+	if errors.Is(err, state.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		var newer *state.NewerError
+		var unavailable *state.UnavailableError
+		if !errors.As(err, &newer) && !errors.As(err, &unavailable) {
+			err = &state.UnavailableError{Path: path, Err: err}
+		}
+		return nil, &failureError{stateFailure(err)}
+	}
+	pool, bad := poolOf(st)
+	if bad != nil {
+		st.Close()
+		return nil, &failureError{*bad}
+	}
+	pool.owned = true
+	p.pool = pool
+	projects, err := st.Projects()
+	if err != nil {
+		return nil, &failureError{stateFailure(err)}
+	}
+	var ids []string
+	for _, project := range projects {
+		ids = append(ids, project.ID)
+	}
+	return ids, nil
 }
 
 // setupTool builds the integration with the tool in the data root and
@@ -251,37 +308,21 @@ func distrustKeys(list []codex.Distrusted) []string {
 	return keys
 }
 
-// setupExtra is what the text of setup has apart from the contract: whether
-// a project is connected, whose worktrees have subagents laid out, and the
-// records of trust in Codex the operator did not trust, which the hints
-// name.
+// setupExtra is what the text of setup has apart from the contract: the
+// records of trust in Codex the operator did not trust, which the hints name.
 type setupExtra struct {
-	projects     bool
 	distrustKeys []string
-}
-
-// connectedProjects reports whether a project is connected on the machine.
-// The state store is only read, and not created; a store that cannot be read
-// is told by the commands of the projects, not by setup.
-func connectedProjects() bool {
-	st, bad := openTasks()
-	if bad != nil || st == nil {
-		return false
-	}
-	defer st.Close()
-	projects, err := st.Projects()
-	return err == nil && len(projects) > 0
 }
 
 // pluginChanged reports whether setup installed, updated or switched the
 // plugin: then the subagents laid out are laid out anew.
 func pluginChanged(out contract.SetupOutput) bool {
-	return out.Action != setupUnchanged || out.PreviousDir != nil
+	return setup.Changed(out)
 }
 
 // setupText prints what setup did with the plugin, in the words of the tool.
-// Once the plugin is installed, updated or switched, the last hint is to lay
-// out the subagents in each project, if there is one.
+// Successful layouts are quiet; conflicts follow the settings warnings and
+// their hints follow the settings hints in the last block.
 func setupText(p *page, out contract.SetupOutput, x setupExtra) {
 	title := toolTitles[out.Tool]
 	if out.PreviousDir != nil {
@@ -316,18 +357,14 @@ func setupText(p *page, out contract.SetupOutput, x setupExtra) {
 	}
 	var hints []hint
 	if !out.Enabled {
-		if afterField {
-			fmt.Fprintln(p)
-		}
+		fmt.Fprintln(p)
 		fmt.Fprintln(p, msg.Text(msg.SetupDisabled, title))
 		hints = append(hints, hintOf(msg.HintPluginEnable))
 	}
 	if permission == claude.PermissionFailed || permission == claude.PermissionUnwritten {
 		hints = append(hints, hintOf(msg.HintSetupPermission, claude.PermissionRule))
 	}
-	if x.projects && pluginChanged(out) {
-		hints = append(hints, hintOf(msg.HintAgentsDeployAll))
-	}
+	hints = append(hints, setupAgentsText(p, out.Agents)...)
 	p.hints(hints...)
 }
 
@@ -371,10 +408,26 @@ func codexSetupText(p *page, out contract.SetupOutput, x setupExtra) {
 			hints = append(hints, hintOf(msg.HintCodexTrust, codex.KeyText(k)))
 		}
 	}
-	if x.projects && pluginChanged(out) {
-		hints = append(hints, hintOf(msg.HintAgentsDeployAll))
-	}
+	hints = append(hints, setupAgentsText(p, out.Agents)...)
 	p.hints(hints...)
+}
+
+// setupAgentsText prints one conflict table for all successful projects,
+// returning one hint for each affected project in project list order.
+func setupAgentsText(p *page, projects []contract.UpdateAgents) []hint {
+	var conflicts []contract.AgentsConflict
+	var hints []hint
+	for _, project := range projects {
+		if len(project.Conflicts) > 0 {
+			conflicts = append(conflicts, project.Conflicts...)
+			hints = append(hints, hintOf(msg.HintAgentsConflictWarning).forProject(project.Project))
+		}
+	}
+	if len(conflicts) > 0 {
+		fmt.Fprintf(p, "\n%s\n\n", msg.Text(msg.AgentsConflictWarning))
+		writeConflicts(&p.Builder, conflicts)
+	}
+	return hints
 }
 
 // str is the value of an optional string of the contract; "" if absent.

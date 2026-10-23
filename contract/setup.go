@@ -13,6 +13,12 @@ type SetupOutput struct {
 	// a client shows an unknown value as is.
 	Action string `json:"action"`
 
+	// Successful layouts of the projects of the current data root, in project list
+	// order; only after the plugin was installed, updated or switched, and only if a
+	// project was processed successfully. Conflicting files are skipped and reported
+	// as with update.
+	Agents []UpdateAgents `json:"agents,omitempty,omitzero"`
+
 	// Directory of the integration files built for the tool.
 	Dir string `json:"dir"`
 

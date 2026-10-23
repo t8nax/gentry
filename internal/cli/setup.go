@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -81,6 +82,18 @@ func setupClaude(dir string, switchDir bool) (out contract.SetupOutput, bad *fai
 	if err != nil {
 		return refuse(toolNotFound(claude.Tool, "claude", toolTitles[claude.Tool]))
 	}
+	// The registration is shared by every data root using this Claude
+	// configuration. Keep the lock through rollback: its defers below must
+	// run before this release, so they cannot undo another successful setup.
+	lock, err := claude.LockSetup(context.Background(), dir)
+	if err != nil {
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			return refuse(ioError(pe.Path, pe.Err))
+		}
+		return refuse(internal(err))
+	}
+	defer lock.Release()
 	// The plugin serves every session of the tool, whatever the data root of
 	// this call: it is moved from an existing directory of another data root
 	// only by --switch, and before anything is written.

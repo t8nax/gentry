@@ -923,9 +923,7 @@ func TestSetupCodexText(t *testing.T) {
 		wantCode(t, r, 0)
 		want := testkit.Lines(
 			"Gentry подключён к Codex.",
-			"Плагин начнёт работать со следующей сессии.",
-			"",
-			"Разложить субагентов в рабочие копии каждого проекта: gentry agents deploy --project <идентификатор>")
+			"Плагин начнёт работать со следующей сессии.")
 		if r.stdout != want {
 			t.Errorf("stdout:\n%s\nwant:\n%s", r.stdout, want)
 		}
@@ -1307,53 +1305,41 @@ func TestSetupCodexElsewhere(t *testing.T) {
 	})
 }
 
-// TestSetupAgentsHint checks the hint of setup to lay out the subagents in
-// each project after the plugin changed. Its words are stated by
-// TestSetupCodexText/first_connection; here the hint is the last block, one
-// line, the same in setup claude and setup codex, which neither prints
-// once its plugin is unchanged.
+// TestSetupAgentsHint checks GEN-59's removal of the general manual-layout
+// hint after either tool is connected. Detailed layout cases are covered
+// by TestSetupAgents59FirstConnection.
 func TestSetupAgentsHint(t *testing.T) {
 	parallel(t)
-	// hintOf returns the last block of the output of a first connection,
-	// which must be one line after the blocks before it.
-	hintOf := func(t *testing.T, r result) string {
+	noHint := func(t *testing.T, r result) {
 		t.Helper()
 		wantCode(t, r, 0)
-		last := lastBlock(r.stdout)
-		if len(blocksOf(r.stdout)) < 2 || len(last) != 1 {
-			t.Fatalf("stdout:\n%s\nwant the last block of one line, the hint", r.stdout)
+		if strings.Contains(r.stdout, "gentry agents deploy --project") {
+			t.Errorf("setup still prints the removed general layout hint:\n%s", r.stdout)
 		}
-		return last[0]
 	}
 	t.Run("codex_first", func(t *testing.T) {
 		parallel(t)
 		s := installedStand(t, latest, false)
 		s.project("shop")
 		s.useCodex()
-		if hint := hintOf(t, s.gentry("setup", "codex")); !strings.Contains(hint, "gentry agents deploy --project") {
-			t.Errorf("the last block of setup codex: %q, want the hint to lay out the subagents by gentry agents deploy --project", hint)
-		}
+		noHint(t, s.gentry("setup", "codex"))
 	})
 	t.Run("claude_first", func(t *testing.T) {
 		parallel(t)
 		s := installedStand(t, latest, false)
 		s.project("shop")
-		claude := hintOf(t, s.gentry("setup", "claude"))
+		noHint(t, s.gentry("setup", "claude"))
 		s.useCodex()
-		if codex := hintOf(t, s.gentry("setup", "codex")); claude != codex {
-			t.Errorf("the hint of setup claude %q is not that of setup codex %q", claude, codex)
-		}
+		noHint(t, s.gentry("setup", "codex"))
 	})
 	t.Run("codex_repeat", func(t *testing.T) {
 		parallel(t)
 		s := installedStand(t, latest, false)
 		s.project("shop")
 		s.useCodex()
-		hint := hintOf(t, s.gentry("setup", "codex"))
+		noHint(t, s.gentry("setup", "codex"))
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
-		if slices.Contains(lines(r.stdout), hint) {
-			t.Errorf("stdout of a repeat:\n%s\nhas the hint «%s»", r.stdout, hint)
-		}
+		noHint(t, r)
 	})
 }

@@ -213,3 +213,48 @@ func TestProgram(t *testing.T) {
 		t.Errorf("Program() = %q, %v; want %q", p, err, exe)
 	}
 }
+
+func TestRegisterRollback(t *testing.T) {
+	for _, tt := range []struct {
+		name, fail string
+		existing   bool
+	}{
+		{name: "install", fail: "install"},
+		{name: "plugin-list", fail: "list"},
+		{name: "marketplace-add", fail: "marketplace-add"},
+		{name: "existing-install", fail: "install", existing: true},
+		{name: "existing-update", fail: "marketplace-update", existing: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			program, log := fake(t)
+			dir := filepath.Join(t.TempDir(), "claude")
+			version := plugin(t, dir, "0.1.0")
+			if tt.existing {
+				if out, err := exec.Command(program, "plugin", "marketplace", "add", dir, "--json").CombinedOutput(); err != nil {
+					t.Fatalf("add existing marketplace: %v\n%s", err, out)
+				}
+			}
+			t.Setenv("FAKECLAUDE_FAIL", tt.fail)
+			_, err := Register(program, dir, version)
+			var ce *CommandError
+			if !errors.As(err, &ce) || ce.Output != "simulated failure" {
+				t.Fatalf("registration error = %v; want the original command failure", err)
+			}
+			got, err := Registered(program)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := ""
+			if tt.existing {
+				want = dir
+			}
+			if got != want {
+				t.Errorf("marketplace after failure = %q; want %q", got, want)
+			}
+			removed := slices.Contains(log(), "plugin marketplace remove gentry --json")
+			if want := !tt.existing && tt.fail != "marketplace-add"; removed != want {
+				t.Errorf("marketplace removed = %v; want %v", removed, want)
+			}
+		})
+	}
+}

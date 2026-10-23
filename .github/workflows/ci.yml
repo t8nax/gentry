@@ -129,32 +129,39 @@ jobs:
           go build -tags acceptance -buildvcs=false -o "$bin" ./cmd/gentry
           echo "ACCEPTANCE_BINARY=$bin" >> "$GITHUB_ENV"
 
-      # The areas install and release run no gentry commands, and the cases
-      # of gentry update in the area update run the programs of releases the
-      # area builds itself, each with a data root of its own, not the gentry
-      # of the job: on the build their tests skip, so the second command runs
-      # them in the process of the test; without it they would run nowhere.
-      # The areas install and update run on every OS: their cases of Windows
-      # only (a running program renamed to .old) and of Linux and macOS only
-      # (a folder closed for writing, a symbolic link) skip elsewhere by
-      # themselves. The area release runs on Linux only, where the button
-      # Release runs: on Windows and macOS it adds nothing, and its builds of
-      # the six platforms take most of the time of the job. Both commands are
-      # one step, so that the time of the suite reads as the time of the
-      # step; the second runs when the first fails too, and the step fails
-      # when either does.
+      # Areas that call SkipOnBinary need a second pass in the process of
+      # the test: on the build they skip, so without it they run nowhere.
+      # Discover calls in every Go file, including helpers, so a new area
+      # needs no change here. The area release runs on Linux only, where the
+      # button Release runs; elsewhere its builds add no coverage. All other
+      # areas keep their own platform skips. Both passes are one step, and
+      # the second runs after a failed first pass too; either failure makes
+      # the step fail.
       - name: acceptance tests
         id: acceptance
         if: matrix.suite == 'acceptance'
         run: |
           status=0
           GENTRY_TEST_BINARY="$ACCEPTANCE_BINARY" go test -count=1 ./tests/acceptance/... || status=$?
-          areas="./tests/acceptance/install ./tests/acceptance/update"
-          if [ "$RUNNER_OS" = Linux ]; then
-            areas="$areas ./tests/acceptance/release"
+          test -d ./tests/acceptance
+          areas=()
+          for area in ./tests/acceptance/*; do
+            [ -d "$area" ] || continue
+            if [ "$area" = ./tests/acceptance/release ] && [ "$RUNNER_OS" != Linux ]; then
+              continue
+            fi
+            if grep -rE --include='*.go' '\.SkipOnBinary[[:space:]]*\(' "$area" > /dev/null; then
+              areas+=("$area")
+            else
+              code=$?
+              if [ "$code" -ne 1 ]; then
+                exit "$code"
+              fi
+            fi
+          done
+          if [ "${#areas[@]}" -gt 0 ]; then
+            go test -count=1 "${areas[@]}" || status=$?
           fi
-          # shellcheck disable=SC2086 # a word per area
-          go test -count=1 $areas || status=$?
           exit "$status"
 
       # What the job builds does not depend on the result of the tests: the

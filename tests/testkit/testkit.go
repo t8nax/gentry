@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -84,12 +85,18 @@ var binary string
 // no test can touch the operator's data, and runs the tests. Claude Code and
 // Codex are programs that do not exist: the commands under test must not
 // call them unless a test points them at a fake one. Call it from TestMain.
+// Short mode skips the whole package before preparing the environment.
 //
 // With BinaryEnv set, Main checks that its gentry is a build for the tests,
 // as it states. The commands inherit the environment and the current
 // directory of the test at the moment they run, so the tests change them as
 // they do for the commands of the process.
 func Main(m *testing.M) int {
+	flag.Parse()
+	if testing.Short() {
+		return 0
+	}
+
 	dir, err := os.MkdirTemp("", "gentry-test-")
 	if err != nil {
 		panic(err)

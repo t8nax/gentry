@@ -439,7 +439,34 @@ func (s *setupAgentsStand) wantPluginCurrent() {
 	}
 }
 
-func (s *setupAgentsStand) failure(r result, code string) (setupAgentsError, setupAgentsResult, []setupAgentsFailure) {
+// updatedSetupControl captures every existing setup field independently of the
+// failing command. Call it before introducing faults into the reference stand.
+// Project results have a separate oracle and are deliberately excluded here.
+func (s *setupAgentsStand) updatedSetupControl(pluginVersion string) map[string]any {
+	s.t.Helper()
+	s.stalePlugin()
+	r := s.setup(true)
+	s.parse(r, "updated")
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(r.stdout), &fields); err != nil {
+		s.t.Fatal(err)
+	}
+	delete(fields, "agents")
+	// The fingerprint includes absolute plugin/program paths, so distinct
+	// stands have distinct versions. Use the subject's pre-command manifest
+	// from the installed task build for this one path-dependent field.
+	fields["plugin_version"] = pluginVersion
+	return normalizeSetupAgents(s.t, fields, s.root)
+}
+
+func (s *setupAgentsStand) setupManifestVersion() string {
+	if s.tool == "codex" {
+		return s.codexManifestVersion()
+	}
+	return manifestVersion(s.t, filepath.Join(s.integration(), "gentry", ".claude-plugin", "plugin.json"))
+}
+
+func (s *setupAgentsStand) failure(r result, code string, wantSetup map[string]any) (setupAgentsError, setupAgentsResult, []setupAgentsFailure) {
 	s.t.Helper()
 	wantCode(s.t, r, 1)
 	if r.stderr != "" {
@@ -471,6 +498,14 @@ func (s *setupAgentsStand) failure(r result, code string) (setupAgentsError, set
 			if _, ok := fields["agents"]; ok {
 				s.t.Errorf("empty partial agents must be omitted: %s", b)
 			}
+		}
+		var complete map[string]any
+		if err := json.Unmarshal(b, &complete); err != nil {
+			s.t.Fatal(err)
+		}
+		delete(complete, "agents")
+		if got := normalizeSetupAgents(s.t, complete, s.root); !reflect.DeepEqual(got, wantSetup) {
+			s.t.Errorf("partial setup differs from independent successful setup:\ngot %#v\nwant %#v", got, wantSetup)
 		}
 	}
 	var failures []setupAgentsFailure

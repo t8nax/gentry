@@ -69,6 +69,16 @@ func wantSetupNoStderr(t *testing.T, r result) {
 	}
 }
 
+// A separate canonical text case owns the words; other cases still require a
+// single result block of the prescribed size, with no extra hints or blocks.
+func wantSetupResultLines(t *testing.T, r result, count int) {
+	t.Helper()
+	blocks := blocksOf(r.stdout)
+	if len(blocks) != 1 || len(blocks[0]) != count || r.stdout != testkit.Lines(blocks[0]...) {
+		t.Errorf("setup result blocks: %#v, want one block of %d lines", blocks, count)
+	}
+}
+
 func setupAgentsVerify(t *testing.T, s, e *setupAgentsStand, mode bool, r result, action string) setupAgentsResult {
 	t.Helper()
 	want := e.reference("admin", "shop")
@@ -185,9 +195,14 @@ func TestSetupAgents59Repeat(t *testing.T) {
 			s.wantContract(r, out)
 		} else {
 			wantSetupSilent(t, r)
-			want := fmt.Sprintf("Gentry уже подключён к %s.\n", setupAgentsTitle(tool))
-			if r.stdout != want {
-				t.Errorf("stdout=%q, want %q", r.stdout, want)
+			if tool == "claude" {
+				want := fmt.Sprintf("Gentry уже подключён к %s.\n", setupAgentsTitle(tool))
+				if r.stdout != want {
+					t.Errorf("stdout=%q, want %q", r.stdout, want)
+				}
+			} else {
+				// TestSetupCodexText/unchanged owns the exact Codex wording.
+				wantSetupResultLines(t, r, 1)
 			}
 		}
 		s.wantUnchanged(before)
@@ -716,6 +731,13 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 	eachSetupAgents(t, false, func(t *testing.T, tool string, mode bool) {
 		s, e := changedSetupPair(t, tool, false)
 		want := e.reference("admin", "shop")
+		var wantSetup map[string]any
+		if mode {
+			// The reference is already fully deployed. A future automatic
+			// layout by this successful control cannot change the captured
+			// added/updated/removed results or the desired file oracle.
+			wantSetup = e.updatedSetupControl(s.setupManifestVersion())
+		}
 		blocked, old := "", ""
 		var conflict *setupAgentsConflict
 		if kind == "late_write" {
@@ -762,22 +784,30 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 		}
 		r := s.setup(mode)
 		if mode {
-			_, out, failures := s.failure(r, "agents_failed")
+			errOut, out, failures := s.failure(r, "agents_failed", wantSetup)
 			s.wantFailureProjects(failures, failed...)
-			if out.Action != "updated" || out.Tool != tool || out.PluginVersion == "" {
-				t.Errorf("partial setup: %+v", out)
-			}
+			partial := result{stdout: string(errOut.Error.Details["setup"])}
 			if kind == "all" {
+				s.wantContract(partial, out)
 				if out.Agents != nil {
 					t.Errorf("all failed, agents must be absent: %+v", out.Agents)
 				}
 			} else {
+				s.wantContract(partial, out, "shop")
 				if len(out.Agents) != 1 || out.Agents[0].Project != "shop" {
 					t.Errorf("partial successful projects: %+v", out.Agents)
 				} else if conflict != nil {
-					if !reflect.DeepEqual(out.Agents[0].Conflicts, []setupAgentsConflict{*conflict}) {
-						t.Errorf("conflicts: %+v", out.Agents[0].Conflicts)
-					}
+					// A tracked reviewer prevents that name's sole format in A.
+					// All other paths and exact changes come from the independent
+					// conflict-free deploy, including the full result of copy B.
+					expected := want[1]
+					expected.Worktrees = slices.Clone(expected.Worktrees)
+					expected.Worktrees[0].Agents = slices.DeleteFunc(slices.Clone(expected.Worktrees[0].Agents), func(name string) bool { return name == "reviewer" })
+					expected.Worktrees[0].Updated = slices.DeleteFunc(slices.Clone(expected.Worktrees[0].Updated), func(name string) bool { return name == "reviewer" })
+					c := *conflict
+					c.Worktree = e.copy("shop", "A")
+					expected.Conflicts = []setupAgentsConflict{c}
+					s.wantReference(e, out.Agents, []setupAgentsProject{expected}, setupConflictPhysical(*conflict))
 				} else {
 					s.wantReference(e, out.Agents, want[1:])
 				}
@@ -852,7 +882,11 @@ func TestSetupAgents59StateNewer(t *testing.T) { setupAgentsStateFailureCase(t, 
 
 func setupAgentsStateFailureCase(t *testing.T, newer bool) {
 	eachSetupAgents(t, false, func(t *testing.T, tool string, mode bool) {
-		s, _ := changedSetupPair(t, tool, false)
+		s, e := changedSetupPair(t, tool, false)
+		var wantSetup map[string]any
+		if mode {
+			wantSetup = e.updatedSetupControl(s.setupManifestVersion())
+		}
 		before := s.snapshot()
 		code := "state_unavailable"
 		if newer {
@@ -886,19 +920,48 @@ func setupAgentsStateFailureCase(t *testing.T, newer bool) {
 		if original.code != 1 || newer && baseline.Error.Code != code {
 			t.Fatalf("bad state fixture: %s", original)
 		}
+		if !newer {
+			const prefix = "Хранилище состояния недоступно: "
+			var reason string
+			var ok bool
+			switch baseline.Error.Code {
+			case "state_unavailable":
+				reason, ok = strings.CutPrefix(baseline.Error.Message, prefix)
+			case "internal":
+				// The old read-only command can leave the SQLite failure under
+				// this known wrapper, observed on Windows. Preserve its entire
+				// reason; only the setup error's specified envelope differs.
+				if len(baseline.Error.Details) != 0 || baseline.Error.Hint != "" || len(baseline.Error.Hints) != 0 {
+					t.Fatalf("unexpected internal state control: %s", original)
+				}
+				reason, ok = strings.CutPrefix(baseline.Error.Message, "Внутренняя ошибка Gentry: ")
+				path, err := json.Marshal(s.stateStore())
+				if err != nil {
+					t.Fatal(err)
+				}
+				baseline.Error.Code = code
+				baseline.Error.Message = prefix + reason
+				baseline.Error.Details = map[string]json.RawMessage{"path": path}
+				baseline.Error.Hint = "Повторите команду; если ошибка повторится, проверьте доступ к файлу: " + s.stateStore()
+			default:
+				t.Fatalf("unexpected state control: %s", original)
+			}
+			if !ok || strings.TrimSpace(reason) == "" || strings.Contains(reason, "\n") {
+				t.Fatalf("state control has no complete single-line reason: %s", original)
+			}
+		}
 		textBaseline := s.gentry("project", "list")
 		r := s.setup(mode)
 		if mode {
-			out, setup, failures := s.failure(r, code)
+			out, setup, failures := s.failure(r, code, wantSetup)
 			if setup.Action != "updated" || setup.Agents != nil || len(failures) != 0 {
 				t.Errorf("partial state error: setup=%+v, failures=%+v", setup, failures)
 			}
 			delete(out.Error.Details, "setup")
-			if newer {
-				if !reflect.DeepEqual(out.Error.Details, baseline.Error.Details) || out.Error.Message != baseline.Error.Message || out.Error.Hint != baseline.Error.Hint {
-					t.Errorf("original state failure lost: got %s want %s", r.stdout, original.stdout)
-				}
-			} else {
+			if !reflect.DeepEqual(out.Error.Details, baseline.Error.Details) || out.Error.Message != baseline.Error.Message || out.Error.Hint != baseline.Error.Hint || !slices.Equal(out.Error.Hints, baseline.Error.Hints) {
+				t.Errorf("original state failure lost: got %+v want %+v", out.Error, baseline.Error)
+			}
+			if !newer {
 				var path string
 				json.Unmarshal(out.Error.Details["path"], &path)
 				if !samePath(path, s.stateStore()) {
@@ -907,10 +970,6 @@ func setupAgentsStateFailureCase(t *testing.T, newer bool) {
 				wantHint := "Повторите команду; если ошибка повторится, проверьте доступ к файлу: " + s.stateStore()
 				if out.Error.Hint != wantHint {
 					t.Errorf("state error hint=%q, want %q", out.Error.Hint, wantHint)
-				}
-				reason, ok := strings.CutPrefix(out.Error.Message, "Хранилище состояния недоступно: ")
-				if !ok || strings.TrimSpace(reason) == "" || strings.Contains(reason, "\n") {
-					t.Errorf("state_unavailable message=%q", out.Error.Message)
 				}
 			}
 		} else {
@@ -924,11 +983,9 @@ func setupAgentsStateFailureCase(t *testing.T, newer bool) {
 					t.Errorf("state_newer text:\n%s", r.stderr)
 				}
 			} else {
-				prefix := "Хранилище состояния недоступно: "
-				suffix := "\n\nПовторите команду; если ошибка повторится, проверьте доступ к файлу: " + s.stateStore() + "\n"
-				reason := strings.TrimSuffix(strings.TrimPrefix(r.stderr, prefix), suffix)
-				if strings.TrimSpace(reason) == "" || strings.Contains(reason, "\n") || r.stderr != prefix+reason+suffix {
-					t.Errorf("state_unavailable text:\n%s", r.stderr)
+				want := baseline.Error.Message + "\n\n" + baseline.Error.Hint + "\n"
+				if r.stderr != want {
+					t.Errorf("state_unavailable text:\n%s\nwant:\n%s", r.stderr, want)
 				}
 			}
 		}

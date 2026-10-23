@@ -229,7 +229,7 @@ func TestSetupCodexInstalls(t *testing.T) {
 		s := installedStand(t, latest, false)
 		s.useCodex()
 		// The lines of the first connection are stated by
-		// TestSetupCodexText/first_connection; here the action of the JSON.
+		// TestSetupAgents59FirstConnection/codex/text; here the JSON action.
 		if out, res, _ := s.setupCodexJSON(); res.Action != "installed" {
 			t.Errorf("setup codex --json: %s\nwant action installed", out)
 		}
@@ -921,12 +921,9 @@ func TestSetupCodexText(t *testing.T) {
 		s.writeCodexConfig("[features]\nhooks = false\n")
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
-		want := testkit.Lines(
-			"Gentry подключён к Codex.",
-			"Плагин начнёт работать со следующей сессии.")
-		if r.stdout != want {
-			t.Errorf("stdout:\n%s\nwant:\n%s", r.stdout, want)
-		}
+		// TestSetupAgents59FirstConnection/codex/text owns the full wording
+		// on the specification's stand. Here its shape and settings effects.
+		wantSetupResultLines(t, r, 2)
 		cfg := s.codexConfig()
 		if v, _ := toml.At(cfg, "features", "hooks"); v != true {
 			t.Errorf("features.hooks: %v, want true", v)
@@ -952,9 +949,9 @@ func TestSetupCodexText(t *testing.T) {
 		s := stale(t)
 		r := s.gentry("setup", "codex")
 		wantCode(t, r, 0)
-		if want := testkit.Lines("Плагин Gentry в Codex обновлён.", "Изменения вступят в силу со следующей сессии."); r.stdout != want {
-			t.Errorf("stdout:\n%s\nwant:\n%s", r.stdout, want)
-		}
+		// TestSetupAgents59ShortText/codex/text owns the full wording on a
+		// stand that requires deployment. Here its shape and the action.
+		wantSetupResultLines(t, r, 2)
 		if out, res, _ := stale(t).setupCodexJSON(); res.Action != "updated" {
 			t.Errorf("setup codex --json: %s\nwant action updated", out)
 		}

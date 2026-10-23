@@ -299,7 +299,37 @@ func normalizeSetupAgents[T any](t *testing.T, value T, root string) T {
 	return out
 }
 
+// A file oracle is captured before any setup control can change the reference.
+// Every comparison gets its own map so exclusions and path normalization cannot
+// alter the original bytes seen by later assertions.
+type setupAgentsFileSnapshot map[string]map[string]string
+
+func (s *setupAgentsStand) snapshotReference(projects []setupAgentsProject) setupAgentsFileSnapshot {
+	s.t.Helper()
+	files := setupAgentsFileSnapshot{}
+	for _, project := range projects {
+		for _, copy := range s.copies(project.Project) {
+			files[copy] = setupAgentFiles(s.t, copy)
+		}
+	}
+	return files
+}
+
+func (snapshot setupAgentsFileSnapshot) files(t *testing.T, copy string) map[string]string {
+	t.Helper()
+	files, ok := snapshot[copy]
+	if !ok {
+		t.Fatalf("reference snapshot has no copy %s", copy)
+	}
+	return maps.Clone(files)
+}
+
 func (s *setupAgentsStand) wantReference(e *setupAgentsStand, got, want []setupAgentsProject, excluded ...string) {
+	s.t.Helper()
+	s.wantReferenceFiles(e, got, want, nil, excluded...)
+}
+
+func (s *setupAgentsStand) wantReferenceFiles(e *setupAgentsStand, got, want []setupAgentsProject, snapshot setupAgentsFileSnapshot, excluded ...string) {
 	s.t.Helper()
 	if got != nil && !reflect.DeepEqual(normalizeSetupAgents(s.t, got, s.root), normalizeSetupAgents(s.t, want, e.root)) {
 		g, _ := json.MarshalIndent(got, "", "  ")
@@ -309,7 +339,13 @@ func (s *setupAgentsStand) wantReference(e *setupAgentsStand, got, want []setupA
 	for _, project := range want {
 		for _, c := range []string{"A", "B"} {
 			a, b := s.copy(project.Project, c), e.copy(project.Project, c)
-			gotFiles, wantFiles := setupAgentFiles(s.t, a), setupAgentFiles(s.t, b)
+			gotFiles := setupAgentFiles(s.t, a)
+			var wantFiles map[string]string
+			if snapshot != nil {
+				wantFiles = snapshot.files(s.t, b)
+			} else {
+				wantFiles = setupAgentFiles(s.t, b)
+			}
 			for _, p := range excluded {
 				rel, err := filepath.Rel(a, p)
 				if err == nil {

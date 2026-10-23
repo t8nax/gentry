@@ -731,11 +731,11 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 	eachSetupAgents(t, false, func(t *testing.T, tool string, mode bool) {
 		s, e := changedSetupPair(t, tool, false)
 		want := e.reference("admin", "shop")
+		wantFiles := e.snapshotReference(want)
 		var wantSetup map[string]any
 		if mode {
-			// The reference is already fully deployed. A future automatic
-			// layout by this successful control cannot change the captured
-			// added/updated/removed results or the desired file oracle.
+			// Both JSON and file oracles are already immutable; a future
+			// automatic layout by this control cannot contaminate either.
 			wantSetup = e.updatedSetupControl(s.setupManifestVersion())
 		}
 		blocked, old := "", ""
@@ -807,9 +807,9 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 					c := *conflict
 					c.Worktree = e.copy("shop", "A")
 					expected.Conflicts = []setupAgentsConflict{c}
-					s.wantReference(e, out.Agents, []setupAgentsProject{expected}, setupConflictPhysical(*conflict))
+					s.wantReferenceFiles(e, out.Agents, []setupAgentsProject{expected}, wantFiles, setupConflictPhysical(*conflict))
 				} else {
-					s.wantReference(e, out.Agents, want[1:])
+					s.wantReferenceFiles(e, out.Agents, want[1:], wantFiles)
 				}
 			}
 			for _, f := range failures {
@@ -853,15 +853,21 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 		s.wantPluginCurrent()
 		if kind != "all" {
 			if conflict == nil {
-				s.wantReference(e, nil, want[1:])
+				s.wantReferenceFiles(e, nil, want[1:], wantFiles)
 			} else {
-				s.wantReference(e, nil, want[1:], setupConflictPhysical(*conflict))
+				s.wantReferenceFiles(e, nil, want[1:], wantFiles, setupConflictPhysical(*conflict))
 			}
 		}
 		if kind == "late_write" {
 			wantFileState(t, blocked, old)
 			got := setupAgentFiles(t, s.copy("admin", "A"))
-			expected := setupAgentFiles(t, e.copy("admin", "A"))
+			expected := wantFiles.files(t, e.copy("admin", "A"))
+			for rel, text := range got {
+				got[rel] = strings.ReplaceAll(text, s.root, "<stand>")
+			}
+			for rel, text := range expected {
+				expected[rel] = strings.ReplaceAll(text, e.root, "<stand>")
+			}
 			if !maps.Equal(got, expected) {
 				t.Errorf("changes to admin/A rolled back or not performed: got %#v want %#v", got, expected)
 			}

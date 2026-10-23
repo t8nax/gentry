@@ -75,7 +75,7 @@ func setupTool(tool string, switchDir bool) (contract.SetupOutput, setupExtra, *
 
 // setupClaude builds the integration with Claude Code in dir and registers
 // it in Claude Code.
-func setupClaude(dir string, switchDir bool) (contract.SetupOutput, *failure) {
+func setupClaude(dir string, switchDir bool) (out contract.SetupOutput, bad *failure) {
 	refuse := func(f failure) (contract.SetupOutput, *failure) { return contract.SetupOutput{}, &f }
 	program, err := claude.Program()
 	if err != nil {
@@ -103,6 +103,15 @@ func setupClaude(dir string, switchDir bool) (contract.SetupOutput, *failure) {
 	if err != nil {
 		return refuse(internal(err))
 	}
+	// Only a successful setup connects Claude Code. A failed first setup
+	// removes its new directory; a directory that was there is kept.
+	_, statErr := os.Stat(dir)
+	first := errors.Is(statErr, fs.ErrNotExist)
+	defer func() {
+		if bad != nil && first {
+			os.RemoveAll(dir)
+		}
+	}()
 	if err := claude.Write(dir, p); err != nil {
 		return refuse(ioError(dir, err))
 	}
@@ -124,7 +133,7 @@ func setupClaude(dir string, switchDir bool) (contract.SetupOutput, *failure) {
 	}
 	removeCallMarks()
 
-	out := contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled, Permission: &permission}
+	out = contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled, Permission: &permission}
 	if settings != "" {
 		out.Settings = &settings
 	}

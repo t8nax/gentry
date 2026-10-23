@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -407,5 +408,33 @@ func TestSetupAsksToDeploy(t *testing.T) {
 	}
 	if _, stdout, _ := run("setup", "claude"); stdout != msg.Text(msg.SetupUnchanged, "Claude Code")+"\n" {
 		t.Errorf("unchanged with a project:\n%s", stdout)
+	}
+}
+
+func TestSetupClaudeRollbackDirectory(t *testing.T) {
+	for _, fail := range []string{"marketplace-add", "install"} {
+		for _, existing := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/existing=%t", fail, existing), func(t *testing.T) {
+				root := t.TempDir()
+				t.Setenv(home.EnvVar, root)
+				t.Setenv(claude.ConfigDirEnv, filepath.Join(root, "claude-config"))
+				t.Setenv("FAKECLAUDE_STATE", filepath.Join(root, "fakeclaude-state.json"))
+				t.Setenv("FAKECLAUDE_FAIL", fail)
+				dir := filepath.Join(root, "integrations", "claude")
+				if existing {
+					if err := os.MkdirAll(dir, 0o755); err != nil {
+						t.Fatal(err)
+					}
+				}
+				_, bad := setupClaude(dir, false)
+				if bad == nil {
+					t.Fatal("setup succeeded; want the command failure")
+				}
+				_, err := os.Stat(dir)
+				if existing && err != nil || !existing && !errors.Is(err, fs.ErrNotExist) {
+					t.Errorf("integration directory after failure: existing=%t, stat error=%v", existing, err)
+				}
+			})
+		}
 	}
 }

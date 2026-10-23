@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -75,12 +76,24 @@ func setupTool(tool string, switchDir bool) (contract.SetupOutput, setupExtra, *
 
 // setupClaude builds the integration with Claude Code in dir and registers
 // it in Claude Code.
-func setupClaude(dir string, switchDir bool) (contract.SetupOutput, *failure) {
+func setupClaude(dir string, switchDir bool) (out contract.SetupOutput, bad *failure) {
 	refuse := func(f failure) (contract.SetupOutput, *failure) { return contract.SetupOutput{}, &f }
 	program, err := claude.Program()
 	if err != nil {
 		return refuse(toolNotFound(claude.Tool, "claude", toolTitles[claude.Tool]))
 	}
+	// The registration is shared by every data root using this Claude
+	// configuration. Keep the lock through rollback: its defers below must
+	// run before this release, so they cannot undo another successful setup.
+	lock, err := claude.LockSetup(context.Background(), dir)
+	if err != nil {
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			return refuse(ioError(pe.Path, pe.Err))
+		}
+		return refuse(internal(err))
+	}
+	defer lock.Release()
 	// The plugin serves every session of the tool, whatever the data root of
 	// this call: it is moved from an existing directory of another data root
 	// only by --switch, and before anything is written.
@@ -103,6 +116,15 @@ func setupClaude(dir string, switchDir bool) (contract.SetupOutput, *failure) {
 	if err != nil {
 		return refuse(internal(err))
 	}
+	// Only a successful setup connects Claude Code. A failed first setup
+	// removes its new directory; a directory that was there is kept.
+	_, statErr := os.Stat(dir)
+	first := errors.Is(statErr, fs.ErrNotExist)
+	defer func() {
+		if bad != nil && first {
+			os.RemoveAll(dir)
+		}
+	}()
 	if err := claude.Write(dir, p); err != nil {
 		return refuse(ioError(dir, err))
 	}
@@ -124,7 +146,7 @@ func setupClaude(dir string, switchDir bool) (contract.SetupOutput, *failure) {
 	}
 	removeCallMarks()
 
-	out := contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled, Permission: &permission}
+	out = contract.SetupOutput{Tool: claude.Tool, Dir: dir, PluginVersion: p.Version, Action: r.Action, Enabled: r.Enabled, Permission: &permission}
 	if settings != "" {
 		out.Settings = &settings
 	}

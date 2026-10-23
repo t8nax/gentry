@@ -80,8 +80,9 @@ func Registered(program string) (string, error) {
 // Register makes Claude Code serve the plugin built in dir with the given
 // version: it adds the marketplace (again, if it points elsewhere), installs
 // the plugin for the user or updates it. It does only what is missing and
-// leaves a plugin the operator disabled disabled.
-func Register(program, dir, version string) (Result, error) {
+// leaves a plugin the operator disabled disabled. A failure removes a
+// marketplace added by this call if none was registered before it.
+func Register(program, dir, version string) (res Result, err error) {
 	c := cli{program: program}
 	id := integration.Name + "@" + integration.Name
 
@@ -89,11 +90,12 @@ func Register(program, dir, version string) (Result, error) {
 	if err := c.list(&markets, "plugin", "marketplace", "list", "--json"); err != nil {
 		return Result{}, err
 	}
-	registered, disabled := false, false
+	registered, disabled, existed := false, false, false
 	for _, m := range markets {
 		if m.Name != integration.Name {
 			continue
 		}
+		existed = true
 		if SamePath(m.Path, dir) {
 			registered = true
 			continue
@@ -110,12 +112,23 @@ func Register(program, dir, version string) (Result, error) {
 			return Result{}, err
 		}
 	}
+	// Cleanup is best effort: the command that refused registration is the
+	// error the caller needs. Existing marketplaces are left in place.
+	added := false
+	defer func() {
+		if err != nil && added && !existed {
+			c.run("plugin", "marketplace", "remove", integration.Name, "--json")
+		}
+	}()
 	if registered {
 		if err := c.run("plugin", "marketplace", "update", integration.Name, "--json"); err != nil {
 			return Result{}, err
 		}
-	} else if err := c.run("plugin", "marketplace", "add", dir, "--json"); err != nil {
-		return Result{}, err
+	} else {
+		if err := c.run("plugin", "marketplace", "add", dir, "--json"); err != nil {
+			return Result{}, err
+		}
+		added = true
 	}
 
 	p, found, err := c.plugin(id)

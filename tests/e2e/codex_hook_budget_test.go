@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -38,7 +39,9 @@ func TestHookCodexBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve gentry program %s: %v", bin, err)
 	}
-	if strings.ContainsAny(program, " \t") {
+	if runtime.GOOS == "windows" {
+		program = "& '" + strings.NewReplacer("'", "''", "‘", "‘‘", "’", "’’").Replace(program) + "'"
+	} else if strings.ContainsAny(program, " \t") {
 		program = `"` + program + `"`
 	}
 	want := testkit.Lines(

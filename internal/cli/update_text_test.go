@@ -3,11 +3,13 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/internal/adapter/claude"
 	"github.com/t8nax/gentry/internal/agents"
+	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/msg"
 	"github.com/t8nax/gentry/internal/releases"
 	"github.com/t8nax/gentry/internal/update"
@@ -293,6 +295,47 @@ func TestUpdateRefusalText(t *testing.T) {
 	// A program that could not get its name back is told with the reason.
 	restore := updateRefusal(&releases.WriteError{Program: installed, Err: errors.New("busy"), Restore: errors.New("denied")})
 	wantFail(t, "program not given its name back", restore, lines(msg.Text(msg.ErrProgramWrite, installed, "busy; denied")), "")
+}
+
+// TestUpdateProgramShell checks the absolute command of the refusal in each
+// channel: Codex on Windows uses PowerShell, other sessions keep their form.
+// Paths in the refusal remain data, without the quoting of the command.
+func TestUpdateProgramShell(t *testing.T) {
+	for _, session := range []struct {
+		name, codex, claude string
+	}{
+		{"outside", "", ""},
+		{"codex", "thread", ""},
+		{"claude", "", "1"},
+	} {
+		t.Run(session.name, func(t *testing.T) {
+			t.Setenv(caller.CodexThreadEnv, session.codex)
+			t.Setenv(caller.ClaudeCodeEnv, session.claude)
+			for _, p := range []struct {
+				path, old, powershell string
+			}{
+				{`C:\Gentry\bin\gentry.exe`, `C:\Gentry\bin\gentry.exe`, `& 'C:\Gentry\bin\gentry.exe'`},
+				{`C:\Gentry data\bin\gentry.exe`, `"C:\Gentry data\bin\gentry.exe"`, `& 'C:\Gentry data\bin\gentry.exe'`},
+				{"C:\\Касса & (tools); $HOME `tick 'quote'\\gentry.exe", "\"C:\\Касса & (tools); $HOME `tick 'quote'\\gentry.exe\"", "& 'C:\\Касса & (tools); $HOME `tick ''quote''\\gentry.exe'"},
+				{`C:\Касса ‘left’ “double”\gentry.exe`, `"C:\Касса ‘left’ “double”\gentry.exe"`, `& 'C:\Касса ‘‘left’’ “double”\gentry.exe'`},
+			} {
+				f := programElsewhere("running", p.path)
+				command := p.old
+				if runtime.GOOS == "windows" && session.codex != "" {
+					command = p.powershell
+				}
+				want := hintLineOf(msg.HintUpdateProgram, command+" update")
+				for _, ch := range []channel{cliChannel, agentChannel, jsonChannel} {
+					if got, ok := f.hints[0].render(ch); !ok || got != want {
+						t.Errorf("%s in channel %d: %q %v, want %q", p.path, ch, got, ok, want)
+					}
+				}
+				if f.details["program"] != "running" || f.details["installed"] != p.path {
+					t.Errorf("paths became commands: %v", f.details)
+				}
+			}
+		})
+	}
 }
 
 // TestUpdateFailures checks that the failures after the program is

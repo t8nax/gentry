@@ -74,9 +74,12 @@ func TestCodexPowerShellHints(t *testing.T) {
 		r := s.runIn(other, s.root, "update", "--json")
 		e := readHintError(t, r, other, s.program())
 		text := s.runIn(other, s.root, "update")
-		message, _, ok := strings.Cut(text.stderr, "\n\n")
+		message, textHint, ok := strings.Cut(text.stderr, "\n\n")
 		if !ok || e.Error.Message != message {
 			t.Errorf("JSON changed the refusal message: %q; text: %q", e.Error.Message, text.stderr)
+		}
+		if e.Error.Hint != strings.TrimSuffix(textHint, "\n") {
+			t.Errorf("JSON changed the complete hint: %q; text block: %q", e.Error.Hint, textHint)
 		}
 		wantHintCommand(t, hintCommand(t, e.Error.Hint), psHintPath(s.program())+" update")
 		fromJSON := wantHintUpdate(t, s, hintCommand(t, e.Error.Hint))
@@ -197,18 +200,20 @@ func TestCodexPowerShellHints(t *testing.T) {
 
 	t.Run("untrusted_pool_order", func(t *testing.T) {
 		windowsHints(t)
-		trustWarning := testkit.Lines(
-			"Рабочая копия не доверена в Codex: субагенты флоу в этой сессии недоступны.",
-			"Сообщить оператору.",
-		)
 		for _, active := range []bool{false, true} {
 			t.Run(map[bool]string{true: "active", false: "free"}[active], func(t *testing.T) {
 				s, dir := hintPool(t, active, "untrusted")
+				intro := poolHintIntro(dir, active)
 				matching := hintHook(s, dir, "codex")
-				if matching.code != 0 || matching.stderr != "" || !strings.HasPrefix(matching.stdout, trustWarning+"\nПроект: ") {
-					t.Fatalf("matching plugin lost the trust warning or introduction: %s", matching)
+				// The introduction is independent of the control output, so an
+				// active worktree incorrectly shown as free cannot be its own
+				// expectation. The unchanged warning's wording is checked by
+				// TestIntroCodexTrust/untrusted; here only its boundaries matter.
+				trustWarning, ok := strings.CutSuffix(matching.stdout, "\n"+intro)
+				warningLines := strings.Split(trustWarning, "\n")
+				if matching.code != 0 || matching.stderr != "" || !ok || len(warningLines) != 3 || warningLines[0] == "" || warningLines[1] == "" || warningLines[2] != "" {
+					t.Fatalf("matching plugin lost the two-line trust warning or the expected introduction: %s\nwant introduction:\n%s", matching, intro)
 				}
-				intro := strings.TrimPrefix(matching.stdout, trustWarning+"\n")
 				s.staleCodexPlugin()
 				before := hintData(t, s)
 				outside := hintHook(s, s.root, "codex")
@@ -246,11 +251,14 @@ func TestCodexPowerShellHints(t *testing.T) {
 		command := updateHintCommand(t, text)
 		const install = "irm https://github.com/t8nax/gentry/releases/latest/download/install.ps1 | iex"
 		wantHintCommand(t, command, install)
-		_, textHint, ok := strings.Cut(text.stderr, "\n\n")
+		textMessage, textHint, ok := strings.Cut(text.stderr, "\n\n")
 		if !ok || textHint != "Установить Gentry: "+install+"\n" {
 			t.Errorf("missing-program hint: %q", textHint)
 		}
 		e := readHintError(t, s.runIn(other, s.root, "update", "--json"), other, "")
+		if textMessage != e.Error.Message {
+			t.Errorf("text and JSON differ in the missing-program message: text %q; JSON %q", textMessage, e.Error.Message)
+		}
 		if e.Error.Hint+"\n" != textHint || !strings.HasSuffix(e.Error.Message, "\nПрограмма в папке данных: не установлена") {
 			t.Errorf("missing-program JSON: %+v", e.Error)
 		}

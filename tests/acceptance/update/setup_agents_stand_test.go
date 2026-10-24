@@ -1,6 +1,8 @@
 package update_test
 
 import (
+	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -10,10 +12,13 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"testing/fstest"
 
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/tests/testkit"
+	"github.com/t8nax/gentry/tests/testkit/toml"
 )
 
 // GEN-59 deliberately describes its JSON here, without importing new production
@@ -102,6 +107,213 @@ func newSetupAgentsStand(t *testing.T, tool string, both, connected bool) *setup
 			s.mustIn(s.root, "setup", tool)
 		}
 	}
+	template := setupAgentsTemplates[tool]
+	if both {
+		template = setupAgentsTemplates["both"]
+	}
+	template.once.Do(func() {
+		// Only preparation is shared. Capture the closed project graph after
+		// real registration and flow commands, never a tested setup result.
+		prepared := buildSetupAgentsStand(t, tool, both)
+		template.root = prepared.root
+		template.files = setupAgentsGraph(t, prepared)
+		if slices.Contains(prepared.tools, "codex") {
+			projects, _ := prepared.codexConfig()["projects"].(map[string]any)
+			if len(projects) != 4 {
+				t.Fatalf("stand: registration did not trust all four copies: %#v", projects)
+			}
+			template.trust = map[string]string{}
+			for path, raw := range projects {
+				entry, _ := raw.(map[string]any)
+				level, _ := entry["trust_level"].(string)
+				if level != "trusted" {
+					t.Fatalf("stand: registration left %s untrusted: %#v", path, raw)
+				}
+				template.trust[path] = level
+			}
+		}
+		// A surviving absolute link would now fail instead of silently reading
+		// or modifying the source graph. Only the immutable bytes remain.
+		if err := os.RemoveAll(prepared.root); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if template.files == nil {
+		t.Fatal("stand: preparation of the project graph did not complete")
+	}
+	if err := os.CopyFS(s.root, template.files); err != nil {
+		t.Fatal(err)
+	}
+	s.relocateGraph(template.root)
+	if connected && slices.Contains(s.tools, "codex") {
+		// Registration trusts the copies when Codex is already connected.
+		// Carry over just those records, produced by real registration above;
+		// every other setting and the plugin fingerprint came from this
+		// stand's actual initial setup, before its project pool was present.
+		s.editCodexConfig(func(cfg map[string]any) {
+			for path, level := range template.trust {
+				toml.Set(cfg, level, "projects", strings.ReplaceAll(path, template.root, s.root), "trust_level")
+			}
+		})
+	}
+	return s
+}
+
+type setupAgentsTemplate struct {
+	once  sync.Once
+	root  string
+	files fstest.MapFS // immutable bytes; CopyFS creates new files, not hard links
+	trust map[string]string
+}
+
+var setupAgentsTemplates = map[string]*setupAgentsTemplate{
+	"claude": {}, "codex": {}, "both": {},
+}
+
+// setupAgentsGraph retains only the reusable project graph. Binaries, homes,
+// tool settings and integrations belong to each stand and are not retained.
+// The snapshot lives in memory until package exit, independently of the first
+// test's temporary directory and cleanup.
+func setupAgentsGraph(t *testing.T, s *setupAgentsStand) fstest.MapFS {
+	t.Helper()
+	files := fstest.MapFS{}
+	for _, name := range []string{"admin", "admin-B", "admin-knowledge", "shop", "shop-B", "shop-knowledge", "data/process", "data/state"} {
+		err := filepath.WalkDir(filepath.Join(s.root, filepath.FromSlash(name)), func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(s.root, p)
+			if err != nil {
+				return err
+			}
+			f := &fstest.MapFile{Mode: info.Mode()}
+			if !d.IsDir() {
+				if !info.Mode().IsRegular() {
+					return fmt.Errorf("stand: project graph contains a non-regular file: %s", p)
+				}
+				if strings.HasSuffix(p, "state.db-wal") || strings.HasSuffix(p, "state.db-shm") {
+					return fmt.Errorf("stand: state database is not closed: %s", p)
+				}
+				f.Data, err = os.ReadFile(p)
+				if err != nil {
+					return err
+				}
+			}
+			files[filepath.ToSlash(rel)] = f
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return files
+}
+
+// relocateGraph changes only the fresh copy. Git object/index bytes stay
+// untouched; their names are relative. Text settings (notably clone origins),
+// instructions and event JSON are relocated with their respective escaping.
+func (s *setupAgentsStand) relocateGraph(from string) {
+	s.t.Helper()
+	encoded := func(p string) string { b, _ := json.Marshal(p); return string(b[1 : len(b)-1]) }
+	replace := strings.NewReplacer(encoded(from), encoded(s.root), from, s.root, filepath.ToSlash(from), filepath.ToSlash(s.root))
+	err := filepath.WalkDir(s.root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "objects" && filepath.Base(filepath.Dir(p)) == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if p == s.stateStore() || filepath.Base(filepath.Dir(p)) == ".git" && d.Name() == "index" || strings.HasPrefix(p, s.bin()+string(filepath.Separator)) {
+			return nil
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if !bytes.Contains(b, []byte(from)) && !bytes.Contains(b, []byte(filepath.ToSlash(from))) && !bytes.Contains(b, []byte(encoded(from))) {
+			return nil
+		}
+		return os.WriteFile(p, []byte(replace.Replace(string(b))), 0o644)
+	})
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", s.stateStore())
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for _, update := range []struct {
+		query string
+		args  []any
+		count int64
+	}{
+		{`UPDATE projects SET knowledge = replace(knowledge, ?, ?)`, []any{from, s.root}, 2},
+		{`UPDATE worktrees SET path = replace(path, ?, ?)`, []any{from, s.root}, 4},
+		{`UPDATE events SET data = replace(replace(replace(data, ?, ?), ?, ?), ?, ?)`, []any{encoded(from), encoded(s.root), from, s.root, filepath.ToSlash(from), filepath.ToSlash(s.root)}, -1},
+	} {
+		res, err := tx.Exec(update.query, update.args...)
+		if err != nil {
+			s.t.Fatal(err)
+		}
+		if n, err := res.RowsAffected(); err != nil || update.count >= 0 && n != update.count {
+			s.t.Fatalf("stand: relocation affected %d rows, want %d: %v", n, update.count, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		s.t.Fatal(err)
+	}
+	var tasks int
+	if err := db.QueryRow(`SELECT (SELECT count(*) FROM tasks) + (SELECT count(*) FROM flow_snapshots)`).Scan(&tasks); err != nil || tasks != 0 {
+		s.t.Fatalf("stand: project graph contains tasks or task snapshots: %d (%v)", tasks, err)
+	}
+	var stale int
+	if err := db.QueryRow(`SELECT count(*) FROM events WHERE instr(data, ?) > 0 OR instr(data, ?) > 0 OR instr(data, ?) > 0`, from, filepath.ToSlash(from), encoded(from)).Scan(&stale); err != nil || stale != 0 {
+		s.t.Fatalf("stand: event data retains template paths: %d (%v)", stale, err)
+	}
+	rows, err := db.Query(`SELECT knowledge FROM projects UNION ALL SELECT path FROM worktrees`)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			s.t.Fatal(err)
+		}
+		rel, err := filepath.Rel(s.root, p)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || !testkit.FileExists(filepath.Join(p, ".git")) {
+			s.t.Fatalf("stand: project path does not point to its own repository: %s (%v)", p, err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		s.t.Fatal(err)
+	}
+}
+
+func buildSetupAgentsStand(t *testing.T, tool string, both bool) *setupAgentsStand {
+	t.Helper()
+	s := &setupAgentsStand{stand: installedStand(t, latest, false), tool: tool, tools: []string{tool}}
+	if both {
+		s.tools = []string{"claude", "codex"}
+	}
+	writeFile(t, filepath.Join(s.claudeConfig, "settings.json"), `{"permissions":{"allow":["mcp__plugin_gentry_core"]}}`+"\n")
+	s.useCodex()
+	for _, tool := range s.tools {
+		s.mustIn(s.root, "setup", tool)
+	}
 	// Register both copies before applying the final flow. The general project
 	// stand applies a reviewer-only flow first, which this stand would replace
 	// immediately and deploy twice more while adding B and the final agents.
@@ -126,12 +338,10 @@ func newSetupAgentsStand(t *testing.T, tool string, both, connected bool) *setup
 	for _, project := range []string{"admin", "shop"} {
 		writeFile(t, filepath.Join(s.data, "process", project, "flow", "stages", "implementation.yaml"), "title: Реализация\nexit: изменения сделаны, тесты проходят\nexecutor: coder\n")
 		s.mustIn(s.copy(project, "A"), "flow", "apply")
-		if connected {
-			for _, copy := range s.copies(project) {
-				for _, tool := range s.tools {
-					if !testkit.FileExists(setupAgentFile(copy, tool, "reviewer")) {
-						t.Fatalf("stand: no subagent reviewer of %s in %s", tool, copy)
-					}
+		for _, copy := range s.copies(project) {
+			for _, tool := range s.tools {
+				if !testkit.FileExists(setupAgentFile(copy, tool, "reviewer")) {
+					t.Fatalf("stand: no subagent reviewer of %s in %s", tool, copy)
 				}
 			}
 		}

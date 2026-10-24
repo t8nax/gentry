@@ -727,6 +727,34 @@ func TestSetupAgents59AllProjectsFail(t *testing.T) { setupAgentsProjectFailureC
 // Case: a failure and a conflict in different projects.
 func TestSetupAgents59FailureAndConflict(t *testing.T) { setupAgentsProjectFailureCase(t, "conflict") }
 
+// The independent deploy has already laid out its files, while setup sees the
+// stale files. Their ls-files pathspecs (and map iteration order) can differ;
+// only that service argument list is normalized. Keep the command, its known
+// error envelope and the complete underlying git diagnostic in the comparison.
+func normalizeSetupAgentsGitReason(t *testing.T, tool, reason string) string {
+	t.Helper()
+	const prefix = "Команда «git ls-files -z --full-name -- "
+	const separator = "» завершилась ошибкой: "
+	command, ok := strings.CutPrefix(reason, prefix)
+	if !ok || strings.ContainsAny(reason, "\r\n") {
+		t.Fatalf("unexpected git failure envelope: %q", reason)
+	}
+	args, diagnostic, ok := strings.Cut(command, separator)
+	if !ok || !strings.HasPrefix(diagnostic, "fatal: not a git repository") {
+		t.Fatalf("missing original not-a-repository git diagnostic: %q", reason)
+	}
+	var allowed []string
+	for _, name := range []string{"coder", "reviewer", "obsolete", "personal"} {
+		allowed = append(allowed, ":(top,literal)"+setupConflictFile(tool, name))
+	}
+	for _, arg := range strings.Split(args, " ") {
+		if !slices.Contains(allowed, arg) {
+			t.Fatalf("unexpected ls-files pathspec in git failure: %q", reason)
+		}
+	}
+	return prefix + "<agent paths>" + separator + diagnostic
+}
+
 func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 	eachSetupAgents(t, false, func(t *testing.T, tool string, mode bool) {
 		s, e := changedSetupPair(t, tool, false)
@@ -760,8 +788,8 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 			failed = append(failed, "shop")
 		}
 		// Obtain the original failure from the independent command under the
-		// same fault. This checks both the stable code and the complete reason,
-		// without assuming how the OS or git words its error on this platform.
+		// same fault. Compare its code and complete reason, apart from git's
+		// service pathspec list, without assuming the full OS/git diagnostic.
 		var original []setupAgentsFailure
 		for _, project := range failed {
 			if kind == "late_write" {
@@ -780,6 +808,12 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 				t.Fatalf("fault did not refuse reference deployment: %s", control)
 			}
 			reason := strings.Split(errOut.Error.Message, "\n")[0]
+			if kind != "late_write" {
+				if errOut.Error.Code != "git_failed" {
+					t.Fatalf("broken repository did not return git_failed: %s", control)
+				}
+				reason = normalizeSetupAgentsGitReason(t, tool, reason)
+			}
 			original = append(original, setupAgentsFailure{Project: project, Reason: strings.ReplaceAll(reason, e.root, s.root), Code: errOut.Error.Code})
 		}
 		r := s.setup(mode)
@@ -812,12 +846,16 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 					s.wantReferenceFiles(e, out.Agents, want[1:], wantFiles)
 				}
 			}
-			for _, f := range failures {
+			comparable := slices.Clone(failures)
+			for i, f := range failures {
 				if kind == "late_write" && !strings.Contains(f.Reason, blocked) {
 					t.Errorf("write failure does not name reviewer: %+v", f)
 				}
+				if kind != "late_write" {
+					comparable[i].Reason = normalizeSetupAgentsGitReason(t, tool, f.Reason)
+				}
 			}
-			if !reflect.DeepEqual(failures, original) {
+			if !reflect.DeepEqual(comparable, original) {
 				t.Errorf("original failure lost: got %+v, want %+v", failures, original)
 			}
 		} else {
@@ -845,7 +883,17 @@ func setupAgentsProjectFailureCase(t *testing.T, kind string) {
 					hints = append(hints, "Повторить раскладку: gentry agents deploy --project "+p)
 				}
 				text += "\n" + testkit.Lines(hints...)
-				if r.stderr != text {
+				stderr := r.stderr
+				if kind != "late_write" {
+					lines := strings.Split(stderr, "\n")
+					for i, line := range lines {
+						if reason, ok := strings.CutPrefix(line, "Причина: "); ok {
+							lines[i] = "Причина: " + normalizeSetupAgentsGitReason(t, tool, reason)
+						}
+					}
+					stderr = strings.Join(lines, "\n")
+				}
+				if stderr != text {
 					t.Errorf("stderr:\n%s\nwant:\n%s", r.stderr, text)
 				}
 			}

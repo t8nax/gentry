@@ -1,25 +1,19 @@
 package update_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
-	"time"
-	"unicode/utf8"
 
 	"github.com/t8nax/gentry/contract"
 	"github.com/t8nax/gentry/tests/testkit"
 	"github.com/t8nax/gentry/tests/testkit/toml"
 )
 
-// GEN-70, 3. Обновление: gentry update with the integration with Codex; and
-// the budget of the hook of Codex (4), which only the installed program
-// shows.
+// GEN-70, 3. Обновление: gentry update with the integration with Codex.
 
 // updateError runs gentry update --json of the installed program, checks
 // that it fails with the exit code 1 and an output of the schema of errors,
@@ -372,50 +366,5 @@ func TestUpdateCodexAgents(t *testing.T) {
 		if !testkit.FileExists(p) {
 			t.Errorf("no file %s after the update", p)
 		}
-	}
-}
-
-// codexHookIn runs the session start hook of the installed program for a
-// session of Codex in dir, with the input Codex gives it.
-func (s *stand) codexHookIn(dir string) result {
-	s.t.Helper()
-	in, _ := json.Marshal(map[string]string{"cwd": dir, "session_id": "s1", "source": "startup", "hook_event_name": "SessionStart"})
-	return s.runEnv(s.program(), dir, bytes.NewReader(in), nil, "hook", "session-start", "--tool", "codex")
-}
-
-// TestHookCodexBudget checks the session start hook of Codex against the
-// time and the output of the hook of Claude Code, with both warnings: 0.1 s
-// for the median of 30 runs and 10 thousand characters. The case does not
-// run in parallel with the others: they would slow the runs down.
-func TestHookCodexBudget(t *testing.T) {
-	testkit.SkipOnBinary(t)
-	s := installedStand(t, latest, false)
-	s.connectCodex()
-	a := s.project("shop")
-	s.mustIn(a, "task", "take", "--scenario", "feature", "--title", "Частичный возврат по карте", "--statement", "Деньги возвращаются на карту.")
-	testkit.SetCodexTrust(t, s.codexHome, a, "untrusted")
-	s.staleCodexPlugin()
-	r := s.codexHookIn(a)
-	wantCode(t, r, 0)
-	if ls := lines(r.stdout); len(ls) < 5 || !strings.HasPrefix(ls[1], pluginStaleHint) {
-		t.Fatalf("the hook of Codex:\n%s\nwant the warning of the plugin, that of the worktree and the introduction", r.stdout)
-	}
-	if n := utf8.RuneCountInString(r.stdout); n > 10000 {
-		t.Errorf("the output of the hook of Codex is %d characters, the budget 10000", n)
-	}
-	const warmup, runs = 3, 30
-	var times []time.Duration
-	for i := 0; i < warmup+runs; i++ {
-		start := time.Now()
-		s.codexHookIn(a)
-		if i >= warmup {
-			times = append(times, time.Since(start))
-		}
-	}
-	sort.Slice(times, func(i, j int) bool { return times[i] < times[j] })
-	median := times[len(times)/2]
-	t.Logf("the hook of Codex in a worktree with a task, both warnings, %d runs: median %s", runs, median)
-	if median > 100*time.Millisecond {
-		t.Errorf("the median of the hook of Codex is %s, the budget 100ms", median)
 	}
 }

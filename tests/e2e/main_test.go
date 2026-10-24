@@ -13,6 +13,7 @@ import (
 
 	"github.com/t8nax/gentry/internal/gittest"
 	"github.com/t8nax/gentry/internal/home"
+	"github.com/t8nax/gentry/tests/testkit"
 )
 
 // TestMain points the data root and the user's home at a temporary directory,
@@ -39,6 +40,7 @@ func isolated(m *testing.M) int {
 		panic(err)
 	}
 	defer os.RemoveAll(dir)
+	defer testkit.RemoveFakeCodex()
 	testDir = dir
 	os.Setenv(home.EnvVar, dir)
 	os.Setenv("HOME", dir)

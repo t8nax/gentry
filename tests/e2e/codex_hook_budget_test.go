@@ -34,7 +34,10 @@ func TestHookCodexBudget(t *testing.T) {
 
 	// Acceptance tests in task own the words of both warnings and the
 	// introduction. Here the complete output must still contain them in order.
-	program := bin
+	program, err := filepath.EvalSymlinks(bin)
+	if err != nil {
+		t.Fatalf("resolve gentry program %s: %v", bin, err)
+	}
 	if strings.ContainsAny(program, " \t") {
 		program = `"` + program + `"`
 	}

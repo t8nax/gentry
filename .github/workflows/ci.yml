@@ -23,9 +23,8 @@ jobs:
   # Windows. On macOS they run in the job of the unit tests instead: the plan
   # Free runs at most 5 jobs on macOS at once, and a run with a fifth one
   # there would take them all, so that another run waited for it. The
-  # timeout leaves room over the longest suite, the acceptance tests on
-  # Linux with the areas update and release, and for the slower runners of
-  # Windows.
+  # acceptance job leaves room for both passes, their release builds and
+  # setup on the slower runners of Windows; the other suites keep 10 minutes.
   test:
     name: ${{ matrix.os }} / ${{ matrix.title || matrix.suite }}
     strategy:
@@ -45,7 +44,7 @@ jobs:
             suite: checks
             checks: true
     runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 10
+    timeout-minutes: ${{ matrix.suite == 'acceptance' && 30 || 10 }}
     defaults:
       run:
         shell: bash
@@ -142,7 +141,7 @@ jobs:
         if: matrix.suite == 'acceptance'
         run: |
           status=0
-          GENTRY_TEST_BINARY="$ACCEPTANCE_BINARY" go test -count=1 ./tests/acceptance/... || status=$?
+          GENTRY_TEST_BINARY="$ACCEPTANCE_BINARY" go test -count=1 -timeout 20m ./tests/acceptance/... || status=$?
           test -d ./tests/acceptance
           areas=()
           for area in ./tests/acceptance/*; do
@@ -160,7 +159,7 @@ jobs:
             fi
           done
           if [ "${#areas[@]}" -gt 0 ]; then
-            go test -count=1 "${areas[@]}" || status=$?
+            go test -count=1 -timeout 20m "${areas[@]}" || status=$?
           fi
           exit "$status"
 

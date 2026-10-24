@@ -373,6 +373,12 @@ func (s *stand) keepUserPath() []string {
 // stand, and the variables of the process the case sets or removes.
 func (s *stand) environ() []string {
 	drop := []string{"HOME", "USERPROFILE", testkit.HomeEnv, releasesEnv, "XDG_CONFIG_HOME", "ZDOTDIR", "SHELL"}
+	if s.shell != sh {
+		// Let each PowerShell build its own module path: a path inherited
+		// from PowerShell 7 hides built-in modules of Windows PowerShell
+		// when it is started through an intermediate process such as Go.
+		drop = append(drop, "PSModulePath")
+	}
 	if s.path != "" {
 		drop = append(drop, "PATH")
 	}

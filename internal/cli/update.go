@@ -14,6 +14,7 @@ import (
 	"github.com/t8nax/gentry/internal/adapter/codex"
 	"github.com/t8nax/gentry/internal/agents"
 	"github.com/t8nax/gentry/internal/buildinfo"
+	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/home"
 	"github.com/t8nax/gentry/internal/integration"
 	"github.com/t8nax/gentry/internal/msg"
@@ -559,7 +560,11 @@ func programElsewhere(running, installed string) failure {
 	if installed != "" {
 		details["installed"] = installed
 		shown = installed
-		h = hintOf(msg.HintUpdateProgram).by(installed)
+		tool := ""
+		if os.Getenv(caller.CodexThreadEnv) != "" {
+			tool = codex.Tool
+		}
+		h = hintOf(msg.HintUpdateProgram).by(installed, tool)
 	}
 	return failure{
 		exit:    contract.ExitError,

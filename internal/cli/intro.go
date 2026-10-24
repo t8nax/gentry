@@ -44,7 +44,7 @@ func introduce(w io.Writer, in hook.Input) error {
 	}
 	if ok {
 		fmt.Fprintln(&stale, msg.Text(msg.IntroPluginStale))
-		fmt.Fprintln(&stale, introHint(hintOf(msg.HintIntroPluginStale).set("tool", in.Tool).by(exe)))
+		fmt.Fprintln(&stale, introHint(hintOf(msg.HintIntroPluginStale).set("tool", in.Tool).by(exe, in.Tool)))
 	}
 	// The warning does not depend on the state store: it stays when the
 	// introduction cannot be read.

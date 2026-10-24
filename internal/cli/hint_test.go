@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/t8nax/gentry/internal/caller"
 	"github.com/t8nax/gentry/internal/msg"
 )
 
@@ -46,9 +48,9 @@ func TestHintChannels(t *testing.T) {
 		{hintOf(msg.HintTitle), msg.Text(msg.HintTitle), msg.Text(msg.HintTitle)},
 		// A command by the path of the program is the same in every channel:
 		// the agent runs it in a shell; a path with a space is quoted.
-		{hintOf(msg.HintIntroPluginStale).set("tool", "claude").by("/home/anna/.gentry/bin/gentry"),
+		{hintOf(msg.HintIntroPluginStale).set("tool", "claude").by("/home/anna/.gentry/bin/gentry", "claude"),
 			hintLineOf(msg.HintIntroPluginStale, "/home/anna/.gentry/bin/gentry setup claude"), hintLineOf(msg.HintIntroPluginStale, "/home/anna/.gentry/bin/gentry setup claude")},
-		{hintOf(msg.HintIntroPluginStale).set("tool", "claude").by("/home/anna/Gentry data/bin/gentry"),
+		{hintOf(msg.HintIntroPluginStale).set("tool", "claude").by("/home/anna/Gentry data/bin/gentry", "claude"),
 			hintLineOf(msg.HintIntroPluginStale, `"/home/anna/Gentry data/bin/gentry" setup claude`), hintLineOf(msg.HintIntroPluginStale, `"/home/anna/Gentry data/bin/gentry" setup claude`)},
 		// The words of a hint for another command, alone.
 		{hintOf(msg.HintToolNotFound, "Claude Code").instead("task show"),
@@ -67,6 +69,34 @@ func TestHintChannels(t *testing.T) {
 				t.Errorf("%s in channel %d: %q %v, want %q", c.h.label, ch.channel, got, ok, ch.want)
 			}
 		}
+	}
+}
+
+// TestHintProgramTool checks that the explicit recipient chooses the shell
+// of an absolute command, even when the shell session belongs to another tool.
+func TestHintProgramTool(t *testing.T) {
+	for _, session := range []string{"outside", "codex", "claude"} {
+		t.Run(session, func(t *testing.T) {
+			t.Setenv(caller.CodexThreadEnv, "")
+			t.Setenv(caller.ClaudeCodeEnv, "")
+			if session == "codex" {
+				t.Setenv(caller.CodexThreadEnv, "thread")
+			}
+			if session == "claude" {
+				t.Setenv(caller.ClaudeCodeEnv, "1")
+			}
+			for _, tool := range []string{"codex", "claude"} {
+				h := hintOf(msg.HintIntroPluginStale).set("tool", tool).by(`C:\Tools 'one' ‘two’\gentry.exe`, tool)
+				command := `"C:\Tools 'one' ‘two’\gentry.exe" setup ` + tool
+				if runtime.GOOS == "windows" && tool == "codex" {
+					command = `& 'C:\Tools ''one'' ‘‘two’’\gentry.exe' setup codex`
+				}
+				want := hintLineOf(msg.HintIntroPluginStale, command)
+				if got := introHint(h); got != want {
+					t.Errorf("%s: %q, want %q", tool, got, want)
+				}
+			}
+		})
 	}
 }
 

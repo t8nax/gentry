@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -136,7 +137,13 @@ func TestIntroCodexPlugin(t *testing.T) {
 		// The words of the warning are those of the hook of Claude Code, which
 		// TestIntroStalePlugin states; the hint names setup codex with the
 		// full path of the program the commands run on.
-		want := testkit.Lines(msg.Text(msg.IntroPluginStale), msg.Text(msg.HintIntroPluginStale)+": "+testkit.Executable(t)+" setup codex") + "\n" + intro
+		program := testkit.Executable(t)
+		if runtime.GOOS == "windows" {
+			program = "& '" + strings.NewReplacer("'", "''", "‘", "‘‘", "’", "’’").Replace(program) + "'"
+		} else if strings.ContainsAny(program, " \t") {
+			program = `"` + program + `"`
+		}
+		want := testkit.Lines(msg.Text(msg.IntroPluginStale), msg.Text(msg.HintIntroPluginStale)+": "+program+" setup codex") + "\n" + intro
 		if got := codexIntro(t, a); got != want {
 			t.Errorf("hook in the worktree:\n%s\nwant:\n%s", got, want)
 		}

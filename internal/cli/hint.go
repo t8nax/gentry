@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"runtime"
 	"slices"
 	"strings"
 
+	"github.com/t8nax/gentry/internal/adapter/codex"
 	"github.com/t8nax/gentry/internal/msg"
 )
 
@@ -29,6 +31,9 @@ type hint struct {
 	// program is the path of the program the command is named by instead of
 	// gentry; empty for gentry.
 	program string
+	// powershell invokes program as a literal path in PowerShell, which
+	// Codex uses on Windows.
+	powershell bool
 }
 
 // param is an argument or a flag of the command of a hint, named as the field
@@ -157,9 +162,11 @@ func (h hint) set(field, v string) hint {
 // by names the command of h by the path of the program instead of gentry,
 // in every channel, the agent's too: the agent runs it in a shell, and a
 // session of an AI tool may have no gentry in PATH. Such a command is one
-// of the command line, which the agent has no tool of.
-func (h hint) by(program string) hint {
+// of the command line, which the agent has no tool of. The AI tool chooses
+// the shell: Codex on Windows runs the command in PowerShell.
+func (h hint) by(program, tool string) hint {
 	h.program = program
+	h.powershell = runtime.GOOS == "windows" && tool == codex.Tool
 	return h
 }
 
@@ -252,7 +259,7 @@ func (h hint) render(ch channel) (string, bool) {
 func (h hint) commandLine(c command) string {
 	words := []string{"gentry", h.cmd}
 	if h.program != "" {
-		words[0] = shellPath(h.program)
+		words[0] = shellPath(h.program, h.powershell)
 	}
 	for _, p := range h.params {
 		if p.flag {
@@ -271,8 +278,13 @@ func (h hint) commandLine(c command) string {
 
 // shellPath is the path of a program as a shell takes it: in double quotes
 // if it has a space or a tab, without which the shell would split it; as it
-// is otherwise, for the operator to read and copy.
-func shellPath(p string) string {
+// is otherwise, for the operator to read and copy. PowerShell always needs
+// the call operator and a literal string; its three single quotes must be
+// doubled, while all other characters of the path stay as they are.
+func shellPath(p string, powershell bool) string {
+	if powershell {
+		return "& '" + strings.NewReplacer("'", "''", "‘", "‘‘", "’", "’’").Replace(p) + "'"
+	}
 	if strings.ContainsAny(p, " \t") {
 		return `"` + p + `"`
 	}

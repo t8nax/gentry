@@ -383,22 +383,12 @@ func readImports(root, top, module string, tests bool) (map[string]map[string][]
 		if err != nil {
 			return err
 		}
-		for _, group := range f.Comments {
-			if group.Pos() > f.Package {
-				break
-			}
-			for _, c := range group.List {
-				if !constraint.IsGoBuild(c.Text) {
-					continue
-				}
-				expr, err := constraint.Parse(c.Text)
-				if err != nil {
-					return fmt.Errorf("%s: %w", p, err)
-				}
-				if tag, ok := expr.(*constraint.TagExpr); ok && tag.Tag == "ignore" {
-					return nil
-				}
-			}
+		ignored, err := ignoredGoFile(f)
+		if err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+		if ignored {
+			return nil
 		}
 		rel, err := filepath.Rel(root, p)
 		if err != nil {
@@ -437,6 +427,29 @@ func readImports(root, top, module string, tests bool) (map[string]map[string][]
 		return nil
 	})
 	return pkgs, err
+}
+
+// ignoredGoFile reports the standalone ignore constraint used by source
+// generators: other constraints count on every platform in these checks.
+func ignoredGoFile(f *ast.File) (bool, error) {
+	for _, group := range f.Comments {
+		if group.Pos() > f.Package {
+			break
+		}
+		for _, c := range group.List {
+			if !constraint.IsGoBuild(c.Text) {
+				continue
+			}
+			expr, err := constraint.Parse(c.Text)
+			if err != nil {
+				return false, err
+			}
+			if tag, ok := expr.(*constraint.TagExpr); ok && tag.Tag == "ignore" {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // collapse returns s with each run of spaces and line breaks made one space

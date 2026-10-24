@@ -102,10 +102,23 @@ func newSetupAgentsStand(t *testing.T, tool string, both, connected bool) *setup
 			s.mustIn(s.root, "setup", tool)
 		}
 	}
+	// Register both copies before applying the final flow. The general project
+	// stand applies a reviewer-only flow first, which this stand would replace
+	// immediately and deploy twice more while adding B and the final agents.
 	for _, project := range []string{"shop", "admin"} {
-		a := s.project(project)
+		a := gittest.Repo(t, s.copy(project, "A"))
+		s.mustIn(a, "project", "add", project, "--knowledge", filepath.Join(s.root, project+"-knowledge"))
 		b := s.clone(project, "B") // Independent repositories, not linked git worktrees.
 		s.mustIn(a, "worktree", "add", b)
+		process := filepath.Join(s.data, "process")
+		if !testkit.FileExists(filepath.Join(process, "agents", "reviewer.md")) {
+			if err := os.CopyFS(filepath.Join(process, "agents"), os.DirFS(filepath.Join(flowTestdata(), "agents"))); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.CopyFS(filepath.Join(process, project, "flow"), os.DirFS(filepath.Join(flowTestdata(), "shop", "flow"))); err != nil {
+			t.Fatal(err)
+		}
 	}
 	writeFile(t, filepath.Join(s.data, "process", "agents", "reviewer.md"), "Действующая инструкция\n")
 	writeFile(t, filepath.Join(s.data, "process", "agents", "coder.yaml"), "purpose: реализация\ncapabilities: [read, search, edit, run]\n")
@@ -113,6 +126,15 @@ func newSetupAgentsStand(t *testing.T, tool string, both, connected bool) *setup
 	for _, project := range []string{"admin", "shop"} {
 		writeFile(t, filepath.Join(s.data, "process", project, "flow", "stages", "implementation.yaml"), "title: Реализация\nexit: изменения сделаны, тесты проходят\nexecutor: coder\n")
 		s.mustIn(s.copy(project, "A"), "flow", "apply")
+		if connected {
+			for _, copy := range s.copies(project) {
+				for _, tool := range s.tools {
+					if !testkit.FileExists(setupAgentFile(copy, tool, "reviewer")) {
+						t.Fatalf("stand: no subagent reviewer of %s in %s", tool, copy)
+					}
+				}
+			}
+		}
 	}
 	return s
 }

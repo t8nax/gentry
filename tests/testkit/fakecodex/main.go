@@ -783,6 +783,15 @@ func configWrite(r request) (any, *rpcError) {
 	if r.Method == "config/value/write" {
 		p.Edits = []edit{p.edit}
 	}
+	// GEN-59 can refuse only the hook's trust write while every other
+	// app-server request and setting succeeds, just as Codex may do.
+	if reason := os.Getenv("FAKECODEX_HOOK_TRUST_ERROR"); reason != "" {
+		for _, e := range p.Edits {
+			if e.KeyPath == "hooks.state" {
+				return nil, &rpcError{-32603, reason}
+			}
+		}
+	}
 	path := configPath()
 	if p.FilePath != nil && *p.FilePath != "" {
 		path = *p.FilePath

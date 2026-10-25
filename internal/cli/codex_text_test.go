@@ -23,14 +23,11 @@ func codexSetup(action string) contract.SetupOutput {
 }
 
 func TestSetupCodexText(t *testing.T) {
-	deploy := HintText(msg.HintAgentsDeployAll)
-	deployTool := hintLineOf(msg.HintAgentsDeployAll, "agents_deploy (project)")
 	installed := []string{"Gentry подключён к Codex.", "Плагин начнёт работать со следующей сессии."}
-	wantText(t, "installed with projects", func(p *page) { setupText(p, codexSetup(codex.Installed), setupExtra{projects: true}) },
-		lines(append(installed, "", deploy)...), lines(append(installed, "", deployTool)...))
+	wantText(t, "installed", func(p *page) { setupText(p, codexSetup(codex.Installed), setupExtra{}) }, lines(installed...), "")
 	wantText(t, "updated", func(p *page) { setupText(p, codexSetup(codex.Updated), setupExtra{}) },
 		lines("Плагин Gentry в Codex обновлён.", "Изменения вступят в силу со следующей сессии."), "")
-	wantText(t, "unchanged with projects", func(p *page) { setupText(p, codexSetup(codex.Unchanged), setupExtra{projects: true}) },
+	wantText(t, "unchanged", func(p *page) { setupText(p, codexSetup(codex.Unchanged), setupExtra{}) },
 		lines("Gentry уже подключён к Codex."), "")
 
 	switched := codexSetup(codex.Installed)

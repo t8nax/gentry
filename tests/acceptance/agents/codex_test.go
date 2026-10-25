@@ -503,6 +503,13 @@ func TestAgentsChanges(t *testing.T) {
 		specReviewer(t)
 		a := testkit.MustWd(t)
 		testkit.ConnectCodex(t)
+		if !testkit.FileExists(reviewerFile(a)) {
+			t.Fatal("stand: Claude reviewer is missing")
+		}
+		// Setup may already lay out Codex; this deploy must add its format.
+		if err := os.Remove(codexFile(a, "reviewer")); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
 		testkit.WantRun(t, contract.ExitOK, testkit.Lines(msg.Text(msg.AgentsDeployed, "shop"), nextSession, "")+testkit.Table(deployHeader,
 			[]string{a, testkit.None, "reviewer", msg.Text(msg.AgentAdded, "reviewer")},
 		), "", "agents", "deploy", "--project", "shop")

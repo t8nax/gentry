@@ -64,33 +64,36 @@
     "agents": {
       "description": "The layout of the subagents in the worktrees of each project, in the order of gentry project list; present only if the program was replaced or a plugin was built anew, and there is a project.",
       "type": "array",
-      "items": {
-        "title": "UpdateAgents",
-        "type": "object",
-        "properties": {
-          "project": {
-            "description": "Identifier of the project.",
-            "type": "string",
-            "minLength": 1
-          },
-          "changed": {
-            "description": "Whether the layout changed any worktree.",
-            "type": "boolean"
-          },
-          "worktrees": {
-            "description": "Every worktree of the pool, the main one first, then by path, as gentry agents deploy gives them.",
-            "type": "array",
-            "items": { "$ref": "./agents-worktree.json" }
-          },
-          "conflicts": {
-            "description": "Subagents not laid out: a file of their name is there already, which git of the project tracks or Gentry did not lay out. The update is done; gentry agents deploy --project lays them out once the files are dealt with.",
-            "type": "array",
-            "items": { "$ref": "./agents-conflict.json" }
-          }
-        },
-        "required": ["project", "changed", "worktrees"]
-      }
+      "items": { "$ref": "#/$defs/agents" }
     }
   },
-  "required": ["action", "version", "program", "integrations"]
+  "required": ["action", "version", "program", "integrations"],
+  "$defs": {
+    "agents": {
+      "title": "UpdateAgents",
+      "type": "object",
+      "properties": {
+        "project": {
+          "description": "Identifier of the project.",
+          "type": "string",
+          "minLength": 1
+        },
+        "changed": {
+          "description": "Whether the layout changed any worktree.",
+          "type": "boolean"
+        },
+        "worktrees": {
+          "description": "Every worktree of the pool, the main one first, then by path, as gentry agents deploy gives them.",
+          "type": "array",
+          "items": { "$ref": "./agents-worktree.json" }
+        },
+        "conflicts": {
+          "description": "Subagents not laid out: a file of their name is there already, which git of the project tracks or Gentry did not lay out. The update is done; gentry agents deploy --project lays them out once the files are dealt with.",
+          "type": "array",
+          "items": { "$ref": "./agents-conflict.json" }
+        }
+      },
+      "required": ["project", "changed", "worktrees"]
+    }
+  }
 }

@@ -359,10 +359,9 @@ func TestSetupSameThroughLink(t *testing.T) {
 	}
 }
 
-// TestSetupAsksToDeploy checks that setup asks to lay out the subagents anew
-// once it updates the plugin and a project is connected, and does not lay
-// them out itself.
-func TestSetupAsksToDeploy(t *testing.T) {
+// Setup stays quiet about successful layouts, including a project with no
+// worktrees. The unchanged plugin has no layout in its output.
+func TestSetupQuietLayout(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(home.EnvVar, root)
 	fake := filepath.Join(root, "fakeclaude-state.json")
@@ -402,9 +401,18 @@ func TestSetupAsksToDeploy(t *testing.T) {
 	}
 	st.Close()
 	older()
-	if _, stdout, _ := run("setup", "claude"); !strings.HasPrefix(stdout, msg.Text(msg.SetupUpdated, "Claude Code")+"\n") ||
-		!strings.HasSuffix(stdout, "\n\n"+HintText(msg.HintAgentsDeployAll)+"\n") {
+	if code, stdout, stderr := run("setup", "claude"); code != contract.ExitOK || stderr != "" || stdout != msg.Text(msg.SetupUpdated, "Claude Code")+"\n" {
 		t.Errorf("updated with a project:\n%s", stdout)
+	}
+	older()
+	if code, stdout, stderr := run("setup", "claude", "--json"); code != contract.ExitOK || stderr != "" {
+		t.Fatalf("updated JSON: code=%d, stdout=%s, stderr=%s", code, stdout, stderr)
+	} else {
+		validate(t, "schemas/setup.json", stdout)
+		var out contract.SetupOutput
+		if err := json.Unmarshal([]byte(stdout), &out); err != nil || len(out.Agents) != 1 || out.Agents[0].Project != "shop" || out.Agents[0].Changed || len(out.Agents[0].Worktrees) != 0 {
+			t.Errorf("layout of empty project: %s (error %v)", stdout, err)
+		}
 	}
 	if _, stdout, _ := run("setup", "claude"); stdout != msg.Text(msg.SetupUnchanged, "Claude Code")+"\n" {
 		t.Errorf("unchanged with a project:\n%s", stdout)
@@ -436,5 +444,77 @@ func TestSetupClaudeRollbackDirectory(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSetupProjectsUnavailable(t *testing.T) {
+	for _, kind := range []string{"directory", "invalid database"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Setenv(home.EnvVar, t.TempDir())
+			path, err := state.Path()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if kind == "directory" {
+				err = os.Mkdir(path, 0o755)
+			} else {
+				err = os.WriteFile(path, []byte("not a database"), 0o644)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, cause := state.OpenRead(path)
+			if cause == nil {
+				t.Fatal("invalid state store was readable")
+			}
+			var unavailable *state.UnavailableError
+			if errors.As(cause, &unavailable) {
+				cause = unavailable.Err
+			}
+			projects := &setupProjects{}
+			defer projects.close()
+			_, err = projects.List()
+			if err == nil {
+				t.Fatal("invalid state store was listed")
+			}
+			bad := failureOf(err)
+			if bad.code != contract.CodeStateUnavailable || bad.details["path"] != path ||
+				bad.message != msg.Text(msg.ErrStateUnavailable, cause) || len(bad.hints) != 1 {
+				t.Errorf("state error lost cause, path or hints: %+v", bad)
+			}
+		})
+	}
+}
+
+func TestSetupConflictText(t *testing.T) {
+	conflicts := []contract.AgentsConflict{
+		{Worktree: "/admin/A", Agent: "reviewer", File: ".claude/agents/reviewer.md", Reason: "tracked"},
+		{Worktree: "/shop/B", Agent: "coder", File: ".claude/agents/coder.md", Reason: "foreign"},
+	}
+	for _, tool := range []string{"claude", "codex"} {
+		out := contract.SetupOutput{Tool: tool, Action: "updated", Permission: ptr(claude.PermissionPresent)}
+		out.Agents = []contract.UpdateAgents{
+			{Project: "admin", Conflicts: conflicts[:1]},
+			{Project: "shop", Conflicts: conflicts[1:]},
+		}
+		block := lines(msg.Text(msg.SetupUpdated, toolTitles[tool]), "", msg.Text(msg.SetupDisabled, toolTitles[tool]), "", msg.Text(msg.AgentsConflictWarning), "")
+		block += render(cliChannel, func(p *page) { writeConflicts(&p.Builder, conflicts) })
+		enable := msg.Text(msg.HintPluginEnable)
+		if tool == "codex" {
+			enable = msg.Text(msg.HintCodexPluginEnable)
+		}
+		cli := block + lines("", enable,
+			hintLineOf(msg.HintAgentsConflictWarning, "gentry agents deploy --project admin"),
+			hintLineOf(msg.HintAgentsConflictWarning, "gentry agents deploy --project shop"))
+		agent := block + lines("", enable,
+			hintLineOf(msg.HintAgentsConflictWarning, "agents_deploy (project: admin)"),
+			hintLineOf(msg.HintAgentsConflictWarning, "agents_deploy (project: shop)"))
+		wantText(t, tool, func(p *page) { setupText(p, out, setupExtra{}) }, cli, agent)
+		out.Enabled = true
+		out.Agents[0].Conflicts, out.Agents[1].Conflicts = nil, nil
+		wantText(t, tool+" successful layout", func(p *page) { setupText(p, out, setupExtra{}) }, lines(msg.Text(msg.SetupUpdated, toolTitles[tool])), "")
 	}
 }

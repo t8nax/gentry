@@ -5,6 +5,11 @@
   "description": "Output of `gentry setup <tool> --json`.",
   "type": "object",
   "properties": {
+    "agents": {
+      "description": "Successful layouts of the projects of the current data root, in project list order; only after the plugin was installed, updated or switched, and only if a project was processed successfully. Conflicting files are skipped and reported as with update.",
+      "type": "array",
+      "items": { "$ref": "./update.json#/$defs/agents" }
+    },
     "tool": {
       "description": "The tool Gentry was set up for, such as claude.",
       "type": "string",

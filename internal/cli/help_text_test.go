@@ -392,54 +392,6 @@ func TestSetupText(t *testing.T) {
 	for _, tt := range tests {
 		wantText(t, tt.name, func(p *page) { setupText(p, tt.out, setupExtra{}) }, tt.cli, tt.agent)
 	}
-
-	// With a project connected, an installed, updated or switched plugin asks
-	// to lay out the subagents, last; a plugin unchanged does not.
-	deploy := "Разложить субагентов в рабочие копии каждого проекта: gentry agents deploy --project <идентификатор>"
-	deployTool := hintLineOf(msg.HintAgentsDeployAll, "agents_deploy (project)")
-	withProjects := []struct {
-		name       string
-		out        contract.SetupOutput
-		cli, agent string
-	}{
-		{"updated with projects", setup(claude.Updated, claude.PermissionPresent, true), lines(
-			msg.Text(msg.SetupUpdated, "Claude Code"),
-			"",
-			deploy,
-		), lines(
-			msg.Text(msg.SetupUpdated, "Claude Code"),
-			"",
-			deployTool,
-		)},
-		{"switched and disabled with projects", disabled, lines(
-			msg.Text(msg.SetupSwitched, "Claude Code", previous),
-			"",
-			msg.Text(msg.SetupDisabled, "Claude Code"),
-			"",
-			msg.Text(msg.HintPluginEnable),
-			deploy,
-		), lines(
-			msg.Text(msg.SetupSwitched, "Claude Code", previous),
-			"",
-			msg.Text(msg.SetupDisabled, "Claude Code"),
-			"",
-			msg.Text(msg.HintPluginEnable),
-			deployTool,
-		)},
-		{"installed with projects", setup(claude.Installed, claude.PermissionPresent, true), lines(
-			msg.Text(msg.SetupInstalled, "Claude Code"),
-			"",
-			deploy,
-		), lines(
-			msg.Text(msg.SetupInstalled, "Claude Code"),
-			"",
-			deployTool,
-		)},
-		{"unchanged with projects", setup(claude.Unchanged, claude.PermissionPresent, true), msg.Text(msg.SetupUnchanged, "Claude Code") + "\n", ""},
-	}
-	for _, tt := range withProjects {
-		wantText(t, tt.name, func(p *page) { setupText(p, tt.out, setupExtra{projects: true}) }, tt.cli, tt.agent)
-	}
 }
 
 // TestSetupRefusalText checks the refusals of the argument of setup.
